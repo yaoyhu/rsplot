@@ -76,7 +76,12 @@ def raster(
         rsplot raster YRD 20260208 --dpi 300 --output yrd.png
     """
     from rsplot.geo.boundaries import resolve_region
-    from rsplot.geo.gridding import grid_data, mask_to_region, smooth_grid
+    from rsplot.geo.gridding import (
+        fill_nan_gaps,
+        grid_data,
+        mask_to_region,
+        smooth_grid,
+    )
     from rsplot.plotting.raster import plot_raster
     from rsplot.plotting.styles import setup_fonts
     from rsplot.readers import auto_vrange, get_product_info
@@ -136,7 +141,8 @@ def raster(
     LON, LAT, grid_raw = grid_data(
         swath.lon, swath.lat, swath.values, read_extent, use_res
     )
-    grid_masked = mask_to_region(LON, LAT, grid_raw, info.geometry)
+    grid_filled = fill_nan_gaps(LON, LAT, grid_raw)
+    grid_masked = mask_to_region(LON, LAT, grid_filled, info.geometry)
 
     coverage = float(np.isfinite(grid_masked).mean()) * 100
     console.print(f"  → 网格 {grid_masked.shape}, 覆盖率 {coverage:.1f}%")
