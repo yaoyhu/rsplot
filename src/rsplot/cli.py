@@ -51,7 +51,7 @@ def raster(
         None,
         "--output",
         "-o",
-        help="输出文件路径，不指定则弹窗显示。",
+        help="输出文件路径，不指定则保存到 /tmp。",
     ),
     dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
     res: float | None = typer.Option(None, "--res", help="网格分辨率 (度)"),
@@ -162,7 +162,9 @@ def raster(
     console.print(f"  → 色标范围: {use_vmin:.1f} ~ {use_vmax:.1f}")
 
     # --- 8. Plot ---
-    # FIXME: 棋盘格 / 条纹问题
+    if output is None:
+        output = f"/tmp/rsplot_{info.name}_{date}.png"
+
     console.print("\n[bold]绘图中...[/bold]")
     plot_raster(
         LON,
@@ -180,8 +182,4 @@ def raster(
         colorbar_label=colorbar_label,
     )
 
-    if output:
-        console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
-    else:
-        # FIXME: is this real?
-        console.print("[dim]（窗口关闭后退出）[/dim]")
+    console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
