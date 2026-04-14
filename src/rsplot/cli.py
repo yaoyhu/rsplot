@@ -23,9 +23,8 @@ def _callback() -> None:
 
 @app.command()
 def raster(
-    # FIXME: 如何应对区域重名如高新区
     region: str = typer.Argument(
-        ..., help="区域名称，如 合肥、安徽、YRD、蜀山"
+        ..., help="区域名称，如 中国、安徽、合肥、YRD、合肥/蜀山"
     ),
     date: str = typer.Argument(..., help="日期，格式 YYYYMMDD 如 20260208"),
     # --- optional overrides ---
@@ -39,7 +38,7 @@ def raster(
         None,
         "--level",
         "-l",
-        help="强制指定级别: key_region / province / city / county",
+        help="强制指定级别: country / key_region / province / city / county",
     ),
     data_dir: str | None = typer.Option(
         None,
@@ -51,7 +50,7 @@ def raster(
         None,
         "--output",
         "-o",
-        help="输出文件路径，不指定则保存到 /tmp。",
+        help="输出文件路径，不指定则弹窗显示。",
     ),
     dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
     res: float | None = typer.Option(None, "--res", help="网格分辨率 (度)"),

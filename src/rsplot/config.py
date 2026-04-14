@@ -55,6 +55,16 @@ class LevelParams:
 
 
 LEVEL_DEFAULTS: dict[str, LevelParams] = {
+    "country": LevelParams(
+        res=0.1,
+        basemap=False,
+        smooth_sigma=None,
+        grid_step=5.0,
+        pad=0.5,
+        boundary_linewidth=0.5,
+        label_fontsize=5,
+        zoom=5,
+    ),
     "key_region": LevelParams(
         res=0.05,
         basemap=False,

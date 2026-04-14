@@ -160,6 +160,7 @@ def plot_raster(
 def _figsize_for_level(level: str) -> tuple[float, float]:
     """Choose figure size based on admin level."""
     return {
+        "country": (14, 12),
         "key_region": (12, 10),
         "province": (10, 10),
         "city": (10, 8),

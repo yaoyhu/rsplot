@@ -109,6 +109,51 @@ def resolve_region(
     gdf_city = _load_city(gj)
     gdf_county = _load_county(gj)
 
+    # --- 0. Country level (中国 / China) ---
+    if (level_override is None or level_override == "country") and name in (
+        "中国",
+        "China",
+        "china",
+        "CHINA",
+    ):
+        union_geom = unary_union(gdf_prov.geometry)
+        info = _build_info(
+            name="中国",
+            level="country",
+            geometry=union_geom,
+            main_gdf=gdf_prov,
+            sub_gdf=gdf_prov,
+        )
+        # Override extent: focus on mainland (exclude deep South China Sea)
+        info.extent = (73.0, 136.0, 17.0, 54.0)
+        return info
+
+    # --- Handle "city/county" format for county disambiguation ---
+    if "/" in name:
+        city_name, county_name = name.split("/", 1)
+        city_match = _fuzzy_match(city_name, gdf_city)
+        if city_match is None:
+            raise ValueError(f"无法识别城市 '{city_name}'。")
+        city_geom = unary_union(city_match.geometry)
+        sub_counties = gdf_county[
+            gdf_county.geometry.within(city_geom.buffer(0.01))
+        ]
+        county_match = _fuzzy_match(county_name, sub_counties)
+        if county_match is None:
+            available = ", ".join(sub_counties[NAME_FIELD].tolist())
+            raise ValueError(
+                f"在 {city_match.iloc[0][NAME_FIELD]} 下未找到 '{county_name}'。"
+                f"\n可用县区: {available}"
+            )
+        union_geom = unary_union(county_match.geometry)
+        return _build_info(
+            name=county_match.iloc[0][NAME_FIELD],
+            level="county",
+            geometry=union_geom,
+            main_gdf=county_match,
+            sub_gdf=None,
+        )
+
     # --- 1. Key regions (config presets) ---
     if level_override is None or level_override == "key_region":
         upper = name.upper()
@@ -169,17 +214,11 @@ def resolve_region(
             )
 
     # --- 4. County ---
-    if level_override is None or level_override == "county":
-        match = _fuzzy_match(name, gdf_county)
-        if match is not None:
-            union_geom = unary_union(match.geometry)
-            return _build_info(
-                name=match.iloc[0][NAME_FIELD],
-                level="county",
-                geometry=union_geom,
-                main_gdf=match,
-                sub_gdf=None,
-            )
+    if level_override == "county":
+        # "/" case already handled above; bare name with --level county is ambiguous
+        raise ValueError(
+            "县/区级别需要指定所属城市，格式: 城市/县区，如 合肥/蜀山、成都/高新"
+        )
 
     raise ValueError(
         f"无法识别区域 '{name}'。请检查名称是否正确，"
