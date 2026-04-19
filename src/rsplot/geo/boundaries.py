@@ -28,6 +28,9 @@ _SUFFIXES = re.compile(
 
 NAME_FIELD = "name"
 
+# 直辖市 — resolved as province but displayed with county-level sub-boundaries
+MUNICIPALITIES = {"北京市", "天津市", "上海市", "重庆市"}
+
 
 @dataclass
 class RegionInfo:
@@ -44,6 +47,7 @@ class RegionInfo:
     # sub-boundary GeoDataFrames for overlay
     main_boundary_gdf: gpd.GeoDataFrame | None = None  # red border
     sub_boundary_gdf: gpd.GeoDataFrame | None = None  # grey sub-divisions
+    detail_boundary_gdf: gpd.GeoDataFrame | None = None  # finer sub-divisions (counties in province view)
     sub_name_field: str = NAME_FIELD
 
 
@@ -187,15 +191,37 @@ def resolve_region(
     if level_override is None or level_override == "province":
         match = _fuzzy_match(name, gdf_prov)
         if match is not None:
+            prov_name = match.iloc[0][NAME_FIELD]
             union_geom = unary_union(match.geometry)
-            sub_cities = gdf_city[gdf_city.geometry.intersects(union_geom)]
-            return _build_info(
-                name=match.iloc[0][NAME_FIELD],
-                level="province",
-                geometry=union_geom,
-                main_gdf=match,
-                sub_gdf=sub_cities,
-            )
+
+            if prov_name in MUNICIPALITIES:
+                # 直辖市: show county/district boundaries like a city view
+                sub_counties = gdf_county[
+                    gdf_county.geometry.within(union_geom.buffer(0.01))
+                ]
+                return _build_info(
+                    name=prov_name,
+                    level="province",
+                    geometry=union_geom,
+                    main_gdf=match,
+                    sub_gdf=sub_counties,
+                )
+            else:
+                # Regular province: cities + counties within each city
+                sub_cities = gdf_city[
+                    gdf_city.geometry.intersects(union_geom)
+                ]
+                detail_counties = gdf_county[
+                    gdf_county.geometry.intersects(union_geom)
+                ]
+                return _build_info(
+                    name=prov_name,
+                    level="province",
+                    geometry=union_geom,
+                    main_gdf=match,
+                    sub_gdf=sub_cities,
+                    detail_gdf=detail_counties,
+                )
 
     # --- 3. City ---
     if level_override is None or level_override == "city":
@@ -217,7 +243,7 @@ def resolve_region(
     if level_override == "county":
         # "/" case already handled above; bare name with --level county is ambiguous
         raise ValueError(
-            "县/区级别需要指定所属城市，格式: 城市/县区，如 合肥/蜀山、成都/高新"
+            f"县/区级别需要指定所属城市，格式: 城市/县区，如 合肥/蜀山、成都/高新"
         )
 
     raise ValueError(
@@ -232,6 +258,7 @@ def _build_info(
     geometry: BaseGeometry,
     main_gdf: gpd.GeoDataFrame | None,
     sub_gdf: gpd.GeoDataFrame | None,
+    detail_gdf: gpd.GeoDataFrame | None = None,
 ) -> RegionInfo:
     bounds = geometry.bounds  # (minx, miny, maxx, maxy)
     params = LEVEL_DEFAULTS[level]
@@ -249,4 +276,5 @@ def _build_info(
         params=params,
         main_boundary_gdf=main_gdf,
         sub_boundary_gdf=sub_gdf,
+        detail_boundary_gdf=detail_gdf,
     )

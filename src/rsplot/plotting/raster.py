@@ -84,6 +84,22 @@ def plot_raster(
     if tiles is not None:
         ax.add_image(tiles, params.zoom)
 
+    # --- Detail boundaries (counties in province view, dotted) ---
+    if (
+        region.detail_boundary_gdf is not None
+        and len(region.detail_boundary_gdf) > 0
+    ):
+        ax.add_feature(
+            ShapelyFeature(
+                region.detail_boundary_gdf.geometry,
+                ccrs.PlateCarree(),
+                edgecolor="#aaa",
+                facecolor="none",
+                linewidth=0.25,
+                linestyle=":",
+            )
+        )
+
     # --- Sub-boundaries (grey) ---
     if (
         region.sub_boundary_gdf is not None

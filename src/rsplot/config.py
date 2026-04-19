@@ -28,6 +28,7 @@ load_dotenv()
 DEFAULT_DATA_DIRS: dict[str, str] = {
     "no2": "/satellite/exports3/dhxu114/tropomi/NRT/NO2/product",
     "o3": "/satellite/exports3/dhxu114/tropomi/NRT/O3TOT/product",
+    "guokong": "/home/zzgsg/data/guokong_combine",
 }
 DEFAULT_GEOJSON_DIR = "/satellite/d4/yaoyhu/tiandi"
 DEFAULT_FONT_DIR = "/satellite/d4/yaoyhu/fonts"
@@ -111,34 +112,52 @@ LEVEL_DEFAULTS: dict[str, LevelParams] = {
 # Preset key regions (province name lists)
 # ---------------------------------------------------------------------------
 DEFAULT_KEY_REGIONS: dict[str, list[str]] = {
+    # 长三角（31）
     "YRD": ["上海市", "江苏省", "浙江省", "安徽省"],
     "长三角": ["上海市", "江苏省", "浙江省", "安徽省"],
-    "BTH": ["北京市", "天津市", "河北省"],
-    "京津冀": ["北京市", "天津市", "河北省"],
+
+    # 京津冀及周边（38）
+    "BTH": ["北京市", "天津市", "河北省", "山东省", "河南省"],
+    "京津冀": ["北京市", "天津市", "河北省", "山东省", "河南省"],
+    "京津冀及周边": ["北京市", "天津市", "河北省", "山东省", "河南省"],
+
+    # 汾渭平原（13）
+    "FWP": ["山西省", "陕西省"],
+    "汾渭平原": ["山西省", "陕西省"],
+
+    # 成渝地区（16）
+    "SCB": ["重庆市", "四川省"],
+    "成渝": ["重庆市", "四川省"],
+    "成渝地区": ["重庆市", "四川省"],
+
+    # 长江中游城市群（21）
+    "MYR": ["湖北省", "江西省", "湖南省"],
+    "长江中游": ["湖北省", "江西省", "湖南省"],
+    "长江中游城市群": ["湖北省", "江西省", "湖南省"],
+
+    # 珠三角（9）
     "PRD": [
         "广州市",
         "深圳市",
         "珠海市",
+        "佛山市",
+        "江门市",
+        "肇庆市",
+        "惠州市",
         "东莞市",
         "中山市",
-        "江门市",
-        "惠州市",
-        "肇庆市",
-        "佛山市",
     ],
     "珠三角": [
         "广州市",
         "深圳市",
         "珠海市",
+        "佛山市",
+        "江门市",
+        "肇庆市",
+        "惠州市",
         "东莞市",
         "中山市",
-        "江门市",
-        "惠州市",
-        "肇庆市",
-        "佛山市",
     ],
-    "SCB": ["四川省", "重庆市"],
-    "成渝": ["四川省", "重庆市"],
 }
 
 
@@ -155,7 +174,7 @@ class AppConfig:
     )
     geojson_dir: str = DEFAULT_GEOJSON_DIR
     font_dir: str = DEFAULT_FONT_DIR
-    tianditu_key: str = DEFAULT_TIANDITU_KEY
+    tianditu_key: str | None = DEFAULT_TIANDITU_KEY
 
     # plotting defaults
     dpi: int = 300
@@ -219,3 +238,74 @@ class AppConfig:
         kr = data.get("key_regions", {})
         for name, provinces in kr.items():
             self.key_regions[name] = provinces
+
+
+# ---------------------------------------------------------------------------
+# GB 3095-2026 Air Quality Limits (transitional phase, grade II)
+# ---------------------------------------------------------------------------
+AQ_LIMITS_2026: dict[str, dict[str, float]] = {
+    "SO2": {"annual": 60, "daily": 150, "hourly": 500},
+    "NO2": {"annual": 40, "daily": 80, "hourly": 200},
+    "CO": {"daily": 4, "hourly": 10},
+    "O3": {"8h": 160, "hourly": 200},
+    "PM10": {"annual": 60, "daily": 120},
+    "PM2_5": {"annual": 30, "daily": 60},
+    "TSP": {"annual": 200, "daily": 300},
+    "NOx": {"annual": 40, "daily": 70, "hourly": 250},
+    "Pb": {"annual": 0.5, "seasonal": 1.0},
+    "BaP": {"annual": 0.001, "daily": 0.0025},
+}
+
+# ---------------------------------------------------------------------------
+# AQI Classification (official standard)
+# ---------------------------------------------------------------------------
+AQI_COLORS: list[tuple[int, str]] = [
+    # (upper bound, hex color)
+    (50, "#00e400"),   # 优 / green
+    (100, "#ffff00"),  # 良 / yellow
+    (150, "#ff7e00"),  # 轻度污染 / orange
+    (200, "#ff0000"),  # 中度污染 / red
+    (300, "#99004c"),  # 重度污染 / purple
+    (500, "#7e0023"),  # 严重污染 / maroon
+]
+
+AQI_EXCEEDANCE_THRESHOLD = 100  # AQI > 100 considered exceeding
+
+# ---------------------------------------------------------------------------
+# Station variable metadata: nc_name -> (unit, limit_key, limit_time)
+# limit_key maps into AQ_LIMITS_2026; limit_time selects which sub-key.
+# None means no standard exceedance check for this variable.
+# ---------------------------------------------------------------------------
+STATION_VAR_META: dict[str, tuple[str, str | None, str | None]] = {
+    "AQI": ("", None, None),
+    "PM2.5": ("ug/m3", None, None),
+    "PM2.5_24h": ("ug/m3", "PM2_5", "daily"),
+    "PM10": ("ug/m3", None, None),
+    "PM10_24h": ("ug/m3", "PM10", "daily"),
+    "SO2": ("ug/m3", "SO2", "hourly"),
+    "SO2_24h": ("ug/m3", "SO2", "daily"),
+    "NO2": ("ug/m3", "NO2", "hourly"),
+    "NO2_24h": ("ug/m3", "NO2", "daily"),
+    "O3": ("ug/m3", "O3", "hourly"),
+    "O3_24h": ("ug/m3", "O3", "hourly"),
+    "O3_8h": ("ug/m3", "O3", "8h"),
+    "O3_8h_24h": ("ug/m3", "O3", "8h"),
+    "CO": ("mg/m3", "CO", "hourly"),
+    "CO_24h": ("mg/m3", "CO", "daily"),
+}
+
+
+def get_exceedance_threshold(var_name: str) -> float | None:
+    """Return the exceedance threshold for a station variable, or None."""
+    if var_name == "AQI":
+        return AQI_EXCEEDANCE_THRESHOLD
+    meta = STATION_VAR_META.get(var_name)
+    if meta is None:
+        return None
+    _, limit_key, limit_time = meta
+    if limit_key is None or limit_time is None:
+        return None
+    limits = AQ_LIMITS_2026.get(limit_key)
+    if limits is None:
+        return None
+    return limits.get(limit_time)

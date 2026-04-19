@@ -45,7 +45,7 @@ class TropomiNO2Reader(BaseReader):
 
         for f in track(files, description="[cyan]读取轨道数据..."):
             try:
-                ds = xr.open_dataset(f, engine="netcdf4")
+                ds = xr.open_dataset(f)
             except OSError:
                 broken += 1
                 continue

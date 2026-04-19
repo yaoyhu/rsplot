@@ -188,3 +188,138 @@ def raster(
     )
 
     console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
+
+
+@app.command()
+def station(
+    region: str = typer.Argument(
+        ..., help="区域名称，如 中国、安徽、合肥、YRD、合肥/蜀山"
+    ),
+    datetime_str: str = typer.Argument(
+        ..., help="YYYYMMDDHH (精确小时) 或 YYYYMMDD (自动取最新小时)"
+    ),
+    # --- optional overrides ---
+    var: str = typer.Option(
+        "AQI",
+        "--var",
+        "-v",
+        help="变量名: AQI, PM2.5, PM10, NO2, O3, SO2, CO, O3_8h, *_24h",
+    ),
+    level: str | None = typer.Option(
+        None,
+        "--level",
+        "-l",
+        help="强制指定级别: country / key_region / province / city / county",
+    ),
+    data_dir: str | None = typer.Option(
+        None,
+        "--data-dir",
+        "-d",
+        help="数据目录 (覆盖配置默认值)",
+    ),
+    output: str | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="输出文件路径",
+    ),
+    dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
+    basemap: str | None = typer.Option(
+        None,
+        "--basemap",
+        "-b",
+        help="底图控制: satellite / none",
+    ),
+    title: str | None = typer.Option(None, "--title", help="自定义标题"),
+) -> None:
+    """绘制国控站点散点图。
+
+    示例:
+        rsplot station 安徽 20260414        (自动取当天最新小时)
+        rsplot station 安徽 2026041415      (精确到15时)
+        rsplot station 中国 20260414 --var PM2.5_24h
+        rsplot station YRD 2026041415 --var NO2 -o logs/yrd_no2.png
+    """
+    from rsplot.config import STATION_VAR_META, get_exceedance_threshold
+    from rsplot.geo.boundaries import resolve_region
+    from rsplot.plotting.station import plot_station
+    from rsplot.plotting.styles import setup_fonts
+    from rsplot.readers.guokong import read_stations
+
+    # --- 1. Load config ---
+    cfg = AppConfig.load()
+    setup_fonts(cfg.font_dir)
+
+    # --- 2. Validate variable ---
+    if var not in STATION_VAR_META:
+        available = ", ".join(STATION_VAR_META)
+        console.print(f"[red]未知变量 '{var}'[/red]。可用: {available}")
+        raise typer.Exit(1)
+
+    # --- 3. Resolve region ---
+    console.print(f"[bold]解析区域:[/bold] {region}")
+    info = resolve_region(region, cfg, level_override=level)
+    console.print(f"  → [green]{info.name}[/green] (级别: {info.level})")
+
+    # --- 4. Read station data ---
+    use_data_dir = (
+        data_dir if data_dir is not None else cfg.get_data_dir("guokong")
+    )
+    console.print(f"\n[bold]读取站点数据:[/bold] {use_data_dir}")
+    console.print(f"  时间: {datetime_str}, 变量: {var}")
+
+    # Read with buffer for edge stations
+    buf = 0.5
+    read_extent = (
+        info.extent[0] - buf,
+        info.extent[1] + buf,
+        info.extent[2] - buf,
+        info.extent[3] + buf,
+    )
+    data, resolved_dt = read_stations(
+        use_data_dir, datetime_str, var, extent=read_extent
+    )
+    if resolved_dt != datetime_str:
+        console.print(f"  → 自动选择最新时次: [cyan]{resolved_dt}[/cyan]")
+    console.print(
+        f"  → [green]{data.n_valid}[/green] 有效站点 "
+        f"(共 {data.n_stations} 站)"
+    )
+
+    # --- 5. Exceedance threshold ---
+    threshold = get_exceedance_threshold(var)
+    if threshold is not None:
+        n_exceed = int(np.sum(data.values[np.isfinite(data.values)] > threshold))
+        console.print(
+            f"  → 超标阈值: {threshold}, "
+            f"超标站点: [red]{n_exceed}[/red]"
+        )
+
+    # --- 6. Plot ---
+    use_dpi = dpi if dpi is not None else cfg.dpi
+
+    if basemap is not None:
+        use_basemap: bool | None = basemap.lower() == "satellite"
+    else:
+        use_basemap = None
+
+    unit = STATION_VAR_META[var][0]
+    colorbar_label = f"{var} ({unit})" if unit else var
+
+    if output is None:
+        output = f"/tmp/rsplot_station_{info.name}_{var}_{resolved_dt}.png"
+
+    console.print("\n[bold]绘图中...[/bold]")
+    plot_station(
+        data,
+        info,
+        threshold=threshold,
+        dpi=use_dpi,
+        basemap=use_basemap,
+        tianditu_key=cfg.tianditu_key,
+        title=title,
+        output=output,
+        colorbar_label=colorbar_label,
+    )
+
+    console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
