@@ -279,3 +279,4 @@ tags
 
 logs/
 .vscode/
+.claude
