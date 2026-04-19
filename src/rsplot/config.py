@@ -159,7 +159,7 @@ class AppConfig:
 
     # plotting defaults
     dpi: int = 300
-    qa_threshold: float = 0.8
+    qa_threshold: float = 0.5
 
     # key regions
     key_regions: dict[str, list[str]] = field(

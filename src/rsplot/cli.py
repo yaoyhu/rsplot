@@ -67,7 +67,7 @@ def raster(
         None, "--smooth", help="高斯平滑 sigma"
     ),
     title: str | None = typer.Option(None, "--title", help="自定义标题"),
-    qa: float | None = typer.Option(0.8, "--qa", help="QA 阈值 (0-1)"),
+    qa: float | None = typer.Option(0.5, "--qa", help="QA 阈值 (0-1)"),
 ) -> None:
     """绘制卫星遥感栅格图。
 
