@@ -36,7 +36,7 @@ PRODUCT_REGISTRY: dict[str, ProductInfo] = {
     "o3": ProductInfo(
         reader_cls=TropomiO3Reader,
         colorbar_label="O3 Total Column (DU)",
-        cmap="YlGnBu",
+        cmap="YlOrRd",
         vmin=None,
         vmax=None,
         min_range=30.0,

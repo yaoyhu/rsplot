@@ -172,11 +172,12 @@ def resolve_region(
                     )
                 main_gdf = pd.concat([matched_provs, matched_cities])
                 union_geom = unary_union(main_gdf.geometry)
-                # Sub-boundaries: counties if region defined by cities, else cities
-                if len(matched_cities) > 0:
-                    sub = gdf_county[
-                        gdf_county.geometry.intersects(union_geom)
-                    ]
+                # Key regions show cities only (no counties) to avoid label clutter.
+                # Pure city list (e.g. PRD): use matched cities directly.
+                # Mixed / province list (e.g. BTH, YRD): enumerate ALL cities
+                # within the union so each province also contributes its cities.
+                if len(matched_provs) == 0:
+                    sub = matched_cities
                 else:
                     sub = gdf_city[gdf_city.geometry.intersects(union_geom)]
                 return _build_info(

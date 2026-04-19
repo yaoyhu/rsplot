@@ -189,6 +189,30 @@ def raster(
 
     console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
 
+    # --- 9. Emit structured result for downstream agents ---
+    from rsplot.results import build_raster_result, emit_result
+
+    result = build_raster_result(
+        region=info,
+        product=product,
+        date=date,
+        prod_info=prod_info,
+        LON=LON,
+        LAT=LAT,
+        grid=grid_masked,
+        swath_meta={
+            "n_pixels": int(swath.n_pixels),
+            "n_files": int(swath.n_files),
+            "n_broken": int(swath.n_broken),
+            "qa_threshold": use_qa,
+            "resolution_deg": use_res,
+        },
+        vmin=use_vmin,
+        vmax=use_vmax,
+        output=output,
+    )
+    emit_result(result, output)
+
 
 @app.command()
 def station(
@@ -323,3 +347,18 @@ def station(
     )
 
     console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
+
+    # --- 7. Emit structured result for downstream agents ---
+    from rsplot.geo.boundaries import _load_city
+    from rsplot.results import build_station_result, emit_result
+
+    result = build_station_result(
+        region=info,
+        data=data,
+        datetime_str=resolved_dt,
+        threshold=threshold,
+        unit=unit,
+        cities_gdf=_load_city(cfg.geojson_dir),
+        output=output,
+    )
+    emit_result(result, output)
