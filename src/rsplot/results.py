@@ -307,6 +307,79 @@ def build_station_result(
 
 
 # ---------------------------------------------------------------------------
+# Overlay (raster + station combined)
+# ---------------------------------------------------------------------------
+def build_overlay_result(
+    *,
+    region: RegionInfo,
+    product: str,
+    date: str,
+    prod_info: ProductInfo,
+    LON: np.ndarray,
+    LAT: np.ndarray,
+    grid: np.ndarray,
+    swath_meta: dict[str, Any],
+    raster_vmin: float,
+    raster_vmax: float,
+    data: StationData,
+    datetime_str: str,
+    threshold: float | None,
+    unit: str,
+    cities_gdf: gpd.GeoDataFrame | None,
+    output: str,
+) -> dict[str, Any]:
+    """Combine raster + station results into a single JSON payload.
+
+    Nested under `raster` and `station` keys so agents can inspect either
+    layer independently. A shared `region`, `image`, and `datetime` sit
+    at the top level.
+    """
+    raster_block = build_raster_result(
+        region=region,
+        product=product,
+        date=date,
+        prod_info=prod_info,
+        LON=LON,
+        LAT=LAT,
+        grid=grid,
+        swath_meta=swath_meta,
+        vmin=raster_vmin,
+        vmax=raster_vmax,
+        output=output,
+    )
+    station_block = build_station_result(
+        region=region,
+        data=data,
+        datetime_str=datetime_str,
+        threshold=threshold,
+        unit=unit,
+        cities_gdf=cities_gdf,
+        output=output,
+    )
+
+    # Shared fields are promoted to the top level; strip them from the
+    # per-layer blocks so the structure stays flat and non-redundant.
+    shared_keys = ("command", "image", "region")
+    for key in shared_keys:
+        raster_block.pop(key, None)
+        station_block.pop(key, None)
+
+    return {
+        "command": "overlay",
+        "image": output,
+        "region": {
+            "name": region.name,
+            "level": region.level,
+            "extent": [round(x, 3) for x in region.extent],
+        },
+        "datetime": datetime_str,
+        "date": date,
+        "raster": raster_block,
+        "station": station_block,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Emission
 # ---------------------------------------------------------------------------
 def emit_result(result: dict[str, Any], image_path: str) -> str:
