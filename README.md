@@ -1,6 +1,6 @@
 # rsplot
 
-rsplot is a CLI tool for plotting Remote Sensing data, designed for Agent.
+rsplot is a CLI tool for plotting Remote Sensing data, designed for [TianPu Agent](https://git.lug.ustc.edu.cn/yaoyhu/tianpu-agent).
 
 Now in early development stage, stay tuned for updates!
 
