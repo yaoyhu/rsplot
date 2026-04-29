@@ -16,6 +16,7 @@ import numpy as np
 if TYPE_CHECKING:
     import geopandas as gpd
 
+    from rsplot.fnr import FnrResult
     from rsplot.geo.boundaries import RegionInfo
     from rsplot.readers import ProductInfo
     from rsplot.readers.guokong import StationData
@@ -137,7 +138,14 @@ def build_raster_result(
     vmin: float,
     vmax: float,
     output: str,
+    window: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Build the JSON sidecar payload for a raster run.
+
+    ``window`` is None for single-day runs and a dict (start/end/
+    n_days_requested/n_days_found/n_min/dates_failed/coverage_days) for
+    window-mean runs.
+    """
     finite = grid[np.isfinite(grid)]
     total = grid.size
     coverage_pct = round(100 * len(finite) / total, 1) if total else 0.0
@@ -161,6 +169,8 @@ def build_raster_result(
             **_basic_stats(grid),
         },
     }
+    if window is not None:
+        result["window"] = window
 
     sub_gdf = region.sub_boundary_gdf
     if sub_gdf is not None and len(sub_gdf) > 0:
@@ -377,6 +387,156 @@ def build_overlay_result(
         "raster": raster_block,
         "station": station_block,
     }
+
+
+# ---------------------------------------------------------------------------
+# FNR (HCHO/NO2 regime)
+# ---------------------------------------------------------------------------
+def _fnr_per_city_stats(
+    LON: np.ndarray,
+    LAT: np.ndarray,
+    fnr: np.ndarray,
+    cities_gdf: gpd.GeoDataFrame,
+) -> list[dict[str, Any]]:
+    """Per-city mean FNR and dominant regime."""
+    from shapely.vectorized import contains
+
+    from rsplot.fnr import FNR_NOX_LIMIT, FNR_VOC_LIMIT
+
+    rows: list[dict[str, Any]] = []
+    for _, row in cities_gdf.iterrows():
+        mask = contains(row.geometry, LON, LAT)
+        sub = fnr[mask]
+        finite = sub[np.isfinite(sub)]
+        if len(finite) == 0:
+            continue
+        mean_fnr = float(np.mean(finite))
+        if mean_fnr < FNR_VOC_LIMIT:
+            regime = "voc_limited"
+        elif mean_fnr <= FNR_NOX_LIMIT:
+            regime = "transition"
+        else:
+            regime = "nox_limited"
+        rows.append(
+            {
+                "name": row["name"],
+                "n_pixels": int(len(finite)),
+                "mean_fnr": _round(mean_fnr),
+                "median_fnr": _round(np.median(finite)),
+                "regime": regime,
+                "voc_limited_pct": round(
+                    100 * float((finite < FNR_VOC_LIMIT).mean()), 1
+                ),
+                "nox_limited_pct": round(
+                    100 * float((finite > FNR_NOX_LIMIT).mean()), 1
+                ),
+            }
+        )
+    rows.sort(key=lambda r: (r["mean_fnr"] is None, r["mean_fnr"] or 1e9))
+    return rows
+
+
+def build_fnr_result(
+    *,
+    region: RegionInfo,
+    fnr_out: FnrResult,
+    res: float,
+    output: str,
+) -> dict[str, Any]:
+    """Build the JSON sidecar for an FNR run."""
+    from rsplot.fnr import (
+        FNR_DISPLAY_MAX,
+        FNR_NOX_LIMIT,
+        FNR_VOC_LIMIT,
+        regime_percentages,
+    )
+
+    fnr = fnr_out.fnr
+    finite = fnr[np.isfinite(fnr)]
+
+    # Per-pixel coverage histogram: how many of the requested days had
+    # both NO2 and HCHO valid?
+    from shapely.vectorized import contains
+
+    region_mask = contains(region.geometry, fnr_out.LON, fnr_out.LAT)
+    total_region_pixels = int(region_mask.sum())
+    n_valid_fnr = int(np.isfinite(fnr).sum())
+    coverage_pct = (
+        round(100 * n_valid_fnr / total_region_pixels, 3)
+        if total_region_pixels
+        else 0.0
+    )
+    both_valid_days = np.minimum(fnr_out.n_valid_hcho, fnr_out.n_valid_no2)
+    covered = both_valid_days[(both_valid_days > 0) & region_mask]
+    coverage_days = {
+        "min": int(covered.min()) if len(covered) else 0,
+        "max": int(covered.max()) if len(covered) else 0,
+        "mean": round(float(covered.mean()), 1) if len(covered) else 0.0,
+    }
+    diagnostic_masks = {
+        name: mask & region_mask
+        for name, mask in fnr_out.diagnostic_masks.items()
+    }
+    mask_diagnostics = {
+        "total_region_pixels": total_region_pixels,
+        "coverage_ge_n_min_pixels": int(
+            diagnostic_masks["coverage_ok"].sum()
+        ),
+        "no2_ge_threshold_pixels": int(diagnostic_masks["no2_ok"].sum()),
+        "hcho_nonnegative_pixels": int(diagnostic_masks["hcho_ok"].sum()),
+        "final_valid_pixels": n_valid_fnr,
+    }
+
+    result: dict[str, Any] = {
+        "command": "fnr",
+        "image": output,
+        "region": {
+            "name": region.name,
+            "level": region.level,
+            "extent": [round(x, 3) for x in region.extent],
+        },
+        "window": {
+            "start": fnr_out.dates_requested[0],
+            "end": fnr_out.dates_requested[-1],
+            "n_days_requested": len(fnr_out.dates_requested),
+            "n_days_found_no2": len(fnr_out.dates_found_no2),
+            "n_days_found_hcho": len(fnr_out.dates_found_hcho),
+            "dates_failed_no2": fnr_out.dates_failed_no2,
+            "dates_failed_hcho": fnr_out.dates_failed_hcho,
+        },
+        "params": {
+            "n_min": fnr_out.n_min,
+            "no2_min_column": fnr_out.no2_min_column,
+            "voc_threshold": FNR_VOC_LIMIT,
+            "nox_threshold": FNR_NOX_LIMIT,
+            "display_max": FNR_DISPLAY_MAX,
+            "resolution_deg": res,
+        },
+        "stats": {
+            "grid_shape": list(fnr.shape),
+            "coverage_pct": coverage_pct,
+            "valid_pixels": n_valid_fnr,
+            "total_region_pixels": total_region_pixels,
+            "coverage_days": coverage_days,
+            "mask_diagnostics": mask_diagnostics,
+            **_basic_stats(fnr),
+        },
+        "regime_pct": regime_percentages(fnr),
+        "mean_fields": {
+            "hcho_mean_raw_stats": _basic_stats(fnr_out.hcho_mean),
+            "no2_mean_raw_stats": _basic_stats(fnr_out.no2_mean),
+            "hcho_mean_filled_stats": _basic_stats(fnr_out.hcho_mean_filled),
+            "no2_mean_filled_stats": _basic_stats(fnr_out.no2_mean_filled),
+        },
+    }
+
+    sub_gdf = region.sub_boundary_gdf
+    if sub_gdf is not None and len(sub_gdf) > 0:
+        result["city_ranking"] = _fnr_per_city_stats(
+            fnr_out.LON, fnr_out.LAT, fnr, sub_gdf
+        )
+
+    return result
 
 
 # ---------------------------------------------------------------------------

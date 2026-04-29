@@ -8,8 +8,11 @@ from dataclasses import dataclass
 import numpy as np
 
 from rsplot.readers.base import BaseReader
+from rsplot.readers.tropomi_hcho import TropomiHCHOReader
 from rsplot.readers.tropomi_no2 import TropomiNO2Reader
 from rsplot.readers.tropomi_o3 import TropomiO3Reader
+
+HCHO_CMAP = "rsplot_hcho"
 
 
 @dataclass
@@ -40,6 +43,14 @@ PRODUCT_REGISTRY: dict[str, ProductInfo] = {
         vmin=None,
         vmax=None,
         min_range=30.0,
+    ),
+    "hcho": ProductInfo(
+        reader_cls=TropomiHCHOReader,
+        colorbar_label="HCHO VCD (x10^15 molec/cm2)",
+        cmap=HCHO_CMAP,
+        vmin=None,  # unit not yet confirmed — let auto-range pick
+        vmax=None,
+        min_range=5.0,
     ),
 }
 

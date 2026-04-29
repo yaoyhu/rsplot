@@ -17,8 +17,12 @@ import numpy as np
 from cartopy.feature import ShapelyFeature
 from cartopy.mpl.gridliner import LATITUDE_FORMATTER, LONGITUDE_FORMATTER
 
+from rsplot.plotting.colormaps import (
+    STATION_CONCENTRATION_CMAP,
+    register_rsplot_colormaps,
+)
 from rsplot.plotting.raster import _add_sub_labels, _figsize_for_level
-from rsplot.plotting.station import _build_aqi_cmap
+from rsplot.plotting.station import _build_aqi_cmap, _station_marker_size
 from rsplot.tiles.tianditu import TianDiTuTiles
 
 if TYPE_CHECKING:
@@ -57,6 +61,7 @@ def plot_overlay(
     """
     params = region.params
     use_basemap = basemap if basemap is not None else params.basemap
+    register_rsplot_colormaps()
 
     # --- Figure setup ---
     if use_basemap and tianditu_key:
@@ -145,13 +150,7 @@ def plot_overlay(
 
     sc = None
     if len(vals) > 0:
-        marker_size = {
-            "country": 8,
-            "key_region": 18,
-            "province": 25,
-            "city": 50,
-            "county": 80,
-        }.get(region.level, 25)
+        marker_size = _station_marker_size(region.level)
 
         is_aqi = data.var_name == "AQI"
         if is_aqi:
@@ -165,7 +164,7 @@ def plot_overlay(
             p5 = float(np.nanpercentile(vals, 5))
             p95 = float(np.nanpercentile(vals, 95))
             sc = ax.scatter(
-                lon, lat, c=vals, cmap="viridis",
+                lon, lat, c=vals, cmap=STATION_CONCENTRATION_CMAP,
                 vmin=p5, vmax=p95,
                 s=marker_size, edgecolors="#111", linewidths=0.4,
                 transform=ccrs.PlateCarree(), zorder=5,

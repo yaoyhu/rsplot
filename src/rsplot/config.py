@@ -26,8 +26,9 @@ load_dotenv()
 # Default paths
 # ---------------------------------------------------------------------------
 DEFAULT_DATA_DIRS: dict[str, str] = {
-    "no2": "/satellite/exports3/dhxu114/tropomi/NRT/NO2/product",
-    "o3": "/satellite/exports3/dhxu114/tropomi/NRT/O3TOT/product",
+    "no2": "/satellite/exports2/yaoyhu/NO2",
+    "o3": "/satellite/exports2/yaoyhu/O3",
+    "hcho": "/satellite/exports2/yaoyhu/HCHO",
     "guokong": "/home/zzgsg/data/guokong_combine",
 }
 DEFAULT_GEOJSON_DIR = "/satellite/d4/yaoyhu/tiandi"
@@ -63,7 +64,7 @@ LEVEL_DEFAULTS: dict[str, LevelParams] = {
         grid_step=5.0,
         pad=0.5,
         boundary_linewidth=0.5,
-        label_fontsize=5,
+        label_fontsize=6,
         zoom=5,
     ),
     "key_region": LevelParams(
@@ -73,7 +74,7 @@ LEVEL_DEFAULTS: dict[str, LevelParams] = {
         grid_step=2.0,
         pad=0.2,
         boundary_linewidth=1.0,
-        label_fontsize=6,
+        label_fontsize=7,
         zoom=7,
     ),
     "province": LevelParams(
@@ -83,7 +84,7 @@ LEVEL_DEFAULTS: dict[str, LevelParams] = {
         grid_step=1.0,
         pad=0.15,
         boundary_linewidth=0.8,
-        label_fontsize=6,
+        label_fontsize=7,
         zoom=8,
     ),
     "city": LevelParams(
@@ -93,7 +94,7 @@ LEVEL_DEFAULTS: dict[str, LevelParams] = {
         grid_step=0.5,
         pad=0.15,
         boundary_linewidth=1.5,
-        label_fontsize=7,
+        label_fontsize=8,
         zoom=10,
     ),
     "county": LevelParams(
@@ -103,7 +104,7 @@ LEVEL_DEFAULTS: dict[str, LevelParams] = {
         grid_step=0.2,
         pad=0.05,
         boundary_linewidth=1.5,
-        label_fontsize=8,
+        label_fontsize=9,
         zoom=12,
     ),
 }

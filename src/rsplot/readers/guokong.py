@@ -11,9 +11,13 @@ from __future__ import annotations
 import glob
 import os
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
 import xarray as xr
+
+if TYPE_CHECKING:
+    from shapely.geometry.base import BaseGeometry
 
 
 @dataclass
@@ -114,3 +118,26 @@ def read_stations(
         n_stations=len(lon),
         n_valid=n_valid,
     ), datetime_str
+
+
+def mask_stations_to_region(
+    data: StationData, geometry: BaseGeometry
+) -> StationData:
+    """Keep only stations inside the focus region geometry."""
+    from shapely.vectorized import contains
+
+    inside = contains(geometry.buffer(1e-9), data.lon, data.lat)
+    return _subset_stations(data, inside)
+
+
+def _subset_stations(data: StationData, mask: np.ndarray) -> StationData:
+    values = data.values[mask]
+    return StationData(
+        id=np.asarray(data.id)[mask],
+        lon=data.lon[mask],
+        lat=data.lat[mask],
+        values=values,
+        var_name=data.var_name,
+        n_stations=int(mask.sum()),
+        n_valid=int(np.isfinite(values).sum()),
+    )

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import math
+from typing import Any
+
 import numpy as np
 import typer
 from rich.console import Console
@@ -16,6 +19,19 @@ app = typer.Typer(
 )
 
 
+def _default_raster_n_min(product: str, window_n: int) -> int:
+    """Return the product-aware default valid-day threshold for raster means.
+
+    HCHO has much sparser day-to-day coverage than NO2/O3 after QA/cloud
+    filtering. Requiring half the window for HCHO makes otherwise useful
+    monthly means look holey, so use a softer default while still avoiding
+    one-off pixels.
+    """
+    if product.lower() == "hcho":
+        return max(3, math.ceil(window_n * 0.25))
+    return max(3, window_n // 2)
+
+
 @app.callback()
 def _callback() -> None:
     "CLI tool for Remote sensing raster plotting."
@@ -26,13 +42,31 @@ def raster(
     region: str = typer.Argument(
         ..., help="区域名称，如 中国、安徽、合肥、YRD、合肥/蜀山"
     ),
-    date: str = typer.Argument(..., help="日期，格式 YYYYMMDD 如 20260208"),
+    date_arg: str = typer.Argument(
+        ...,
+        help="单日 YYYYMMDD 走单日路径；带 --days 或写成 YYYYMMDD-YYYYMMDD "
+        "时切换为窗口均值（HCHO 单日覆盖率低，月均更可读）",
+    ),
     # --- optional overrides ---
     product: str = typer.Option(
         "o3",
         "--product",
         "-p",
-        help="产品类型，如 no2, o3",
+        help="产品类型: no2 / o3 / hcho",
+    ),
+    days: int | None = typer.Option(
+        None,
+        "--days",
+        help="时间窗口天数；不指定且 DATE 为单日时走单日路径。"
+        "推荐值: 30 (月均，HCHO 首选) / 7 (周均) / 显式区间用 YYYYMMDD-YYYYMMDD",
+    ),
+    n_min: int | None = typer.Option(
+        None,
+        "--n-min",
+        help=(
+            "窗口模式下每像元最少有效天数。默认: NO2/O3=max(3, 天数//2), "
+            "HCHO=max(3, ceil(天数*0.25))"
+        ),
     ),
     level: str | None = typer.Option(
         None,
@@ -72,9 +106,11 @@ def raster(
     """绘制卫星遥感栅格图。
 
     示例:
-        rsplot raster --help
-        rsplot raster YRD 20260208 --dpi 300 --output yrd.png
+        rsplot raster 北京    20260108 --dpi 300 --output yrd.png        # 单日
+        rsplot raster 安徽    20260131 -p hcho --days 30                 # 月均（推荐 HCHO）
+        rsplot raster 长三角  20260101-20260131 -p no2                   # 显式区间
     """
+    from rsplot.fnr import compute_window_mean, parse_date_window
     from rsplot.geo.boundaries import resolve_region
     from rsplot.geo.gridding import (
         fill_nan_gaps,
@@ -85,6 +121,41 @@ def raster(
     from rsplot.plotting.raster import plot_raster
     from rsplot.plotting.styles import setup_fonts
     from rsplot.readers import auto_vrange, get_product_info
+    from rsplot.results import build_raster_result, emit_result
+
+    # --- 0. Decide: single-day or window mode ---
+    DEFAULT_WINDOW_DAYS = 30
+    is_range = "-" in date_arg
+    try:
+        if is_range:
+            dates = parse_date_window(date_arg, default_days=0)
+        elif days is not None:
+            dates = parse_date_window(date_arg, default_days=days)
+        else:
+            # Single date + no --days → single-day mode (validated below)
+            if len(date_arg) != 8 or not date_arg.isdigit():
+                raise ValueError(
+                    f"日期格式错误: '{date_arg}'，"
+                    f"应为 YYYYMMDD 或 YYYYMMDD-YYYYMMDD"
+                )
+            dates = [date_arg]
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from e
+
+    window_mode = len(dates) > 1
+    if window_mode:
+        window_n = len(dates)
+        use_n_min = (
+            n_min
+            if n_min is not None
+            else _default_raster_n_min(product, window_n)
+        )
+        if use_n_min > window_n:
+            console.print(
+                f"[red]--n-min ({use_n_min}) 大于窗口天数 ({window_n})[/red]"
+            )
+            raise typer.Exit(1)
 
     # --- 1. Load config ---
     cfg = AppConfig.load()
@@ -111,10 +182,10 @@ def raster(
     if basemap is not None:
         use_basemap: bool | None = basemap.lower() == "satellite"
     else:
-        use_basemap = None  # let plot_raster use level default
+        use_basemap = None
 
-    # --- 4. Expand extent for data reading (add buffer) ---
-    buf = 1.0  # read 1° extra on each side to avoid edge artifacts
+    # --- 4. Read extent (with buffer to avoid edge artifacts) ---
+    buf = 1.0
     read_extent = (
         info.extent[0] - buf,
         info.extent[1] + buf,
@@ -122,27 +193,120 @@ def raster(
         info.extent[3] + buf,
     )
 
-    # --- 5. Read data ---
     use_data_dir = (
         data_dir if data_dir is not None else cfg.get_data_dir(product)
     )
     reader = prod_info.reader_cls()
     colorbar_label = prod_info.colorbar_label
-    console.print(f"\n[bold]读取数据:[/bold] {use_data_dir} (产品: {product})")
-    console.print(f"  日期: {date}, QA > {use_qa}")
-    swath = reader.read(use_data_dir, date, read_extent, qa_threshold=use_qa)
-    console.print(
-        f"  → [green]{swath.n_pixels}[/green] 有效像元 "
-        f"({swath.n_files} 文件, {swath.n_broken} 损坏)"
-    )
 
-    # --- 6. Grid + mask + smooth ---
-    console.print(f"\n[bold]网格化:[/bold] {use_res}° 分辨率")
-    LON, LAT, grid_raw = grid_data(
-        swath.lon, swath.lat, swath.values, read_extent, use_res
-    )
-    grid_filled = fill_nan_gaps(LON, LAT, grid_raw)
-    grid_masked = mask_to_region(LON, LAT, grid_filled, info.geometry)
+    # --- 5. Read + grid (branches on mode) ---
+    swath_meta: dict[str, Any]
+    window_meta: dict[str, Any] | None = None
+
+    if not window_mode:
+        # ---- Single-day path (unchanged) ----
+        console.print(
+            f"\n[bold]读取数据:[/bold] {use_data_dir} (产品: {product})"
+        )
+        console.print(f"  日期: {dates[0]}, QA > {use_qa}")
+        swath = reader.read(
+            use_data_dir, dates[0], read_extent, qa_threshold=use_qa
+        )
+        console.print(
+            f"  → [green]{swath.n_pixels}[/green] 有效像元 "
+            f"({swath.n_files} 文件, {swath.n_broken} 损坏)"
+        )
+
+        console.print(f"\n[bold]网格化:[/bold] {use_res}° 分辨率")
+        LON, LAT, grid_raw = grid_data(
+            swath.lon, swath.lat, swath.values, read_extent, use_res
+        )
+        grid_filled = fill_nan_gaps(LON, LAT, grid_raw)
+        grid_masked = mask_to_region(LON, LAT, grid_filled, info.geometry)
+
+        swath_meta = {
+            "n_pixels": int(swath.n_pixels),
+            "n_files": int(swath.n_files),
+            "n_broken": int(swath.n_broken),
+            "qa_threshold": use_qa,
+            "resolution_deg": use_res,
+        }
+    else:
+        # ---- Window-mean path ----
+        console.print(
+            f"\n[bold]时间窗口:[/bold] {dates[0]} ~ {dates[-1]} "
+            f"({window_n} 天，每像元至少 {use_n_min} 天有效)"
+        )
+        console.print(
+            f"\n[bold]读取数据:[/bold] {use_data_dir} (产品: {product})"
+        )
+        console.print(f"  QA > {use_qa}")
+
+        win = compute_window_mean(
+            reader=reader,
+            data_dir=use_data_dir,
+            dates=dates,
+            extent=read_extent,
+            res=use_res,
+            qa_threshold=use_qa,
+            label=product.upper(),
+            console=console,
+        )
+        n_failed = len(win.dates_failed)
+        console.print(
+            f"  → 有效天数 [green]{len(win.dates_found)}[/green] / "
+            f"{window_n} (失败 {n_failed})，累计 "
+            f"[green]{win.n_pixels_total}[/green] 像元 "
+            f"({win.n_files_total} 文件, {win.n_broken_total} 损坏)"
+        )
+
+        LON, LAT = win.LON, win.LAT
+        grid_mean = win.grid.copy()
+        # Apply n_min mask: pixels below threshold → NaN
+        grid_mean[win.n_valid < use_n_min] = np.nan
+
+        # Same post-processing as single-day path (fill small gaps from
+        # neighbours, then region mask) so visual treatment stays consistent.
+        grid_filled = fill_nan_gaps(LON, LAT, grid_mean)
+        grid_masked = mask_to_region(LON, LAT, grid_filled, info.geometry)
+
+        # Per-pixel coverage stats (where any day was valid)
+        covered = win.n_valid[win.n_valid > 0]
+        coverage_days = {
+            "min": int(covered.min()) if len(covered) else 0,
+            "max": int(covered.max()) if len(covered) else 0,
+            "mean": (
+                round(float(covered.mean()), 1) if len(covered) else 0.0
+            ),
+        }
+        if len(covered):
+            coverage_days.update(
+                {
+                    "p10": int(np.percentile(covered, 10)),
+                    "p25": int(np.percentile(covered, 25)),
+                    "median": int(np.percentile(covered, 50)),
+                    "p75": int(np.percentile(covered, 75)),
+                    "p90": int(np.percentile(covered, 90)),
+                }
+            )
+
+        swath_meta = {
+            "n_pixels_total": int(win.n_pixels_total),
+            "n_files_total": int(win.n_files_total),
+            "n_broken_total": int(win.n_broken_total),
+            "qa_threshold": use_qa,
+            "resolution_deg": use_res,
+        }
+        window_meta = {
+            "start": dates[0],
+            "end": dates[-1],
+            "n_days_requested": window_n,
+            "n_days_found": len(win.dates_found),
+            "n_min": use_n_min,
+            "n_min_default": n_min is None,
+            "dates_failed": win.dates_failed,
+            "coverage_days": coverage_days,
+        }
 
     coverage = float(np.isfinite(grid_masked).mean()) * 100
     console.print(f"  → 网格 {grid_masked.shape}, 覆盖率 {coverage:.1f}%")
@@ -153,7 +317,7 @@ def raster(
             grid_masked, info.geometry, LON, LAT, sigma=use_smooth
         )
 
-    # --- 7. Determine vmin/vmax (CLI > product default > auto) ---
+    # --- 6. Determine vmin/vmax (CLI > product default > auto) ---
     if vmin is not None and vmax is not None:
         use_vmin, use_vmax = vmin, vmax
     elif prod_info.vmin is not None and prod_info.vmax is not None:
@@ -166,9 +330,20 @@ def raster(
 
     console.print(f"  → 色标范围: {use_vmin:.1f} ~ {use_vmax:.1f}")
 
-    # --- 8. Plot ---
+    # --- 7. Plot ---
     if output is None:
-        output = f"/tmp/rsplot_{info.name}_{date}.png"
+        if window_mode:
+            output = (
+                f"/tmp/rsplot_{info.name}_{dates[0]}_{dates[-1]}.png"
+            )
+        else:
+            output = f"/tmp/rsplot_{info.name}_{dates[0]}.png"
+
+    if title is None and window_mode:
+        title = (
+            f"TROPOMI {product.upper()} - {info.name} "
+            f"({dates[0]}~{dates[-1]}, {window_n}d mean)"
+        )
 
     console.print("\n[bold]绘图中...[/bold]")
     plot_raster(
@@ -189,27 +364,20 @@ def raster(
 
     console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
 
-    # --- 9. Emit structured result for downstream agents ---
-    from rsplot.results import build_raster_result, emit_result
-
+    # --- 8. Emit structured result for downstream agents ---
     result = build_raster_result(
         region=info,
         product=product,
-        date=date,
+        date=dates[0] if not window_mode else dates[-1],
         prod_info=prod_info,
         LON=LON,
         LAT=LAT,
         grid=grid_masked,
-        swath_meta={
-            "n_pixels": int(swath.n_pixels),
-            "n_files": int(swath.n_files),
-            "n_broken": int(swath.n_broken),
-            "qa_threshold": use_qa,
-            "resolution_deg": use_res,
-        },
+        swath_meta=swath_meta,
         vmin=use_vmin,
         vmax=use_vmax,
         output=output,
+        window=window_meta,
     )
     emit_result(result, output)
 
@@ -268,7 +436,7 @@ def station(
     from rsplot.geo.boundaries import resolve_region
     from rsplot.plotting.station import plot_station
     from rsplot.plotting.styles import setup_fonts
-    from rsplot.readers.guokong import read_stations
+    from rsplot.readers.guokong import mask_stations_to_region, read_stations
 
     # --- 1. Load config ---
     cfg = AppConfig.load()
@@ -303,8 +471,13 @@ def station(
     data, resolved_dt = read_stations(
         use_data_dir, datetime_str, var, extent=read_extent
     )
+    n_stations_read = data.n_stations
+    data = mask_stations_to_region(data, info.geometry)
     if resolved_dt != datetime_str:
         console.print(f"  → 自动选择最新时次: [cyan]{resolved_dt}[/cyan]")
+    n_outside = n_stations_read - data.n_stations
+    if n_outside > 0:
+        console.print(f"  → 已忽略关注区域外站点: {n_outside}")
     console.print(
         f"  → [green]{data.n_valid}[/green] 有效站点 "
         f"(共 {data.n_stations} 站)"
@@ -460,7 +633,7 @@ def overlay(
     from rsplot.plotting.overlay import plot_overlay
     from rsplot.plotting.styles import setup_fonts
     from rsplot.readers import auto_vrange, get_product_info
-    from rsplot.readers.guokong import read_stations
+    from rsplot.readers.guokong import mask_stations_to_region, read_stations
     from rsplot.results import build_overlay_result, emit_result
 
     # --- 1. Load config ---
@@ -571,8 +744,13 @@ def overlay(
     data, resolved_dt = read_stations(
         use_station_dir, datetime_str, var, extent=station_extent
     )
+    n_stations_read = data.n_stations
+    data = mask_stations_to_region(data, info.geometry)
     if resolved_dt != datetime_str:
         console.print(f"  → 自动选择最新时次: [cyan]{resolved_dt}[/cyan]")
+    n_outside = n_stations_read - data.n_stations
+    if n_outside > 0:
+        console.print(f"  → 已忽略关注区域外站点: {n_outside}")
     console.print(
         f"  → [green]{data.n_valid}[/green] 有效站点 "
         f"(共 {data.n_stations} 站)"
@@ -643,3 +821,248 @@ def overlay(
         output=output,
     )
     emit_result(result, output)
+
+
+@app.command()
+def fnr(
+    region: str = typer.Argument(
+        ..., help="区域名称，如 中国、安徽、合肥、YRD、合肥/蜀山"
+    ),
+    date_arg: str = typer.Argument(
+        ...,
+        help="单日 (YYYYMMDD，默认向前 --days 天) 或范围 "
+        "(YYYYMMDD-YYYYMMDD，闭区间)",
+    ),
+    # --- window ---
+    days: int = typer.Option(
+        7,
+        "--days",
+        help="时间窗口天数（仅当 date_arg 为单日时生效，默认 7）",
+    ),
+    n_min: int | None = typer.Option(
+        None,
+        "--n-min",
+        help="每像元最少有效天数，默认 max(3, 窗口天数 // 2)",
+    ),
+    no2_min: float = typer.Option(
+        0.5,
+        "--no2-min",
+        help="最小平均 NO2 柱浓度阈值 (x10^15 molec/cm2)；"
+        "低于此值的像元 FNR 不可信，输出为 NaN",
+    ),
+    # --- overrides ---
+    level: str | None = typer.Option(
+        None,
+        "--level",
+        "-l",
+        help="强制指定级别: country / key_region / province / city / county",
+    ),
+    raster_dir_no2: str | None = typer.Option(
+        None,
+        "--no2-dir",
+        help="NO2 数据目录 (覆盖配置默认值)",
+    ),
+    raster_dir_hcho: str | None = typer.Option(
+        None,
+        "--hcho-dir",
+        help="HCHO 数据目录 (覆盖配置默认值)",
+    ),
+    output: str | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="输出文件路径",
+    ),
+    dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
+    res: float | None = typer.Option(None, "--res", help="网格分辨率 (度)"),
+    basemap: str | None = typer.Option(
+        None,
+        "--basemap",
+        "-b",
+        help="底图控制: satellite / none",
+    ),
+    smooth: float | None = typer.Option(
+        None, "--smooth", help="高斯平滑 sigma"
+    ),
+    qa: float | None = typer.Option(
+        0.5,
+        "--qa",
+        help="QA 阈值 (0-1)，同时应用于 NO2 和 HCHO（OFFL L2 swath 推荐 ≥0.5）",
+    ),
+    title: str | None = typer.Option(None, "--title", help="自定义标题"),
+) -> None:
+    """绘制 FNR (HCHO / NO2) 区域控制 regime 图。
+
+    时间窗口平均后再相除（避免日尺度 HCHO 覆盖率太低）。
+    分级依据 Duncan 2010: FNR<1 VOC-limited, 1~2 过渡, >2 NOx-limited.
+
+    示例:
+        rsplot fnr 合肥   20260114                 (7日窗口)
+        rsplot fnr 安徽   20260131 --days 30      (30日窗口)
+        rsplot fnr 长三角 20260101-20260130       (显式范围)
+    """
+    from rsplot.fnr import compute_fnr, parse_date_window
+    from rsplot.geo.boundaries import resolve_region
+    from rsplot.plotting.fnr import plot_fnr
+    from rsplot.plotting.styles import setup_fonts
+    from rsplot.results import build_fnr_result, emit_result
+
+    # --- 1. Load config ---
+    cfg = AppConfig.load()
+    setup_fonts(cfg.font_dir)
+
+    # --- 2. Parse date window ---
+    try:
+        dates = parse_date_window(date_arg, default_days=days)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from e
+
+    window_n = len(dates)
+    use_n_min = n_min if n_min is not None else max(3, window_n // 2)
+    if use_n_min > window_n:
+        console.print(
+            f"[red]--n-min ({use_n_min}) 大于窗口天数 ({window_n})[/red]"
+        )
+        raise typer.Exit(1)
+
+    console.print(
+        f"[bold]时间窗口:[/bold] {dates[0]} ~ {dates[-1]} "
+        f"({window_n} 天，每像元至少 {use_n_min} 天有效)"
+    )
+
+    # --- 3. Resolve region ---
+    console.print(f"[bold]解析区域:[/bold] {region}")
+    info = resolve_region(region, cfg, level_override=level)
+    console.print(f"  → [green]{info.name}[/green] (级别: {info.level})")
+
+    # --- 4. Merge params ---
+    params = info.params
+    use_res = res if res is not None else params.res
+    use_dpi = dpi if dpi is not None else cfg.dpi
+    use_qa = qa if qa is not None else cfg.qa_threshold
+    use_smooth = smooth if smooth is not None else params.smooth_sigma
+
+    if basemap is not None:
+        use_basemap: bool | None = basemap.lower() == "satellite"
+    else:
+        use_basemap = None
+
+    # --- 5. Resolve data dirs ---
+    use_no2_dir = (
+        raster_dir_no2 if raster_dir_no2 is not None else cfg.get_data_dir("no2")
+    )
+    use_hcho_dir = (
+        raster_dir_hcho
+        if raster_dir_hcho is not None
+        else cfg.get_data_dir("hcho")
+    )
+    console.print(f"\n[bold]读取数据:[/bold]")
+    console.print(f"  NO2 : {use_no2_dir}")
+    console.print(f"  HCHO: {use_hcho_dir}")
+
+    # --- 6. Compute FNR ---
+    fnr_out = compute_fnr(
+        info,
+        dates,
+        res=use_res,
+        qa_threshold=use_qa,
+        n_min=use_n_min,
+        raster_dir_no2=use_no2_dir,
+        raster_dir_hcho=use_hcho_dir,
+        no2_min_column=no2_min,
+        smooth_sigma=use_smooth,
+        console=console,
+    )
+
+    n_fail_no2 = len(fnr_out.dates_failed_no2)
+    n_fail_hcho = len(fnr_out.dates_failed_hcho)
+    n_found_no2 = len(fnr_out.dates_found_no2)
+    n_found_hcho = len(fnr_out.dates_found_hcho)
+    console.print(
+        f"  → NO2 有效天数 {n_found_no2}/{window_n} "
+        f"(失败 {n_fail_no2})"
+    )
+    console.print(
+        f"  → HCHO 有效天数 {n_found_hcho}/{window_n} "
+        f"(失败 {n_fail_hcho})"
+    )
+    if use_n_min > min(n_found_no2, n_found_hcho):
+        console.print(
+            f"  → [yellow]注意:[/yellow] n_min={use_n_min} 大于 NO2/HCHO "
+            f"共同可用天数上限 {min(n_found_no2, n_found_hcho)}，"
+            "本次不可能产生有效 FNR 像元。"
+        )
+
+    finite = fnr_out.fnr[np.isfinite(fnr_out.fnr)]
+    if len(finite) == 0:
+        _print_failed_dates("NO2", fnr_out.dates_failed_no2)
+        _print_failed_dates("HCHO", fnr_out.dates_failed_hcho)
+        console.print(
+            "[red]FNR 全区无有效像元，可能原因：窗口内 NO2/HCHO 都覆盖不足，"
+            "或 --n-min 太严。可放宽 --n-min / 扩大窗口。[/red]"
+        )
+        raise typer.Exit(1)
+
+    coverage_pct = 100 * len(finite) / fnr_out.fnr.size
+    console.print(
+        f"  → FNR 覆盖率 {coverage_pct:.1f}%, "
+        f"中位数 {float(np.median(finite)):.2f}"
+    )
+
+    from rsplot.fnr import regime_percentages
+    pct = regime_percentages(fnr_out.fnr)
+    console.print(
+        f"  → Regime: [red]VOC-limited {pct['voc_limited']}%[/red] | "
+        f"[yellow]transition {pct['transition']}%[/yellow] | "
+        f"[blue]NOx-limited {pct['nox_limited']}%[/blue]"
+    )
+
+    # --- 7. Plot ---
+    if output is None:
+        output = (
+            f"/tmp/rsplot_fnr_{info.name}_{dates[0]}_{dates[-1]}.png"
+        )
+
+    subtitle = (
+        f"{dates[0]}~{dates[-1]}  ·  N_days={window_n} "
+        f"(n_min={use_n_min})  ·  NO2≥{no2_min:g}×10¹⁵ molec/cm²"
+    )
+
+    console.print("\n[bold]绘图中...[/bold]")
+    plot_fnr(
+        fnr_out.LON,
+        fnr_out.LAT,
+        fnr_out.fnr,
+        info,
+        dpi=use_dpi,
+        basemap=use_basemap,
+        tianditu_key=cfg.tianditu_key,
+        title=title,
+        output=output,
+        subtitle=subtitle,
+    )
+    console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
+
+    # --- 8. JSON sidecar ---
+    result = build_fnr_result(
+        region=info,
+        fnr_out=fnr_out,
+        res=use_res,
+        output=output,
+    )
+    emit_result(result, output)
+
+
+def _print_failed_dates(
+    label: str, failed: dict[str, str], max_items: int = 8
+) -> None:
+    """Print a compact failed-date summary for window commands."""
+    if not failed:
+        return
+    console.print(f"  → [yellow]{label} 失败日期示例:[/yellow]")
+    items = list(failed.items())
+    for d, msg in items[:max_items]:
+        console.print(f"    - {d}: {msg}")
+    if len(items) > max_items:
+        console.print(f"    ... 另有 {len(items) - max_items} 天")

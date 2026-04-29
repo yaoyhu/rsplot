@@ -7,6 +7,8 @@ import os
 import matplotlib as mpl
 from matplotlib import font_manager
 
+from rsplot.plotting.colormaps import register_rsplot_colormaps
+
 
 def setup_fonts(font_dir: str) -> None:
     """Register Chinese fonts and set matplotlib defaults.
@@ -30,3 +32,4 @@ def setup_fonts(font_dir: str) -> None:
         mpl.rcParams["font.sans-serif"] = ["Microsoft YaHei"]
 
     mpl.rcParams["axes.unicode_minus"] = False
+    register_rsplot_colormaps()

@@ -35,6 +35,17 @@ def _build_aqi_cmap() -> tuple[mcolors.ListedColormap, mcolors.BoundaryNorm]:
     return cmap, norm
 
 
+def _station_marker_size(level: str) -> int:
+    """Marker area by region level, in points squared."""
+    return {
+        "country": 18,
+        "key_region": 32,
+        "province": 46,
+        "city": 76,
+        "county": 110,
+    }.get(level, 46)
+
+
 def plot_station(
     data: StationData,
     region: RegionInfo,
@@ -135,13 +146,7 @@ def plot_station(
         )
     else:
         # --- Marker size by level ---
-        marker_size = {
-            "country": 8,
-            "key_region": 18,
-            "province": 25,
-            "city": 50,
-            "county": 80,
-        }.get(region.level, 25)
+        marker_size = _station_marker_size(region.level)
 
         # --- Colormap / norm ---
         is_aqi = data.var_name == "AQI"

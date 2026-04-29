@@ -17,6 +17,7 @@ import numpy as np
 from cartopy.feature import ShapelyFeature
 from cartopy.mpl.gridliner import LATITUDE_FORMATTER, LONGITUDE_FORMATTER
 
+from rsplot.plotting.colormaps import register_rsplot_colormaps
 from rsplot.tiles.tianditu import TianDiTuTiles
 
 if TYPE_CHECKING:
@@ -51,6 +52,7 @@ def plot_raster(
     """
     params = region.params
     use_basemap = basemap if basemap is not None else params.basemap
+    register_rsplot_colormaps()
 
     # --- Figure setup ---
     if use_basemap and tianditu_key:
