@@ -19,6 +19,21 @@ app = typer.Typer(
 )
 
 
+def _warn_missing_tianditu_key(
+    *,
+    basemap: bool | None,
+    default_basemap: bool,
+    tianditu_key: str | None,
+) -> None:
+    """Warn when a requested TianDiTu basemap cannot be loaded."""
+    use_basemap = basemap if basemap is not None else default_basemap
+    if use_basemap and not tianditu_key:
+        console.print(
+            "[yellow]未设置天地图 API key，底图将不会加载。请设置 "
+            "TIANDITU_API_KEY，或使用 --basemap none。[/yellow]"
+        )
+
+
 def _default_raster_n_min(product: str, window_n: int) -> int:
     """Return the product-aware default valid-day threshold for raster means.
 
@@ -182,6 +197,11 @@ def raster(
         use_basemap: bool | None = basemap.lower() == "satellite"
     else:
         use_basemap = None
+    _warn_missing_tianditu_key(
+        basemap=use_basemap,
+        default_basemap=params.basemap,
+        tianditu_key=cfg.tianditu_key,
+    )
 
     # --- 4. Read extent (with buffer to avoid edge artifacts) ---
     buf = 1.0
@@ -500,6 +520,11 @@ def station(
         use_basemap: bool | None = basemap.lower() == "satellite"
     else:
         use_basemap = None
+    _warn_missing_tianditu_key(
+        basemap=use_basemap,
+        default_basemap=params.basemap,
+        tianditu_key=cfg.tianditu_key,
+    )
 
     unit = STATION_VAR_META[var][0]
     colorbar_label = f"{var} ({unit})" if unit else var
@@ -680,6 +705,11 @@ def overlay(
         use_basemap: bool | None = basemap.lower() == "satellite"
     else:
         use_basemap = None
+    _warn_missing_tianditu_key(
+        basemap=use_basemap,
+        default_basemap=params.basemap,
+        tianditu_key=cfg.tianditu_key,
+    )
 
     # --- 6. Read satellite swath ---
     use_raster_dir = (
@@ -944,6 +974,11 @@ def fnr(
         use_basemap: bool | None = basemap.lower() == "satellite"
     else:
         use_basemap = None
+    _warn_missing_tianditu_key(
+        basemap=use_basemap,
+        default_basemap=params.basemap,
+        tianditu_key=cfg.tianditu_key,
+    )
 
     # --- 5. Resolve data dirs ---
     use_no2_dir = (

@@ -12,14 +12,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
-
 if sys.version_info >= (3, 11):
     import tomllib
 else:
     import tomli as tomllib
-
-load_dotenv()
 
 
 # ---------------------------------------------------------------------------
@@ -33,7 +29,7 @@ DEFAULT_DATA_DIRS: dict[str, str] = {
 }
 DEFAULT_GEOJSON_DIR = "/satellite/d4/yaoyhu/tiandi"
 DEFAULT_FONT_DIR = "/satellite/d4/yaoyhu/fonts"
-DEFAULT_TIANDITU_KEY = os.getenv("TIANDITU_API_KEY")
+DEFAULT_TIANDITU_KEY = None
 
 
 CONFIG_PATH = Path.home() / ".config" / "rsplot" / "config.toml"
@@ -183,7 +179,7 @@ class AppConfig:
                 cfg.data_dirs[product] = v
         if v := os.environ.get("RSPLOT_GEOJSON_DIR"):
             cfg.geojson_dir = v
-        if v := os.environ.get("RSPLOT_TIANDITU_KEY"):
+        if v := os.environ.get("TIANDITU_API_KEY"):
             cfg.tianditu_key = v
         return cfg
 
