@@ -124,7 +124,6 @@ def raster(
     from rsplot.results import build_raster_result, emit_result
 
     # --- 0. Decide: single-day or window mode ---
-    DEFAULT_WINDOW_DAYS = 30
     is_range = "-" in date_arg
     try:
         if is_range:
@@ -310,6 +309,12 @@ def raster(
 
     coverage = float(np.isfinite(grid_masked).mean()) * 100
     console.print(f"  → 网格 {grid_masked.shape}, 覆盖率 {coverage:.1f}%")
+    if not np.isfinite(grid_masked).any():
+        console.print(
+            "[red]窗口均值全区无有效像元，可能原因：窗口内覆盖不足，"
+            "或 --n-min 太严。可放宽 --n-min / 扩大窗口。[/red]"
+        )
+        raise typer.Exit(1)
 
     if use_smooth is not None:
         console.print(f"  → 高斯平滑 sigma={use_smooth}")
@@ -471,13 +476,9 @@ def station(
     data, resolved_dt = read_stations(
         use_data_dir, datetime_str, var, extent=read_extent
     )
-    n_stations_read = data.n_stations
     data = mask_stations_to_region(data, info.geometry)
     if resolved_dt != datetime_str:
         console.print(f"  → 自动选择最新时次: [cyan]{resolved_dt}[/cyan]")
-    n_outside = n_stations_read - data.n_stations
-    if n_outside > 0:
-        console.print(f"  → 已忽略关注区域外站点: {n_outside}")
     console.print(
         f"  → [green]{data.n_valid}[/green] 有效站点 "
         f"(共 {data.n_stations} 站)"
@@ -744,13 +745,9 @@ def overlay(
     data, resolved_dt = read_stations(
         use_station_dir, datetime_str, var, extent=station_extent
     )
-    n_stations_read = data.n_stations
     data = mask_stations_to_region(data, info.geometry)
     if resolved_dt != datetime_str:
         console.print(f"  → 自动选择最新时次: [cyan]{resolved_dt}[/cyan]")
-    n_outside = n_stations_read - data.n_stations
-    if n_outside > 0:
-        console.print(f"  → 已忽略关注区域外站点: {n_outside}")
     console.print(
         f"  → [green]{data.n_valid}[/green] 有效站点 "
         f"(共 {data.n_stations} 站)"
