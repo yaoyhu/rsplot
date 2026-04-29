@@ -851,6 +851,179 @@ def overlay(
 
 
 @app.command()
+def recent(
+    region: str = typer.Argument(
+        ..., help="区域名称，如 中国、安徽、合肥、YRD、合肥/蜀山"
+    ),
+    end_date: str = typer.Argument(
+        ..., help="结束日期 YYYYMMDD，最近 N 天统计以该日期为窗口末端"
+    ),
+    days: int = typer.Option(
+        30,
+        "--days",
+        help="最近天数，如 7 / 30 / 365",
+    ),
+    source: str = typer.Option(
+        "raster",
+        "--source",
+        help="数据源: raster / station",
+    ),
+    product: str = typer.Option(
+        "o3",
+        "--product",
+        "-p",
+        help="source=raster 时的产品: no2 / o3 / hcho",
+    ),
+    var: str = typer.Option(
+        "AQI",
+        "--var",
+        "-v",
+        help="source=station 时的变量名: AQI, PM2.5, PM10, NO2, O3, SO2, CO...",
+    ),
+    level: str | None = typer.Option(
+        None,
+        "--level",
+        "-l",
+        help="强制指定级别: country / key_region / province / city / county",
+    ),
+    data_dir: str | None = typer.Option(
+        None,
+        "--data-dir",
+        "-d",
+        help="数据目录 (覆盖配置默认值)",
+    ),
+    output: str | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="输出 JSON 路径",
+    ),
+    res: float | None = typer.Option(None, "--res", help="网格分辨率 (度)"),
+    qa: float | None = typer.Option(0.5, "--qa", help="QA 阈值 (0-1)"),
+) -> None:
+    """输出最近 N 天数据 JSON，用于周/月/年变化对比。
+
+    示例:
+        rsplot recent 合肥 20260428 --days 30 -p hcho -o recent.json
+        rsplot recent 安徽 20260428 --days 7 --source station --var O3
+    """
+    from rsplot.config import STATION_VAR_META
+    from rsplot.geo.boundaries import resolve_region
+    from rsplot.readers import get_product_info
+    from rsplot.recent import (
+        build_recent_result,
+        parse_recent_dates,
+        summarize_recent_raster,
+        summarize_recent_station,
+        write_recent_result,
+    )
+
+    use_source = source.lower()
+    if use_source not in ("raster", "station"):
+        console.print("[red]--source 仅支持 raster / station[/red]")
+        raise typer.Exit(1)
+
+    try:
+        dates = parse_recent_dates(end_date, days)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from e
+
+    cfg = AppConfig.load()
+    console.print(f"[bold]解析区域:[/bold] {region}")
+    info = resolve_region(region, cfg, level_override=level)
+    console.print(f"  → [green]{info.name}[/green] (级别: {info.level})")
+    console.print(
+        f"[bold]统计窗口:[/bold] {dates[0]} ~ {dates[-1]} ({len(dates)} 天)"
+    )
+
+    if output is None:
+        if use_source == "raster":
+            output = (
+                f"/tmp/rsplot_recent_{info.name}_{product}_"
+                f"{dates[0]}_{dates[-1]}.json"
+            )
+        else:
+            output = (
+                f"/tmp/rsplot_recent_{info.name}_{var}_"
+                f"{dates[0]}_{dates[-1]}.json"
+            )
+
+    if use_source == "raster":
+        prod_info = get_product_info(product)
+        use_res = res if res is not None else info.params.res
+        use_qa = qa if qa is not None else cfg.qa_threshold
+        use_data_dir = (
+            data_dir if data_dir is not None else cfg.get_data_dir(product)
+        )
+        console.print(
+            f"\n[bold]统计栅格:[/bold] {use_data_dir} "
+            f"(产品: {product}, QA > {use_qa}, res={use_res})"
+        )
+        daily = summarize_recent_raster(
+            region=info,
+            product=product,
+            prod_info=prod_info,
+            data_dir=use_data_dir,
+            dates=dates,
+            res=use_res,
+            qa_threshold=use_qa,
+            console=console,
+        )
+        result = build_recent_result(
+            region=info,
+            source=use_source,
+            dates=dates,
+            daily=daily,
+            params={
+                "data_dir": use_data_dir,
+                "qa_threshold": use_qa,
+                "resolution_deg": use_res,
+            },
+            product=product,
+            unit=prod_info.colorbar_label,
+            output=output,
+        )
+    else:
+        if var not in STATION_VAR_META:
+            available = ", ".join(STATION_VAR_META)
+            console.print(f"[red]未知变量 '{var}'[/red]。可用: {available}")
+            raise typer.Exit(1)
+        use_data_dir = (
+            data_dir if data_dir is not None else cfg.get_data_dir("guokong")
+        )
+        unit = STATION_VAR_META[var][0]
+        console.print(
+            f"\n[bold]统计站点:[/bold] {use_data_dir} (变量: {var})"
+        )
+        daily = summarize_recent_station(
+            region=info,
+            data_dir=use_data_dir,
+            dates=dates,
+            var_name=var,
+            console=console,
+        )
+        result = build_recent_result(
+            region=info,
+            source=use_source,
+            dates=dates,
+            daily=daily,
+            params={"data_dir": use_data_dir},
+            variable=var,
+            unit=unit or None,
+            output=output,
+        )
+
+    write_recent_result(result, output)
+    found = result["availability"]["days_found"]
+    failed = result["availability"]["days_failed"]
+    console.print(
+        f"\n[bold green]✓ 已保存:[/bold green] {output} "
+        f"(有效 {found}/{len(dates)} 天，失败 {failed})"
+    )
+
+
+@app.command()
 def fnr(
     region: str = typer.Argument(
         ..., help="区域名称，如 中国、安徽、合肥、YRD、合肥/蜀山"
