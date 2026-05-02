@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from importlib.metadata import PackageNotFoundError, version
 import math
 from typing import Any
 
@@ -46,9 +47,27 @@ def _default_raster_n_min(product: str, window_n: int) -> int:
         return max(3, math.ceil(window_n * 0.25))
     return max(3, window_n // 2)
 
+def _get_version() -> str:
+    try:
+        return version("rsplot")
+    except PackageNotFoundError:
+        return "unknown"
+
+def _version_callback(value: bool) -> None:
+    if value:
+        console.print(f"rsplot {_get_version()}")
+        raise typer.Exit()
 
 @app.callback()
-def _callback() -> None:
+def _callback(
+    show_version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show version and exit.",
+    ),
+) -> None:
     "CLI tool for Remote sensing raster plotting."
 
 
