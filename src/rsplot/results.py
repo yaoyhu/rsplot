@@ -187,21 +187,31 @@ def _attribute_stations_to_cities(
     lon: np.ndarray, lat: np.ndarray, cities_gdf: gpd.GeoDataFrame
 ) -> np.ndarray:
     """Return city name for each (lon, lat); empty string if none contain it."""
+    return _attribute_stations_to_areas(lon, lat, cities_gdf)
+
+
+def _attribute_stations_to_areas(
+    lon: np.ndarray,
+    lat: np.ndarray,
+    areas_gdf: gpd.GeoDataFrame,
+    name_field: str = "name",
+) -> np.ndarray:
+    """Return containing admin-unit name for each (lon, lat)."""
     from shapely.geometry import Point
 
-    sindex = cities_gdf.sindex
+    sindex = areas_gdf.sindex
     out = np.empty(len(lon), dtype=object)
     for i, (x, y) in enumerate(zip(lon, lat)):
         if not (np.isfinite(x) and np.isfinite(y)):
             out[i] = ""
             continue
         pt = Point(float(x), float(y))
-        city = ""
+        area = ""
         for idx in sindex.intersection((x, y, x, y)):
-            if cities_gdf.iloc[idx].geometry.contains(pt):
-                city = cities_gdf.iloc[idx]["name"]
+            if areas_gdf.iloc[idx].geometry.contains(pt):
+                area = areas_gdf.iloc[idx][name_field]
                 break
-        out[i] = city
+        out[i] = area
     return out
 
 
@@ -220,6 +230,46 @@ def _aqi_distribution(vals: np.ndarray) -> dict[str, int]:
     return dist
 
 
+def _station_admin_level(region: RegionInfo) -> str | None:
+    if region.level == "country":
+        return "province"
+    if region.level == "key_region":
+        return "city"
+    if region.level == "province":
+        municipalities = {"北京市", "天津市", "上海市", "重庆市"}
+        return "county" if region.name in municipalities else "city"
+    if region.level == "city":
+        return "county"
+    return None
+
+
+def _top_station_entries(
+    *,
+    vals: np.ndarray,
+    ids: np.ndarray,
+    lons: np.ndarray,
+    lats: np.ndarray,
+    area_names: np.ndarray | None,
+    admin_level: str | None,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    top_stations: list[dict[str, Any]] = []
+    for i in np.argsort(vals)[::-1][:limit]:
+        entry: dict[str, Any] = {
+            "id": str(ids[i]),
+            "value": _round(vals[i]),
+            "lon": round(float(lons[i]), 3),
+            "lat": round(float(lats[i]), 3),
+        }
+        if area_names is not None:
+            entry["admin_level"] = admin_level
+            entry["admin_name"] = area_names[i] or None
+            # Backward-compatible alias for older consumers.
+            entry["city"] = area_names[i] or None
+        top_stations.append(entry)
+    return top_stations
+
+
 def build_station_result(
     *,
     region: RegionInfo,
@@ -235,6 +285,12 @@ def build_station_result(
     lons = data.lon[valid]
     lats = data.lat[valid]
     ids = np.asarray(data.id)[valid]
+    admin_gdf = (
+        region.sub_boundary_gdf
+        if region.sub_boundary_gdf is not None and len(region.sub_boundary_gdf) > 0
+        else cities_gdf
+    )
+    admin_level = _station_admin_level(region)
 
     result: dict[str, Any] = {
         "command": "station",
@@ -253,9 +309,25 @@ def build_station_result(
         "stats": _basic_stats(vals),
     }
 
-    station_cities = None
-    if cities_gdf is not None and len(cities_gdf) > 0 and len(vals) > 0:
-        station_cities = _attribute_stations_to_cities(lons, lats, cities_gdf)
+    station_areas = None
+    if admin_gdf is not None and len(admin_gdf) > 0 and len(vals) > 0:
+        station_areas = _attribute_stations_to_areas(
+            lons, lats, admin_gdf, region.sub_name_field
+        )
+
+    if len(vals) > 0:
+        result["top_stations"] = _top_station_entries(
+            vals=vals,
+            ids=ids,
+            lons=lons,
+            lats=lats,
+            area_names=station_areas,
+            admin_level=admin_level,
+            limit=10,
+        )
+        result["top_station_ids"] = [
+            entry["id"] for entry in result["top_stations"]
+        ]
 
     # Exceedance summary
     if threshold is not None and len(vals) > 0:
@@ -272,8 +344,11 @@ def build_station_result(
                 "lon": round(float(lons[i]), 3),
                 "lat": round(float(lats[i]), 3),
             }
-            if station_cities is not None:
-                entry["city"] = station_cities[i] or None
+            if station_areas is not None:
+                entry["admin_level"] = admin_level
+                entry["admin_name"] = station_areas[i] or None
+                # Backward-compatible alias for older consumers.
+                entry["city"] = station_areas[i] or None
             top_stations.append(entry)
             if len(top_stations) >= 10:
                 break
@@ -287,11 +362,11 @@ def build_station_result(
     if data.var_name == "AQI" and len(vals) > 0:
         result["aqi_distribution"] = _aqi_distribution(vals)
 
-    # Per-city ranking
-    if station_cities is not None and len(vals) > 0:
+    # Per-admin-unit ranking, exposed under the legacy city_ranking key.
+    if station_areas is not None and len(vals) > 0:
         acc: dict[str, dict[str, Any]] = {}
         for i in range(len(vals)):
-            c = station_cities[i]
+            c = station_areas[i]
             if not c:
                 continue
             s = acc.setdefault(c, {"values": [], "n_exceed": 0})
@@ -303,6 +378,9 @@ def build_station_result(
             arr = np.asarray(s["values"])
             ranking.append(
                 {
+                    "name": city,
+                    "admin_level": admin_level,
+                    # Backward-compatible alias for older consumers.
                     "city": city,
                     "n_valid": len(arr),
                     "mean": _round(np.mean(arr)),

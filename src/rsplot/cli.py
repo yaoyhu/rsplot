@@ -496,6 +496,7 @@ def station(
     console.print(f"[bold]解析区域:[/bold] {region}")
     info = resolve_region(region, cfg, level_override=level)
     console.print(f"  → [green]{info.name}[/green] (级别: {info.level})")
+    params = info.params
 
     # --- 4. Read station data ---
     use_data_dir = (
