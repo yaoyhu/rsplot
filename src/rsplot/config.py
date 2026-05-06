@@ -24,6 +24,7 @@ else:
 DEFAULT_DATA_DIRS: dict[str, str] = {
     "no2": "/satellite/exports2/yaoyhu/NO2",
     "o3": "/satellite/exports2/yaoyhu/O3",
+    "o3pr": "/satellite/exports2/yaoyhu/O3PR",
     "hcho": "/satellite/exports2/yaoyhu/HCHO",
     "guokong": "/home/zzgsg/data/guokong_combine",
 }

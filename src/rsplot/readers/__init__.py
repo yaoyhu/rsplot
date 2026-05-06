@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -11,8 +11,17 @@ from rsplot.readers.base import BaseReader
 from rsplot.readers.tropomi_hcho import TropomiHCHOReader
 from rsplot.readers.tropomi_no2 import TropomiNO2Reader
 from rsplot.readers.tropomi_o3 import TropomiO3Reader
+from rsplot.readers.tropomi_o3pr import TropomiO3PRReader
 
 HCHO_CMAP = "rsplot_hcho"
+
+
+@dataclass
+class ProductPlotDefaults:
+    """Optional per-product plotting defaults by administrative level."""
+
+    res: float | None = None
+    smooth_sigma: float | None = None
 
 
 @dataclass
@@ -25,6 +34,13 @@ class ProductInfo:
     vmin: float | None  # None = auto from data percentiles
     vmax: float | None
     min_range: float  # minimum vmax-vmin to avoid exaggerating small differences
+    level_defaults: dict[str, ProductPlotDefaults] = field(
+        default_factory=dict
+    )
+
+    def defaults_for_level(self, level: str) -> ProductPlotDefaults:
+        """Return product-specific defaults for an administrative level."""
+        return self.level_defaults.get(level, ProductPlotDefaults())
 
 
 PRODUCT_REGISTRY: dict[str, ProductInfo] = {
@@ -43,6 +59,24 @@ PRODUCT_REGISTRY: dict[str, ProductInfo] = {
         vmin=None,
         vmax=None,
         min_range=30.0,
+    ),
+    "o3pr": ProductInfo(
+        reader_cls=TropomiO3PRReader,
+        colorbar_label="O3 Tropospheric Column from Profile (DU)",
+        cmap="YlOrRd",
+        vmin=None,
+        vmax=None,
+        min_range=5.0,
+        level_defaults={
+            # O3__PR is a coarse 30x30 km profile product. These defaults
+            # keep map pixels close to the native sampling while still using
+            # modest smoothing for display.
+            "country": ProductPlotDefaults(res=0.25, smooth_sigma=1.0),
+            "key_region": ProductPlotDefaults(res=0.15, smooth_sigma=1.2),
+            "province": ProductPlotDefaults(res=0.1, smooth_sigma=1.5),
+            "city": ProductPlotDefaults(res=0.075, smooth_sigma=1.5),
+            "county": ProductPlotDefaults(res=0.05, smooth_sigma=2.0),
+        },
     ),
     "hcho": ProductInfo(
         reader_cls=TropomiHCHOReader,

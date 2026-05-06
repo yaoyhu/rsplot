@@ -86,7 +86,7 @@ def raster(
         "o3",
         "--product",
         "-p",
-        help="产品类型: no2 / o3 / hcho",
+        help="产品类型: no2 / o3 / o3pr / hcho",
     ),
     days: int | None = typer.Option(
         None,
@@ -98,8 +98,8 @@ def raster(
         None,
         "--n-min",
         help=(
-            "窗口模式下每像元最少有效天数。默认: NO2/O3=max(3, 天数//2), "
-            "HCHO=max(3, ceil(天数*0.25))"
+            "窗口模式下每像元最少有效天数。默认: NO2/O3/O3PR="
+            "max(3, 天数//2), HCHO=max(3, ceil(天数*0.25))"
         ),
     ),
     level: str | None = typer.Option(
@@ -205,12 +205,25 @@ def raster(
 
     # --- 3. Merge params (level defaults + CLI overrides) ---
     params = info.params
-    use_res = res if res is not None else params.res
     use_dpi = dpi if dpi is not None else cfg.dpi
     prod_info = get_product_info(product)
+    product_defaults = prod_info.defaults_for_level(info.level)
+    use_res = (
+        res
+        if res is not None
+        else product_defaults.res
+        if product_defaults.res is not None
+        else params.res
+    )
     use_cmap = cmap if cmap is not None else prod_info.cmap
     use_qa = qa if qa is not None else cfg.qa_threshold
-    use_smooth = smooth if smooth is not None else params.smooth_sigma
+    use_smooth = (
+        smooth
+        if smooth is not None
+        else product_defaults.smooth_sigma
+        if product_defaults.smooth_sigma is not None
+        else params.smooth_sigma
+    )
 
     if basemap is not None:
         use_basemap: bool | None = basemap.lower() == "satellite"
@@ -590,6 +603,7 @@ def station(
 _PRODUCT_STATION_PAIR: dict[str, str] = {
     "no2": "NO2",
     "o3": "O3",
+    "o3pr": "O3",
 }
 
 
@@ -608,7 +622,7 @@ def overlay(
         "o3",
         "--product",
         "-p",
-        help="卫星产品类型: no2 / o3",
+        help="卫星产品类型: no2 / o3 / o3pr / hcho",
     ),
     # --- station variable ---
     var: str | None = typer.Option(
@@ -714,12 +728,25 @@ def overlay(
 
     # --- 5. Merge params ---
     params = info.params
-    use_res = res if res is not None else params.res
     use_dpi = dpi if dpi is not None else cfg.dpi
     prod_info = get_product_info(product)
+    product_defaults = prod_info.defaults_for_level(info.level)
+    use_res = (
+        res
+        if res is not None
+        else product_defaults.res
+        if product_defaults.res is not None
+        else params.res
+    )
     use_cmap = cmap if cmap is not None else prod_info.cmap
     use_qa = qa if qa is not None else cfg.qa_threshold
-    use_smooth = smooth if smooth is not None else params.smooth_sigma
+    use_smooth = (
+        smooth
+        if smooth is not None
+        else product_defaults.smooth_sigma
+        if product_defaults.smooth_sigma is not None
+        else params.smooth_sigma
+    )
 
     if basemap is not None:
         use_basemap: bool | None = basemap.lower() == "satellite"
@@ -892,7 +919,7 @@ def recent(
         "o3",
         "--product",
         "-p",
-        help="source=raster 时的产品: no2 / o3 / hcho",
+        help="source=raster 时的产品: no2 / o3 / o3pr / hcho",
     ),
     var: str = typer.Option(
         "AQI",
@@ -971,7 +998,14 @@ def recent(
 
     if use_source == "raster":
         prod_info = get_product_info(product)
-        use_res = res if res is not None else info.params.res
+        product_defaults = prod_info.defaults_for_level(info.level)
+        use_res = (
+            res
+            if res is not None
+            else product_defaults.res
+            if product_defaults.res is not None
+            else info.params.res
+        )
         use_qa = qa if qa is not None else cfg.qa_threshold
         use_data_dir = (
             data_dir if data_dir is not None else cfg.get_data_dir(product)

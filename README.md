@@ -52,6 +52,9 @@ rsplot raster 合肥 20260115 -p no2 -o ./logs/hcho/raster_city_jiujiang_hcho.pn
 # Plot a 30-day TROPOMI window mean.
 rsplot raster 安徽 20260131 -p hcho --days 30 -o hcho_anhui_202601.png
 
+# Plot a TROPOMI ozone-profile tropospheric column raster.
+rsplot raster 安徽 20260227 -p o3pr -o o3pr_anhui_20260227.png
+
 # Plot an explicit TROPOMI date range.
 rsplot raster 长三角 20260101-20260131 -p no2 -o no2_yrd_202601.png
 
