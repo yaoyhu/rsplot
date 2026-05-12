@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from importlib.metadata import PackageNotFoundError, version
 import math
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 import numpy as np
@@ -47,16 +47,19 @@ def _default_raster_n_min(product: str, window_n: int) -> int:
         return max(3, math.ceil(window_n * 0.25))
     return max(3, window_n // 2)
 
+
 def _get_version() -> str:
     try:
         return version("rsplot")
     except PackageNotFoundError:
         return "unknown"
 
+
 def _version_callback(value: bool) -> None:
     if value:
         console.print(f"rsplot {_get_version()}")
         raise typer.Exit()
+
 
 @app.callback()
 def _callback(
@@ -326,9 +329,7 @@ def raster(
         coverage_days = {
             "min": int(covered.min()) if len(covered) else 0,
             "max": int(covered.max()) if len(covered) else 0,
-            "mean": (
-                round(float(covered.mean()), 1) if len(covered) else 0.0
-            ),
+            "mean": (round(float(covered.mean()), 1) if len(covered) else 0.0),
         }
         if len(covered):
             coverage_days.update(
@@ -390,9 +391,7 @@ def raster(
     # --- 7. Plot ---
     if output is None:
         if window_mode:
-            output = (
-                f"/tmp/rsplot_{info.name}_{dates[0]}_{dates[-1]}.png"
-            )
+            output = f"/tmp/rsplot_{info.name}_{dates[0]}_{dates[-1]}.png"
         else:
             output = f"/tmp/rsplot_{info.name}_{dates[0]}.png"
 
@@ -533,17 +532,17 @@ def station(
     if resolved_dt != datetime_str:
         console.print(f"  → 自动选择最新时次: [cyan]{resolved_dt}[/cyan]")
     console.print(
-        f"  → [green]{data.n_valid}[/green] 有效站点 "
-        f"(共 {data.n_stations} 站)"
+        f"  → [green]{data.n_valid}[/green] 有效站点 (共 {data.n_stations} 站)"
     )
 
     # --- 5. Exceedance threshold ---
     threshold = get_exceedance_threshold(var)
     if threshold is not None:
-        n_exceed = int(np.sum(data.values[np.isfinite(data.values)] > threshold))
+        n_exceed = int(
+            np.sum(data.values[np.isfinite(data.values)] > threshold)
+        )
         console.print(
-            f"  → 超标阈值: {threshold}, "
-            f"超标站点: [red]{n_exceed}[/red]"
+            f"  → 超标阈值: {threshold}, 超标站点: [red]{n_exceed}[/red]"
         )
 
     # --- 6. Plot ---
@@ -662,8 +661,12 @@ def overlay(
         "-b",
         help="底图控制: satellite / none (覆盖级别默认)",
     ),
-    vmin: float | None = typer.Option(None, "--vmin", help="卫星 colorbar 最小值"),
-    vmax: float | None = typer.Option(None, "--vmax", help="卫星 colorbar 最大值"),
+    vmin: float | None = typer.Option(
+        None, "--vmin", help="卫星 colorbar 最小值"
+    ),
+    vmax: float | None = typer.Option(
+        None, "--vmax", help="卫星 colorbar 最大值"
+    ),
     cmap: str | None = typer.Option(None, "--cmap", help="卫星 colormap 名称"),
     smooth: float | None = typer.Option(
         None, "--smooth", help="高斯平滑 sigma"
@@ -771,7 +774,9 @@ def overlay(
         info.extent[2] - buf,
         info.extent[3] + buf,
     )
-    console.print(f"\n[bold]读取卫星数据:[/bold] {use_raster_dir} (产品: {product})")
+    console.print(
+        f"\n[bold]读取卫星数据:[/bold] {use_raster_dir} (产品: {product})"
+    )
     console.print(f"  日期: {date}, QA > {use_qa}")
     swath = reader.read(use_raster_dir, date, read_extent, qa_threshold=use_qa)
     console.print(
@@ -826,23 +831,22 @@ def overlay(
     if resolved_dt != datetime_str:
         console.print(f"  → 自动选择最新时次: [cyan]{resolved_dt}[/cyan]")
     console.print(
-        f"  → [green]{data.n_valid}[/green] 有效站点 "
-        f"(共 {data.n_stations} 站)"
+        f"  → [green]{data.n_valid}[/green] 有效站点 (共 {data.n_stations} 站)"
     )
 
     # --- 10. Exceedance threshold ---
     threshold = get_exceedance_threshold(var)
     if threshold is not None:
-        n_exceed = int(np.sum(data.values[np.isfinite(data.values)] > threshold))
+        n_exceed = int(
+            np.sum(data.values[np.isfinite(data.values)] > threshold)
+        )
         console.print(
             f"  → 超标阈值: {threshold}, 超标站点: [red]{n_exceed}[/red]"
         )
 
     # --- 11. Plot ---
     if output is None:
-        output = (
-            f"/tmp/rsplot_overlay_{info.name}_{product}_{resolved_dt}.png"
-        )
+        output = f"/tmp/rsplot_overlay_{info.name}_{product}_{resolved_dt}.png"
 
     unit = STATION_VAR_META[var][0]
     station_label = f"{var} ({unit})" if unit else var
@@ -1047,9 +1051,7 @@ def recent(
             data_dir if data_dir is not None else cfg.get_data_dir("guokong")
         )
         unit = STATION_VAR_META[var][0]
-        console.print(
-            f"\n[bold]统计站点:[/bold] {use_data_dir} (变量: {var})"
-        )
+        console.print(f"\n[bold]统计站点:[/bold] {use_data_dir} (变量: {var})")
         daily = summarize_recent_station(
             region=info,
             data_dir=use_data_dir,
@@ -1104,6 +1106,21 @@ def fnr(
         help="最小平均 NO2 柱浓度阈值 (x10^15 molec/cm2)；"
         "低于此值的像元 FNR 不可信，输出为 NaN",
     ),
+    voc_threshold: float = typer.Option(
+        1.0,
+        "--voc-threshold",
+        help="VOC-limited 分级阈值：FNR 小于该值判为 VOC-limited",
+    ),
+    nox_threshold: float = typer.Option(
+        2.0,
+        "--nox-threshold",
+        help="NOx-limited 分级阈值：FNR 大于该值判为 NOx-limited",
+    ),
+    display_max: float = typer.Option(
+        6.0,
+        "--display-max",
+        help="FNR 图例显示上限，必须大于 --nox-threshold",
+    ),
     # --- overrides ---
     level: str | None = typer.Option(
         None,
@@ -1155,7 +1172,11 @@ def fnr(
         rsplot fnr 安徽   20260131 --days 30      (30日窗口)
         rsplot fnr 长三角 20260101-20260130       (显式范围)
     """
-    from rsplot.fnr import compute_fnr, parse_date_window
+    from rsplot.fnr import (
+        compute_fnr,
+        parse_date_window,
+        validate_fnr_thresholds,
+    )
     from rsplot.geo.boundaries import resolve_region
     from rsplot.plotting.fnr import plot_fnr
     from rsplot.plotting.styles import setup_fonts
@@ -1179,10 +1200,26 @@ def fnr(
             f"[red]--n-min ({use_n_min}) 大于窗口天数 ({window_n})[/red]"
         )
         raise typer.Exit(1)
+    try:
+        use_voc_threshold, use_nox_threshold, use_display_max = (
+            validate_fnr_thresholds(
+                voc_threshold=voc_threshold,
+                nox_threshold=nox_threshold,
+                display_max=display_max,
+            )
+        )
+    except ValueError as e:
+        console.print(f"[red]FNR 阈值错误: {e}[/red]")
+        raise typer.Exit(1) from e
 
     console.print(
         f"[bold]时间窗口:[/bold] {dates[0]} ~ {dates[-1]} "
         f"({window_n} 天，每像元至少 {use_n_min} 天有效)"
+    )
+    console.print(
+        f"[bold]FNR 分级:[/bold] VOC<{use_voc_threshold:g}, "
+        f"transition {use_voc_threshold:g}~{use_nox_threshold:g}, "
+        f"NOx>{use_nox_threshold:g}"
     )
 
     # --- 3. Resolve region ---
@@ -1209,7 +1246,9 @@ def fnr(
 
     # --- 5. Resolve data dirs ---
     use_no2_dir = (
-        raster_dir_no2 if raster_dir_no2 is not None else cfg.get_data_dir("no2")
+        raster_dir_no2
+        if raster_dir_no2 is not None
+        else cfg.get_data_dir("no2")
     )
     use_hcho_dir = (
         raster_dir_hcho
@@ -1239,12 +1278,10 @@ def fnr(
     n_found_no2 = len(fnr_out.dates_found_no2)
     n_found_hcho = len(fnr_out.dates_found_hcho)
     console.print(
-        f"  → NO2 有效天数 {n_found_no2}/{window_n} "
-        f"(失败 {n_fail_no2})"
+        f"  → NO2 有效天数 {n_found_no2}/{window_n} (失败 {n_fail_no2})"
     )
     console.print(
-        f"  → HCHO 有效天数 {n_found_hcho}/{window_n} "
-        f"(失败 {n_fail_hcho})"
+        f"  → HCHO 有效天数 {n_found_hcho}/{window_n} (失败 {n_fail_hcho})"
     )
     if use_n_min > min(n_found_no2, n_found_hcho):
         console.print(
@@ -1270,7 +1307,12 @@ def fnr(
     )
 
     from rsplot.fnr import regime_percentages
-    pct = regime_percentages(fnr_out.fnr)
+
+    pct = regime_percentages(
+        fnr_out.fnr,
+        voc_threshold=use_voc_threshold,
+        nox_threshold=use_nox_threshold,
+    )
     console.print(
         f"  → Regime: [red]VOC-limited {pct['voc_limited']}%[/red] | "
         f"[yellow]transition {pct['transition']}%[/yellow] | "
@@ -1279,9 +1321,7 @@ def fnr(
 
     # --- 7. Plot ---
     if output is None:
-        output = (
-            f"/tmp/rsplot_fnr_{info.name}_{dates[0]}_{dates[-1]}.png"
-        )
+        output = f"/tmp/rsplot_fnr_{info.name}_{dates[0]}_{dates[-1]}.png"
 
     subtitle = (
         f"{dates[0]}~{dates[-1]}  ·  N_days={window_n} "
@@ -1300,6 +1340,9 @@ def fnr(
         title=title,
         output=output,
         subtitle=subtitle,
+        voc_threshold=use_voc_threshold,
+        nox_threshold=use_nox_threshold,
+        display_max=use_display_max,
     )
     console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
 
@@ -1309,6 +1352,9 @@ def fnr(
         fnr_out=fnr_out,
         res=use_res,
         output=output,
+        voc_threshold=use_voc_threshold,
+        nox_threshold=use_nox_threshold,
+        display_max=use_display_max,
     )
     emit_result(result, output)
 

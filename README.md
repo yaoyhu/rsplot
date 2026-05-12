@@ -69,6 +69,9 @@ rsplot fnr 合肥 20260114 -o fnr_hefei.png
 
 # Plot an FNR regime map with an explicit date range.
 rsplot fnr 长三角 20260101-20260130 -o fnr_yrd_202601.png
+
+# Override FNR regime thresholds for agent-driven sensitivity tests.
+rsplot fnr 合肥 20260114 --voc-threshold 0.8 --nox-threshold 1.8 --display-max 5 -o fnr_hefei_sensitivity.png
 ```
 
 When `-o/--output` is provided, `rsplot` writes the image to that path and also

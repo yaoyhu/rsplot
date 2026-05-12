@@ -2,8 +2,8 @@
 
 Uses the same boundary / basemap / gridline conventions as plot_raster,
 but swaps the continuous colorbar for a 3-segment discrete one aligned
-with the FNR_VOC_LIMIT / FNR_NOX_LIMIT thresholds so the regime readout
-is directly visible on the map.
+with the active VOC/NOx thresholds so the regime readout is directly
+visible on the map.
 """
 
 from __future__ import annotations
@@ -19,7 +19,12 @@ from cartopy.feature import ShapelyFeature
 from cartopy.mpl.gridliner import LATITUDE_FORMATTER, LONGITUDE_FORMATTER
 from matplotlib.colors import BoundaryNorm, ListedColormap
 
-from rsplot.fnr import FNR_DISPLAY_MAX, FNR_NOX_LIMIT, FNR_VOC_LIMIT
+from rsplot.fnr import (
+    FNR_DISPLAY_MAX,
+    FNR_NOX_LIMIT,
+    FNR_VOC_LIMIT,
+    validate_fnr_thresholds,
+)
 from rsplot.plotting.raster import _add_sub_labels, _figsize_for_level
 from rsplot.tiles.tianditu import TianDiTuTiles
 
@@ -36,10 +41,15 @@ _REGIME_COLORS = [
 ]
 
 
-def _build_fnr_cmap() -> tuple[ListedColormap, BoundaryNorm]:
+def _build_fnr_cmap(
+    *,
+    voc_threshold: float,
+    nox_threshold: float,
+    display_max: float,
+) -> tuple[ListedColormap, BoundaryNorm]:
     cmap = ListedColormap(_REGIME_COLORS, name="fnr_regime")
     cmap.set_bad(color="#dddddd", alpha=0.0)  # NaN → transparent
-    bounds = [0.0, FNR_VOC_LIMIT, FNR_NOX_LIMIT, FNR_DISPLAY_MAX]
+    bounds = [0.0, voc_threshold, nox_threshold, display_max]
     norm = BoundaryNorm(bounds, ncolors=cmap.N)
     return cmap, norm
 
@@ -56,8 +66,16 @@ def plot_fnr(
     title: str | None = None,
     output: str | None = None,
     subtitle: str | None = None,
+    voc_threshold: float = FNR_VOC_LIMIT,
+    nox_threshold: float = FNR_NOX_LIMIT,
+    display_max: float = FNR_DISPLAY_MAX,
 ) -> None:
     """Draw an FNR regime map."""
+    voc_threshold, nox_threshold, display_max = validate_fnr_thresholds(
+        voc_threshold=voc_threshold,
+        nox_threshold=nox_threshold,
+        display_max=display_max,
+    )
     params = region.params
     use_basemap = basemap if basemap is not None else params.basemap
 
@@ -74,7 +92,11 @@ def plot_fnr(
         subplot_kw={"projection": projection},
     )
 
-    cmap, norm = _build_fnr_cmap()
+    cmap, norm = _build_fnr_cmap(
+        voc_threshold=voc_threshold,
+        nox_threshold=nox_threshold,
+        display_max=display_max,
+    )
     alpha = 0.65 if use_basemap else 0.9
     im = ax.pcolormesh(
         LON,
@@ -160,16 +182,16 @@ def plot_fnr(
         shrink=shrink,
         pad=0.05,
         ticks=[
-            FNR_VOC_LIMIT / 2,
-            (FNR_VOC_LIMIT + FNR_NOX_LIMIT) / 2,
-            (FNR_NOX_LIMIT + FNR_DISPLAY_MAX) / 2,
+            voc_threshold / 2,
+            (voc_threshold + nox_threshold) / 2,
+            (nox_threshold + display_max) / 2,
         ],
     )
     cb.ax.set_yticklabels(
         [
-            f"VOC-limited\n(<{FNR_VOC_LIMIT:.0f})",
-            f"Transition\n({FNR_VOC_LIMIT:.0f}-{FNR_NOX_LIMIT:.0f})",
-            f"NOx-limited\n(>{FNR_NOX_LIMIT:.0f})",
+            f"VOC-limited\n(<{voc_threshold:g})",
+            f"Transition\n({voc_threshold:g}-{nox_threshold:g})",
+            f"NOx-limited\n(>{nox_threshold:g})",
         ],
         fontsize=8,
     )

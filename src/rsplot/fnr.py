@@ -60,6 +60,34 @@ NO2_MIN_COLUMN = 0.5
 FNR_DISPLAY_MAX = 6.0
 
 
+def validate_fnr_thresholds(
+    *,
+    voc_threshold: float = FNR_VOC_LIMIT,
+    nox_threshold: float = FNR_NOX_LIMIT,
+    display_max: float = FNR_DISPLAY_MAX,
+) -> tuple[float, float, float]:
+    """Validate FNR regime/display thresholds and return normalized floats."""
+    values = {
+        "voc_threshold": float(voc_threshold),
+        "nox_threshold": float(nox_threshold),
+        "display_max": float(display_max),
+    }
+    for name, value in values.items():
+        if not np.isfinite(value):
+            raise ValueError(f"{name} 必须是有限数字")
+    if values["voc_threshold"] < 0:
+        raise ValueError("voc_threshold 必须 >= 0")
+    if values["voc_threshold"] >= values["nox_threshold"]:
+        raise ValueError("voc_threshold 必须小于 nox_threshold")
+    if values["nox_threshold"] >= values["display_max"]:
+        raise ValueError("nox_threshold 必须小于 display_max")
+    return (
+        values["voc_threshold"],
+        values["nox_threshold"],
+        values["display_max"],
+    )
+
+
 # ---------------------------------------------------------------------------
 # Date window parsing
 # ---------------------------------------------------------------------------
@@ -361,19 +389,41 @@ def compute_fnr(
 # ---------------------------------------------------------------------------
 # Regime helpers (used by the plotter and the JSON builder)
 # ---------------------------------------------------------------------------
-def classify_regime(fnr: np.ndarray) -> np.ndarray:
+def classify_regime(
+    fnr: np.ndarray,
+    *,
+    voc_threshold: float = FNR_VOC_LIMIT,
+    nox_threshold: float = FNR_NOX_LIMIT,
+) -> np.ndarray:
     """Return int codes: 0=VOC-limited, 1=transition, 2=NOx-limited, -1=NaN."""
+    voc_threshold = float(voc_threshold)
+    nox_threshold = float(nox_threshold)
+    if not np.isfinite(voc_threshold) or not np.isfinite(nox_threshold):
+        raise ValueError("FNR regime thresholds 必须是有限数字")
+    if voc_threshold < 0:
+        raise ValueError("voc_threshold 必须 >= 0")
+    if voc_threshold >= nox_threshold:
+        raise ValueError("voc_threshold 必须小于 nox_threshold")
     code = np.full(fnr.shape, -1, dtype=np.int8)
     valid = np.isfinite(fnr)
-    code[valid & (fnr < FNR_VOC_LIMIT)] = 0
-    code[valid & (fnr >= FNR_VOC_LIMIT) & (fnr <= FNR_NOX_LIMIT)] = 1
-    code[valid & (fnr > FNR_NOX_LIMIT)] = 2
+    code[valid & (fnr < voc_threshold)] = 0
+    code[valid & (fnr >= voc_threshold) & (fnr <= nox_threshold)] = 1
+    code[valid & (fnr > nox_threshold)] = 2
     return code
 
 
-def regime_percentages(fnr: np.ndarray) -> dict[str, float]:
+def regime_percentages(
+    fnr: np.ndarray,
+    *,
+    voc_threshold: float = FNR_VOC_LIMIT,
+    nox_threshold: float = FNR_NOX_LIMIT,
+) -> dict[str, float]:
     """% of valid pixels in each regime."""
-    code = classify_regime(fnr)
+    code = classify_regime(
+        fnr,
+        voc_threshold=voc_threshold,
+        nox_threshold=nox_threshold,
+    )
     valid_total = int((code >= 0).sum())
     if valid_total == 0:
         return {"voc_limited": 0.0, "transition": 0.0, "nox_limited": 0.0}

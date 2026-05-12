@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from rsplot.fnr import FNR_DISPLAY_MAX, FNR_NOX_LIMIT, FNR_VOC_LIMIT
+
 if TYPE_CHECKING:
     import geopandas as gpd
 
@@ -475,11 +477,12 @@ def _fnr_per_city_stats(
     LAT: np.ndarray,
     fnr: np.ndarray,
     cities_gdf: gpd.GeoDataFrame,
+    *,
+    voc_threshold: float,
+    nox_threshold: float,
 ) -> list[dict[str, Any]]:
     """Per-city mean FNR and dominant regime."""
     from shapely.vectorized import contains
-
-    from rsplot.fnr import FNR_NOX_LIMIT, FNR_VOC_LIMIT
 
     rows: list[dict[str, Any]] = []
     for _, row in cities_gdf.iterrows():
@@ -489,9 +492,9 @@ def _fnr_per_city_stats(
         if len(finite) == 0:
             continue
         mean_fnr = float(np.mean(finite))
-        if mean_fnr < FNR_VOC_LIMIT:
+        if mean_fnr < voc_threshold:
             regime = "voc_limited"
-        elif mean_fnr <= FNR_NOX_LIMIT:
+        elif mean_fnr <= nox_threshold:
             regime = "transition"
         else:
             regime = "nox_limited"
@@ -503,10 +506,10 @@ def _fnr_per_city_stats(
                 "median_fnr": _round(np.median(finite)),
                 "regime": regime,
                 "voc_limited_pct": round(
-                    100 * float((finite < FNR_VOC_LIMIT).mean()), 1
+                    100 * float((finite < voc_threshold).mean()), 1
                 ),
                 "nox_limited_pct": round(
-                    100 * float((finite > FNR_NOX_LIMIT).mean()), 1
+                    100 * float((finite > nox_threshold).mean()), 1
                 ),
             }
         )
@@ -520,13 +523,20 @@ def build_fnr_result(
     fnr_out: FnrResult,
     res: float,
     output: str,
+    voc_threshold: float = FNR_VOC_LIMIT,
+    nox_threshold: float = FNR_NOX_LIMIT,
+    display_max: float = FNR_DISPLAY_MAX,
 ) -> dict[str, Any]:
     """Build the JSON sidecar for an FNR run."""
     from rsplot.fnr import (
-        FNR_DISPLAY_MAX,
-        FNR_NOX_LIMIT,
-        FNR_VOC_LIMIT,
         regime_percentages,
+        validate_fnr_thresholds,
+    )
+
+    voc_threshold, nox_threshold, display_max = validate_fnr_thresholds(
+        voc_threshold=voc_threshold,
+        nox_threshold=nox_threshold,
+        display_max=display_max,
     )
 
     fnr = fnr_out.fnr
@@ -585,9 +595,9 @@ def build_fnr_result(
         "params": {
             "n_min": fnr_out.n_min,
             "no2_min_column": fnr_out.no2_min_column,
-            "voc_threshold": FNR_VOC_LIMIT,
-            "nox_threshold": FNR_NOX_LIMIT,
-            "display_max": FNR_DISPLAY_MAX,
+            "voc_threshold": voc_threshold,
+            "nox_threshold": nox_threshold,
+            "display_max": display_max,
             "resolution_deg": res,
         },
         "stats": {
@@ -599,7 +609,11 @@ def build_fnr_result(
             "mask_diagnostics": mask_diagnostics,
             **_basic_stats(fnr),
         },
-        "regime_pct": regime_percentages(fnr),
+        "regime_pct": regime_percentages(
+            fnr,
+            voc_threshold=voc_threshold,
+            nox_threshold=nox_threshold,
+        ),
         "mean_fields": {
             "hcho_mean_raw_stats": _basic_stats(fnr_out.hcho_mean),
             "no2_mean_raw_stats": _basic_stats(fnr_out.no2_mean),
@@ -611,7 +625,12 @@ def build_fnr_result(
     sub_gdf = region.sub_boundary_gdf
     if sub_gdf is not None and len(sub_gdf) > 0:
         result["city_ranking"] = _fnr_per_city_stats(
-            fnr_out.LON, fnr_out.LAT, fnr, sub_gdf
+            fnr_out.LON,
+            fnr_out.LAT,
+            fnr,
+            sub_gdf,
+            voc_threshold=voc_threshold,
+            nox_threshold=nox_threshold,
         )
 
     return result
