@@ -37,6 +37,7 @@ def plot_raster(
     vmax: float = 20.0,
     basemap: bool | None = None,
     tianditu_key: str | None = None,
+    hcho_cmap_file: str | None = None,
     title: str | None = None,
     output: str | None = None,
     colorbar_label: str = "NO2 VCD (x10^15 molec/cm2)",
@@ -52,7 +53,7 @@ def plot_raster(
     """
     params = region.params
     use_basemap = basemap if basemap is not None else params.basemap
-    register_rsplot_colormaps()
+    register_rsplot_colormaps(hcho_cmap_file)
 
     # --- Figure setup ---
     if use_basemap and tianditu_key:

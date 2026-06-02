@@ -47,7 +47,9 @@ class RegionInfo:
     # sub-boundary GeoDataFrames for overlay
     main_boundary_gdf: gpd.GeoDataFrame | None = None  # red border
     sub_boundary_gdf: gpd.GeoDataFrame | None = None  # grey sub-divisions
-    detail_boundary_gdf: gpd.GeoDataFrame | None = None  # finer sub-divisions (counties in province view)
+    detail_boundary_gdf: gpd.GeoDataFrame | None = (
+        None  # finer sub-divisions (counties in province view)
+    )
     sub_name_field: str = NAME_FIELD
 
 
@@ -108,7 +110,7 @@ def resolve_region(
     Cascade order: key_region → province → city → county.
     If level_override is given, skip cascade and match only that level.
     """
-    gj = cfg.geojson_dir
+    gj = cfg.require_geojson_dir()
     gdf_prov = _load_province(gj)
     gdf_city = _load_city(gj)
     gdf_county = _load_county(gj)
@@ -209,9 +211,7 @@ def resolve_region(
                 )
             else:
                 # Regular province: cities + counties within each city
-                sub_cities = gdf_city[
-                    gdf_city.geometry.intersects(union_geom)
-                ]
+                sub_cities = gdf_city[gdf_city.geometry.intersects(union_geom)]
                 detail_counties = gdf_county[
                     gdf_county.geometry.intersects(union_geom)
                 ]
@@ -244,7 +244,7 @@ def resolve_region(
     if level_override == "county":
         # "/" case already handled above; bare name with --level county is ambiguous
         raise ValueError(
-            f"县/区级别需要指定所属城市，格式: 城市/县区，如 合肥/蜀山、成都/高新"
+            "县/区级别需要指定所属城市，格式: 城市/县区，如 合肥/蜀山、成都/高新"
         )
 
     raise ValueError(

@@ -1,6 +1,6 @@
 """National ground monitoring station (国控站点) reader.
 
-Reads hourly combined NC files from /home/zzgsg/data/guokong_combine/.
+Reads hourly combined NC files from the configured GuoKong data directory.
 File naming: {YYYYMMDDHH}.nc, e.g. 2026041415.nc.
 
 Accepts both YYYYMMDDHH (exact hour) and YYYYMMDD (auto-picks latest hour).
@@ -24,10 +24,10 @@ if TYPE_CHECKING:
 class StationData:
     """Filtered station observations for one variable."""
 
-    id: np.ndarray       # 1-D string array
-    lon: np.ndarray      # 1-D float
-    lat: np.ndarray      # 1-D float
-    values: np.ndarray   # 1-D float (NaN where invalid)
+    id: np.ndarray  # 1-D string array
+    lon: np.ndarray  # 1-D float
+    lat: np.ndarray  # 1-D float
+    values: np.ndarray  # 1-D float (NaN where invalid)
     var_name: str
     n_stations: int
     n_valid: int
@@ -74,11 +74,11 @@ def read_stations(
 
     try:
         ds = xr.open_dataset(path)
-    except FileNotFoundError:
+    except FileNotFoundError as e:
         raise FileNotFoundError(
             f"未找到站点数据文件: {path}\n"
             f"请检查 datetime 参数和 --data-dir 路径。"
-        )
+        ) from e
 
     try:
         lon = ds["lon"].values.astype(float)

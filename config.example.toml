@@ -1,0 +1,30 @@
+# Example rsplot configuration.
+#
+# Copy this file to ~/.config/rsplot/config.toml and replace the placeholder
+# paths with paths available on your machine. You can also point RSPLOT_CONFIG
+# at any TOML file with the same structure.
+
+[paths]
+geojson_dir = "/path/to/geojson"
+font_dir = "/path/to/fonts"
+# hcho_cmap_file = "/path/to/256x3_rgb_table.txt"
+
+[paths.data_dirs]
+no2 = "/path/to/NO2"
+o3 = "/path/to/O3"
+o3pr = "/path/to/O3PR"
+hcho = "/path/to/HCHO"
+guokong = "/path/to/guokong_combine"
+
+# Optional satellite basemap key. Leave commented unless you have a real key.
+# [tianditu]
+# api_key = "your-real-key"
+
+[defaults]
+dpi = 300
+qa_threshold = 0.5
+
+# Optional key-region overrides or additions.
+#
+# [key_regions]
+# MY_REGION = ["Province A", "Province B"]

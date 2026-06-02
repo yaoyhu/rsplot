@@ -12,15 +12,10 @@ import numpy as np
 HCHO_CMAP = "rsplot_hcho"
 STATION_CONCENTRATION_CMAP = "rsplot_station_concentration"
 
-DEFAULT_HCHO_CMAP_FILE = (
-    "/exports/XCZ/python/tmp/pycharm_project_24/colormap_22.txt"
-)
-HCHO_CMAP_FILE_ENV = "RSPLOT_HCHO_CMAP_FILE"
 
-
-def register_rsplot_colormaps() -> None:
+def register_rsplot_colormaps(hcho_cmap_file: str | None = None) -> None:
     """Register custom colormaps used by rsplot plots."""
-    _register(_build_hcho_cmap())
+    _register(_build_hcho_cmap(hcho_cmap_file))
     _register(
         mcolors.LinearSegmentedColormap.from_list(
             STATION_CONCENTRATION_CMAP,
@@ -36,9 +31,13 @@ def register_rsplot_colormaps() -> None:
     )
 
 
-def _build_hcho_cmap() -> mcolors.Colormap:
-    cmap_file = Path(os.environ.get(HCHO_CMAP_FILE_ENV, DEFAULT_HCHO_CMAP_FILE))
-    if cmap_file.exists():
+def _build_hcho_cmap(hcho_cmap_file: str | None) -> mcolors.Colormap:
+    if hcho_cmap_file:
+        cmap_file = Path(os.path.expandvars(hcho_cmap_file)).expanduser()
+        if not cmap_file.exists():
+            raise FileNotFoundError(
+                f"Configured HCHO colormap file does not exist: {cmap_file}"
+            )
         data = np.loadtxt(cmap_file)
         if data.shape != (256, 3):
             raise ValueError(

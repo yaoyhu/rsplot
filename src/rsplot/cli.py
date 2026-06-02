@@ -413,6 +413,7 @@ def raster(
         vmax=use_vmax,
         basemap=use_basemap,
         tianditu_key=cfg.tianditu_key,
+        hcho_cmap_file=cfg.hcho_cmap_file,
         title=title,
         output=output,
         colorbar_label=colorbar_label,
@@ -589,7 +590,7 @@ def station(
         datetime_str=resolved_dt,
         threshold=threshold,
         unit=unit,
-        cities_gdf=_load_city(cfg.geojson_dir),
+        cities_gdf=_load_city(cfg.require_geojson_dir()),
         output=output,
     )
     emit_result(result, output)
@@ -867,6 +868,7 @@ def overlay(
         dpi=use_dpi,
         basemap=use_basemap,
         tianditu_key=cfg.tianditu_key,
+        hcho_cmap_file=cfg.hcho_cmap_file,
         title=title,
         output=output,
     )
@@ -895,7 +897,7 @@ def overlay(
         datetime_str=resolved_dt,
         threshold=threshold,
         unit=unit,
-        cities_gdf=_load_city(cfg.geojson_dir),
+        cities_gdf=_load_city(cfg.require_geojson_dir()),
         output=output,
     )
     emit_result(result, output)
@@ -1255,7 +1257,7 @@ def fnr(
         if raster_dir_hcho is not None
         else cfg.get_data_dir("hcho")
     )
-    console.print(f"\n[bold]读取数据:[/bold]")
+    console.print("\n[bold]读取数据:[/bold]")
     console.print(f"  NO2 : {use_no2_dir}")
     console.print(f"  HCHO: {use_hcho_dir}")
 

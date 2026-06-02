@@ -31,16 +31,61 @@ uv run rsplot --help
 
 ## Configuration
 
-For satellite basemaps, set a TianDiTu API key:
+`rsplot` does not ship site-specific data paths. Configure local satellite,
+station, boundary, and font paths with a TOML file:
+
+```bash
+mkdir -p ~/.config/rsplot
+cp config.example.toml ~/.config/rsplot/config.toml
+```
+
+Then edit `~/.config/rsplot/config.toml`:
+
+```toml
+[paths]
+geojson_dir = "/path/to/geojson"
+font_dir = "/path/to/fonts"
+# hcho_cmap_file = "/path/to/256x3_rgb_table.txt"
+
+[paths.data_dirs]
+no2 = "/path/to/NO2"
+o3 = "/path/to/O3"
+o3pr = "/path/to/O3PR"
+hcho = "/path/to/HCHO"
+guokong = "/path/to/guokong_combine"
+
+# Optional satellite basemap key. Leave commented unless you have a real key.
+# [tianditu]
+# api_key = "your-real-key"
+```
+
+You can also point to a different config file:
+
+```bash
+export RSPLOT_CONFIG="/path/to/rsplot.toml"
+```
+
+Environment variables override TOML values:
 
 ```bash
 export TIANDITU_API_KEY="your-key"
+export RSPLOT_GEOJSON_DIR="/path/to/geojson"
+export RSPLOT_FONT_DIR="/path/to/fonts"
+export RSPLOT_DATA_DIR_NO2="/path/to/NO2"
+export RSPLOT_DATA_DIR_O3="/path/to/O3"
+export RSPLOT_DATA_DIR_O3PR="/path/to/O3PR"
+export RSPLOT_DATA_DIR_HCHO="/path/to/HCHO"
+export RSPLOT_DATA_DIR_GUOKONG="/path/to/guokong_combine"
+export RSPLOT_HCHO_CMAP_FILE="/path/to/256x3_rgb_table.txt"
 ```
+
+Command-line directory options, such as `--data-dir`, take precedence for the
+command being run. If no TianDiTu API key is configured, use `--basemap none`
+to avoid requesting satellite tiles.
 
 ## Usage
 
-The examples below assume the command is running on a USTC server or in an
-environment with equivalent data paths configured.
+The examples below assume data paths are configured and readable.
 
 ```bash
 # Show available commands and options.

@@ -49,6 +49,7 @@ def plot_overlay(
     dpi: int = 300,
     basemap: bool | None = None,
     tianditu_key: str | None = None,
+    hcho_cmap_file: str | None = None,
     title: str | None = None,
     output: str | None = None,
 ) -> None:
@@ -61,7 +62,7 @@ def plot_overlay(
     """
     params = region.params
     use_basemap = basemap if basemap is not None else params.basemap
-    register_rsplot_colormaps()
+    register_rsplot_colormaps(hcho_cmap_file)
 
     # --- Figure setup ---
     if use_basemap and tianditu_key:
@@ -156,18 +157,32 @@ def plot_overlay(
         if is_aqi:
             cmap, norm = _build_aqi_cmap()
             sc = ax.scatter(
-                lon, lat, c=vals, cmap=cmap, norm=norm,
-                s=marker_size, edgecolors="#111", linewidths=0.4,
-                transform=ccrs.PlateCarree(), zorder=5,
+                lon,
+                lat,
+                c=vals,
+                cmap=cmap,
+                norm=norm,
+                s=marker_size,
+                edgecolors="#111",
+                linewidths=0.4,
+                transform=ccrs.PlateCarree(),
+                zorder=5,
             )
         else:
             p5 = float(np.nanpercentile(vals, 5))
             p95 = float(np.nanpercentile(vals, 95))
             sc = ax.scatter(
-                lon, lat, c=vals, cmap=STATION_CONCENTRATION_CMAP,
-                vmin=p5, vmax=p95,
-                s=marker_size, edgecolors="#111", linewidths=0.4,
-                transform=ccrs.PlateCarree(), zorder=5,
+                lon,
+                lat,
+                c=vals,
+                cmap=STATION_CONCENTRATION_CMAP,
+                vmin=p5,
+                vmax=p95,
+                s=marker_size,
+                edgecolors="#111",
+                linewidths=0.4,
+                transform=ccrs.PlateCarree(),
+                zorder=5,
             )
 
         # Red circle for exceedance

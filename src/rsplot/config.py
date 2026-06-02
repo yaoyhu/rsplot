@@ -1,7 +1,8 @@
 """Configuration management for rsplot.
 
-# TODO: Loads defaults from ~/.config/rsplot/config.toml if present,
-CLI arguments override everything.
+Runtime paths are intentionally configured outside the package. The loader
+merges safe built-in defaults, TOML config files, environment variables, and
+finally CLI overrides handled by command functions.
 """
 
 from __future__ import annotations
@@ -19,21 +20,20 @@ else:
 
 
 # ---------------------------------------------------------------------------
-# Default paths
+# Safe built-in path defaults
 # ---------------------------------------------------------------------------
-DEFAULT_DATA_DIRS: dict[str, str] = {
-    "no2": "/satellite/exports2/yaoyhu/NO2",
-    "o3": "/satellite/exports2/yaoyhu/O3",
-    "o3pr": "/satellite/exports2/yaoyhu/O3PR",
-    "hcho": "/satellite/exports2/yaoyhu/HCHO",
-    "guokong": "/home/zzgsg/data/guokong_combine",
-}
-DEFAULT_GEOJSON_DIR = "/satellite/d4/yaoyhu/tiandi"
-DEFAULT_FONT_DIR = "/satellite/d4/yaoyhu/fonts"
+KNOWN_DATA_PRODUCTS = ("no2", "o3", "o3pr", "hcho", "guokong")
+
+DEFAULT_DATA_DIRS: dict[str, str] = {}
+DEFAULT_GEOJSON_DIR = None
+DEFAULT_FONT_DIR = None
+DEFAULT_HCHO_CMAP_FILE = None
 DEFAULT_TIANDITU_KEY = None
 
 
 CONFIG_PATH = Path.home() / ".config" / "rsplot" / "config.toml"
+CONFIG_ENV_VAR = "RSPLOT_CONFIG"
+HCHO_CMAP_FILE_ENV = "RSPLOT_HCHO_CMAP_FILE"
 
 
 # ---------------------------------------------------------------------------
@@ -146,15 +146,17 @@ DEFAULT_KEY_REGIONS: dict[str, list[str]] = {
 # ---------------------------------------------------------------------------
 @dataclass
 class AppConfig:
-    """Merged configuration (file defaults + CLI overrides)."""
+    """Merged configuration from files and environment variables."""
 
     # paths (per-product data directories)
     data_dirs: dict[str, str] = field(
         default_factory=lambda: dict(DEFAULT_DATA_DIRS)
     )
-    geojson_dir: str = DEFAULT_GEOJSON_DIR
-    font_dir: str = DEFAULT_FONT_DIR
+    geojson_dir: str | None = DEFAULT_GEOJSON_DIR
+    font_dir: str | None = DEFAULT_FONT_DIR
+    hcho_cmap_file: str | None = DEFAULT_HCHO_CMAP_FILE
     tianditu_key: str | None = DEFAULT_TIANDITU_KEY
+    config_files: list[str] = field(default_factory=list)
 
     # plotting defaults
     dpi: int = 300
@@ -167,43 +169,82 @@ class AppConfig:
 
     @classmethod
     def load(cls) -> AppConfig:
-        """Load config from TOML file, falling back to defaults."""
+        """Load config from TOML files and environment variables.
+
+        Merge order:
+        1. safe built-in defaults
+        2. ~/.config/rsplot/config.toml, if present
+        3. RSPLOT_CONFIG, if set
+        4. environment variable path/API-key overrides
+        """
         cfg = cls()
-        if CONFIG_PATH.exists():
-            with open(CONFIG_PATH, "rb") as f:
+        for path in _config_paths():
+            with open(path, "rb") as f:
                 data = tomllib.load(f)
             cfg._apply_toml(data)
-        # Environment variable overrides (per-product: RSPLOT_DATA_DIR_NO2, etc.)
-        for product in list(cfg.data_dirs):
+            cfg.config_files.append(str(path))
+
+        cfg._apply_env()
+        return cfg
+
+    def _apply_env(self) -> None:
+        """Apply environment variable overrides."""
+        products = set(KNOWN_DATA_PRODUCTS) | set(self.data_dirs)
+        for product in sorted(products):
             env_key = f"RSPLOT_DATA_DIR_{product.upper()}"
             if v := os.environ.get(env_key):
-                cfg.data_dirs[product] = v
+                self.data_dirs[product] = _normalize_path(v)
         if v := os.environ.get("RSPLOT_GEOJSON_DIR"):
-            cfg.geojson_dir = v
+            self.geojson_dir = _normalize_path(v)
+        if v := os.environ.get("RSPLOT_FONT_DIR"):
+            self.font_dir = _normalize_path(v)
+        if v := os.environ.get(HCHO_CMAP_FILE_ENV):
+            self.hcho_cmap_file = _normalize_path(v)
         if v := os.environ.get("TIANDITU_API_KEY"):
-            cfg.tianditu_key = v
-        return cfg
+            self.tianditu_key = v
 
     def get_data_dir(self, product: str) -> str:
         """Return data directory for a product, or raise if not configured."""
         key = product.lower()
-        if key in self.data_dirs:
-            return self.data_dirs[key]
-        available = ", ".join(self.data_dirs)
+        dir_path = self.data_dirs.get(key)
+        if dir_path:
+            return dir_path
+
+        configured = (
+            ", ".join(sorted(k for k, v in self.data_dirs.items() if v))
+            or "none"
+        )
         raise ValueError(
             f"No data directory configured for product '{product}'. "
-            f"Available: {available}"
+            f"Set [paths.data_dirs].{key} in {CONFIG_PATH}, set "
+            f"RSPLOT_DATA_DIR_{key.upper()}, point {CONFIG_ENV_VAR} to a "
+            "TOML config file, or pass the command-specific data directory "
+            f"option. Known products: {', '.join(KNOWN_DATA_PRODUCTS)}. "
+            f"Configured products: {configured}."
+        )
+
+    def require_geojson_dir(self) -> str:
+        """Return the boundary GeoJSON directory, or raise with guidance."""
+        if self.geojson_dir:
+            return self.geojson_dir
+        raise ValueError(
+            "GeoJSON boundary directory is not configured. Set "
+            f"[paths].geojson_dir in {CONFIG_PATH}, set RSPLOT_GEOJSON_DIR, "
+            f"or point {CONFIG_ENV_VAR} to a TOML config file."
         )
 
     def _apply_toml(self, data: dict[str, Any]) -> None:
         paths = data.get("paths", {})
         data_dirs = paths.get("data_dirs", {})
         for product, dir_path in data_dirs.items():
-            self.data_dirs[product.lower()] = dir_path
+            if dir_path:
+                self.data_dirs[product.lower()] = _normalize_path(dir_path)
         if v := paths.get("geojson_dir"):
-            self.geojson_dir = v
+            self.geojson_dir = _normalize_path(v)
         if v := paths.get("font_dir"):
-            self.font_dir = v
+            self.font_dir = _normalize_path(v)
+        if v := paths.get("hcho_cmap_file"):
+            self.hcho_cmap_file = _normalize_path(v)
 
         td = data.get("tianditu", {})
         if v := td.get("api_key"):
@@ -218,6 +259,33 @@ class AppConfig:
         kr = data.get("key_regions", {})
         for name, provinces in kr.items():
             self.key_regions[name] = provinces
+
+
+def _config_paths() -> list[Path]:
+    """Return config files to load in priority order."""
+    paths: list[Path] = []
+    if CONFIG_PATH.exists():
+        paths.append(CONFIG_PATH)
+
+    if raw := os.environ.get(CONFIG_ENV_VAR):
+        path = Path(_normalize_path(raw))
+        if not path.exists():
+            raise FileNotFoundError(
+                f"{CONFIG_ENV_VAR} points to a missing config file: {path}"
+            )
+        try:
+            already_loaded = path.resolve() in {p.resolve() for p in paths}
+        except OSError:
+            already_loaded = path in paths
+        if not already_loaded:
+            paths.append(path)
+
+    return paths
+
+
+def _normalize_path(value: Any) -> str:
+    """Expand ~ and environment variables in configured path values."""
+    return os.path.expanduser(os.path.expandvars(str(value)))
 
 
 # ---------------------------------------------------------------------------
@@ -241,7 +309,7 @@ AQ_LIMITS_2026: dict[str, dict[str, float]] = {
 # ---------------------------------------------------------------------------
 AQI_COLORS: list[tuple[int, str]] = [
     # (upper bound, hex color)
-    (50, "#00e400"),   # 优 / green
+    (50, "#00e400"),  # 优 / green
     (100, "#ffff00"),  # 良 / yellow
     (150, "#ff7e00"),  # 轻度污染 / orange
     (200, "#ff0000"),  # 中度污染 / red
