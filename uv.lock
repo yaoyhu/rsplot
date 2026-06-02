@@ -1224,7 +1224,7 @@ wheels = [
 
 [[package]]
 name = "rsplot"
-version = "0.2.4"
+version = "0.2.5"
 source = { editable = "." }
 dependencies = [
     { name = "astropy", version = "6.1.7", source = { registry = "https://mirrors.ustc.edu.cn/pypi/simple" }, marker = "python_full_version < '3.11'" },
