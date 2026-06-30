@@ -16,6 +16,8 @@ rsplot = rsplot.__main__:app
 ```
 
 Primary CLI commands are `raster`, `station`, `overlay`, `recent`, and `fnr`.
+The `station` command can optionally overlay ERA5 horizontal wind vectors with
+`--wind-level`.
 The `recent` command writes JSON only; the other plotting commands write a PNG
 and a same-basename `.json` sidecar.
 
@@ -31,6 +33,8 @@ and a same-basename `.json` sidecar.
 - `src/rsplot/config.py`: safe path defaults, config loading, level defaults,
   key regions, AQ limits, and station variable metadata.
 - `src/rsplot/readers/`: TROPOMI and station data readers.
+- `src/rsplot/readers/era5_wind.py`: paired U/V ERA5 wind reader with station
+  timezone to ERA5 UTC conversion.
 - `src/rsplot/readers/__init__.py`: product registry and plotting defaults for
   `no2`, `o3`, `o3pr`, and `hcho`.
 - `src/rsplot/geo/`: administrative boundary resolution and gridding helpers.
@@ -81,6 +85,7 @@ export RSPLOT_DATA_DIR_O3="/path/to/o3"
 export RSPLOT_DATA_DIR_O3PR="/path/to/o3pr"
 export RSPLOT_DATA_DIR_HCHO="/path/to/hcho"
 export RSPLOT_DATA_DIR_GUOKONG="/path/to/guokong"
+export RSPLOT_DATA_DIR_ERA5="/path/to/era5"
 export RSPLOT_HCHO_CMAP_FILE="/path/to/256x3_rgb_table.txt"
 ```
 
@@ -184,3 +189,6 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
   `"image": null` in the payload.
 - Many CLI commands use `/tmp/...` default outputs when `--output` is omitted.
   Prefer explicit `--output` paths in examples, tests, and agent workflows.
+- ERA5 files are indexed in UTC, while station filenames default to
+  `Asia/Shanghai` for wind matching. Use `--station-timezone` when a station
+  archive follows a different convention.

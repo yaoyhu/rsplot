@@ -15,6 +15,7 @@ o3 = "/path/to/O3"
 o3pr = "/path/to/O3PR"
 hcho = "/path/to/HCHO"
 guokong = "/path/to/guokong_combine"
+era5 = "/path/to/era5"
 
 # Optional satellite basemap key. Leave commented unless you have a real key.
 # [tianditu]

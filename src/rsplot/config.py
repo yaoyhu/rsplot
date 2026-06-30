@@ -22,7 +22,7 @@ else:
 # ---------------------------------------------------------------------------
 # Safe built-in path defaults
 # ---------------------------------------------------------------------------
-KNOWN_DATA_PRODUCTS = ("no2", "o3", "o3pr", "hcho", "guokong")
+KNOWN_DATA_PRODUCTS = ("no2", "o3", "o3pr", "hcho", "guokong", "era5")
 
 DEFAULT_DATA_DIRS: dict[str, str] = {}
 DEFAULT_GEOJSON_DIR = None
@@ -340,6 +340,11 @@ STATION_VAR_META: dict[str, tuple[str, str | None, str | None]] = {
     "O3_8h_24h": ("ug/m3", "O3", "8h"),
     "CO": ("mg/m3", "CO", "hourly"),
     "CO_24h": ("mg/m3", "CO", "daily"),
+}
+
+STATION_VAR_LABELS: dict[str, str] = {
+    "O3_8h": "8h O3",
+    "O3_8h_24h": "MDA8 O3",
 }
 
 

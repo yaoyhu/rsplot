@@ -20,12 +20,15 @@ def register_rsplot_colormaps(hcho_cmap_file: str | None = None) -> None:
         mcolors.LinearSegmentedColormap.from_list(
             STATION_CONCENTRATION_CMAP,
             [
-                "#fff7ec",
-                "#fee8c8",
-                "#fdbb84",
-                "#fc8d59",
-                "#e34a33",
-                "#b30000",
+                "#1a9850",
+                "#66bd63",
+                "#a6d96a",
+                "#d9ef8b",
+                "#fee08b",
+                "#fdae61",
+                "#f46d43",
+                "#d73027",
+                "#a50026",
             ],
         )
     )

@@ -53,6 +53,7 @@ o3 = "/path/to/O3"
 o3pr = "/path/to/O3PR"
 hcho = "/path/to/HCHO"
 guokong = "/path/to/guokong_combine"
+era5 = "/path/to/era5"
 
 # Optional satellite basemap key. Leave commented unless you have a real key.
 # [tianditu]
@@ -76,6 +77,7 @@ export RSPLOT_DATA_DIR_O3="/path/to/O3"
 export RSPLOT_DATA_DIR_O3PR="/path/to/O3PR"
 export RSPLOT_DATA_DIR_HCHO="/path/to/HCHO"
 export RSPLOT_DATA_DIR_GUOKONG="/path/to/guokong_combine"
+export RSPLOT_DATA_DIR_ERA5="/path/to/era5"
 export RSPLOT_HCHO_CMAP_FILE="/path/to/256x3_rgb_table.txt"
 ```
 
@@ -105,6 +107,13 @@ rsplot raster 长三角 20260101-20260131 -p no2 -o no2_yrd_202601.png
 
 # Plot national monitoring station observations.
 rsplot station 合肥 2026041415 --var O3 -o station_hefei_o3.png
+
+# Overlay hourly ERA5 10 m wind vectors on station observations.
+# Station timestamps default to Asia/Shanghai and are matched to ERA5 UTC.
+rsplot station 合肥 2026041415 --var O3 --wind-level 10m -o station_wind_hefei_o3.png
+
+# Pressure-level wind is also supported (1000/925/850/700/500 hPa).
+rsplot station 安徽 2026041415 --var PM2.5 --wind-level 850 -o station_wind_anhui_pm25.png
 
 # Overlay satellite raster data and station observations.
 rsplot overlay 合肥 2026041415 -p no2 --var NO2 -o overlay_hefei_no2.png

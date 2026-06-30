@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from rsplot.fnr import FnrResult
     from rsplot.geo.boundaries import RegionInfo
     from rsplot.readers import ProductInfo
+    from rsplot.readers.era5_wind import WindFieldData
     from rsplot.readers.guokong import StationData
 
 
@@ -272,6 +273,55 @@ def _top_station_entries(
     return top_stations
 
 
+def _build_wind_block(
+    wind: WindFieldData, stride: int
+) -> dict[str, Any]:
+    """Build machine-readable metadata for a plotted ERA5 wind layer."""
+    step = max(1, stride)
+    sample = np.s_[::step, ::step]
+    sampled_valid = np.isfinite(wind.speed[sample])
+    finite = np.isfinite(wind.speed)
+    total = wind.n_cells
+
+    mean_u = float(np.nanmean(wind.u))
+    mean_v = float(np.nanmean(wind.v))
+    direction_to = (np.degrees(np.arctan2(mean_u, mean_v)) + 360.0) % 360.0
+    direction_from = (direction_to + 180.0) % 360.0
+
+    max_flat_index = int(np.nanargmax(wind.speed))
+    max_index = np.unravel_index(max_flat_index, wind.speed.shape)
+    return {
+        "source": "ERA5",
+        "level": wind.level,
+        "station_datetime": wind.station_datetime,
+        "datetime_utc": wind.datetime_utc,
+        "unit": wind.unit,
+        "source_files": list(wind.source_files),
+        "grid_shape": list(wind.speed.shape),
+        "coverage_pct": (
+            round(100 * int(finite.sum()) / total, 1) if total else 0.0
+        ),
+        "n_region_cells": int(total),
+        "stride": step,
+        "n_vectors_valid": int(finite.sum()),
+        "n_arrows_plotted": int(sampled_valid.sum()),
+        "u_stats": _basic_stats(wind.u),
+        "v_stats": _basic_stats(wind.v),
+        "speed_stats": _basic_stats(wind.speed),
+        "resultant": {
+            "mean_u": _round(mean_u),
+            "mean_v": _round(mean_v),
+            "direction_to_deg": _round(direction_to, 1),
+            "wind_from_deg": _round(direction_from, 1),
+        },
+        "max_speed_location": {
+            "lon": round(float(wind.lon[max_index]), 3),
+            "lat": round(float(wind.lat[max_index]), 3),
+            "speed": _round(wind.speed[max_index]),
+        },
+    }
+
+
 def build_station_result(
     *,
     region: RegionInfo,
@@ -281,6 +331,8 @@ def build_station_result(
     unit: str,
     cities_gdf: gpd.GeoDataFrame | None,
     output: str,
+    wind: WindFieldData | None = None,
+    wind_stride: int | None = None,
 ) -> dict[str, Any]:
     valid = np.isfinite(data.values)
     vals = data.values[valid]
@@ -392,6 +444,9 @@ def build_station_result(
             )
         ranking.sort(key=lambda r: (r["mean"] is None, -(r["mean"] or 0)))
         result["city_ranking"] = ranking
+
+    if wind is not None:
+        result["wind"] = _build_wind_block(wind, wind_stride or 1)
 
     return result
 

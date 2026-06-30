@@ -479,20 +479,68 @@ def station(
         "-b",
         help="底图控制: satellite / none",
     ),
+    wind_level: str | None = typer.Option(
+        None,
+        "--wind-level",
+        help="叠加 ERA5 风场层次: 10m / 100m / 1000 / 925 / 850 / 700 / 500",
+    ),
+    wind_data_dir: str | None = typer.Option(
+        None,
+        "--wind-data-dir",
+        help="ERA5 数据目录 (覆盖配置中的 era5 路径)",
+    ),
+    station_timezone: str = typer.Option(
+        "Asia/Shanghai",
+        "--station-timezone",
+        help="国控文件名时次的 IANA 时区，用于匹配 ERA5 UTC",
+    ),
+    wind_stride: int | None = typer.Option(
+        None,
+        "--wind-stride",
+        help="风矢量抽稀步长；默认根据区域和网格大小自动选择",
+    ),
+    wind_scale: float | None = typer.Option(
+        None,
+        "--wind-scale",
+        help="Matplotlib quiver scale；不指定时自动缩放",
+    ),
+    wind_width: float = typer.Option(
+        0.004,
+        "--wind-width",
+        help="风箭头宽度；默认 0.004",
+    ),
+    wind_cmap: str = typer.Option(
+        "viridis", "--wind-cmap", help="风速色标名称"
+    ),
+    wind_vmin: float | None = typer.Option(
+        None, "--wind-vmin", help="风速色标最小值"
+    ),
+    wind_vmax: float | None = typer.Option(
+        None, "--wind-vmax", help="风速色标最大值"
+    ),
     title: str | None = typer.Option(None, "--title", help="自定义标题"),
 ) -> None:
-    """绘制国控站点散点图。
+    """绘制国控站点散点图，可选叠加 ERA5 风场。
 
     示例:
         rsplot station 安徽 20260414        (自动取当天最新小时)
         rsplot station 安徽 2026041415      (精确到15时)
         rsplot station 中国 20260414 --var PM2.5_24h
         rsplot station YRD 2026041415 --var NO2 -o logs/yrd_no2.png
+        rsplot station 合肥 2026041415 --var O3 --wind-level 10m
     """
-    from rsplot.config import STATION_VAR_META, get_exceedance_threshold
+    from rsplot.config import (
+        STATION_VAR_LABELS,
+        STATION_VAR_META,
+        get_exceedance_threshold,
+    )
     from rsplot.geo.boundaries import resolve_region
-    from rsplot.plotting.station import plot_station
+    from rsplot.plotting.station import plot_station, wind_stride_for_shape
     from rsplot.plotting.styles import setup_fonts
+    from rsplot.readers.era5_wind import (
+        mask_wind_to_region,
+        read_era5_wind,
+    )
     from rsplot.readers.guokong import mask_stations_to_region, read_stations
 
     # --- 1. Load config ---
@@ -546,7 +594,67 @@ def station(
             f"  → 超标阈值: {threshold}, 超标站点: [red]{n_exceed}[/red]"
         )
 
-    # --- 6. Plot ---
+    # --- 6. Optional ERA5 wind overlay ---
+    wind_data = None
+    use_wind_stride = None
+    if wind_level is not None:
+        if wind_stride is not None and wind_stride < 1:
+            console.print("[red]--wind-stride 必须大于等于 1。[/red]")
+            raise typer.Exit(1)
+        if wind_scale is not None and wind_scale <= 0:
+            console.print("[red]--wind-scale 必须大于 0。[/red]")
+            raise typer.Exit(1)
+        if wind_width <= 0:
+            console.print("[red]--wind-width 必须大于 0。[/red]")
+            raise typer.Exit(1)
+        if (
+            wind_vmin is not None
+            and wind_vmax is not None
+            and wind_vmax <= wind_vmin
+        ):
+            console.print("[red]--wind-vmax 必须大于 --wind-vmin。[/red]")
+            raise typer.Exit(1)
+
+        use_wind_data_dir = (
+            wind_data_dir
+            if wind_data_dir is not None
+            else cfg.get_data_dir("era5")
+        )
+        console.print(
+            f"\n[bold]读取 ERA5 风场:[/bold] {use_wind_data_dir}"
+        )
+        console.print(
+            f"  站点时次: {resolved_dt} ({station_timezone}), "
+            f"层次: {wind_level}"
+        )
+        try:
+            wind_data = read_era5_wind(
+                use_wind_data_dir,
+                resolved_dt,
+                wind_level,
+                read_extent,
+                station_timezone=station_timezone,
+            )
+            wind_data = mask_wind_to_region(wind_data, info.geometry)
+        except (FileNotFoundError, ValueError) as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(1) from e
+        if wind_data.n_valid == 0:
+            console.print("[red]目标区域内没有有效 ERA5 风矢量。[/red]")
+            raise typer.Exit(1)
+
+        use_wind_stride = (
+            wind_stride
+            if wind_stride is not None
+            else wind_stride_for_shape(wind_data.speed.shape, info.level)
+        )
+        console.print(
+            f"  → ERA5 UTC 时次: [cyan]{wind_data.datetime_utc}[/cyan], "
+            f"有效网格: [green]{wind_data.n_valid}[/green], "
+            f"抽稀步长: {use_wind_stride}"
+        )
+
+    # --- 7. Plot ---
     use_dpi = dpi if dpi is not None else cfg.dpi
 
     if basemap is not None:
@@ -560,27 +668,47 @@ def station(
     )
 
     unit = STATION_VAR_META[var][0]
-    colorbar_label = f"{var} ({unit})" if unit else var
+    display_var = STATION_VAR_LABELS.get(var, var)
+    colorbar_label = f"{display_var} ({unit})" if unit else display_var
+    use_title = title
+    if use_title is None and display_var != var:
+        if wind_data is None:
+            use_title = f"{display_var} - {info.name}"
+        else:
+            use_title = (
+                f"{display_var} + ERA5 {wind_data.level} wind - {info.name}"
+            )
 
     if output is None:
-        output = f"/tmp/rsplot_station_{info.name}_{var}_{resolved_dt}.png"
+        wind_suffix = f"_wind{wind_data.level}" if wind_data is not None else ""
+        output = (
+            f"/tmp/rsplot_station_{info.name}_{var}_{resolved_dt}"
+            f"{wind_suffix}.png"
+        )
 
     console.print("\n[bold]绘图中...[/bold]")
     plot_station(
         data,
         info,
+        wind=wind_data,
+        wind_stride=use_wind_stride or 1,
+        wind_scale=wind_scale,
+        wind_width=wind_width,
+        wind_cmap=wind_cmap,
+        wind_vmin=wind_vmin,
+        wind_vmax=wind_vmax,
         threshold=threshold,
         dpi=use_dpi,
         basemap=use_basemap,
         tianditu_key=cfg.tianditu_key,
-        title=title,
+        title=use_title,
         output=output,
         colorbar_label=colorbar_label,
     )
 
     console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
 
-    # --- 7. Emit structured result for downstream agents ---
+    # --- 8. Emit structured result for downstream agents ---
     from rsplot.geo.boundaries import _load_city
     from rsplot.results import build_station_result, emit_result
 
@@ -592,6 +720,8 @@ def station(
         unit=unit,
         cities_gdf=_load_city(cfg.require_geojson_dir()),
         output=output,
+        wind=wind_data,
+        wind_stride=use_wind_stride,
     )
     emit_result(result, output)
 

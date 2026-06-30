@@ -18,11 +18,13 @@ from cartopy.feature import ShapelyFeature
 from cartopy.mpl.gridliner import LATITUDE_FORMATTER, LONGITUDE_FORMATTER
 
 from rsplot.config import AQI_COLORS
+from rsplot.plotting.colormaps import STATION_CONCENTRATION_CMAP
 from rsplot.plotting.raster import _add_sub_labels, _figsize_for_level
 from rsplot.tiles.tianditu import TianDiTuTiles
 
 if TYPE_CHECKING:
     from rsplot.geo.boundaries import RegionInfo
+    from rsplot.readers.era5_wind import WindFieldData
     from rsplot.readers.guokong import StationData
 
 
@@ -46,10 +48,40 @@ def _station_marker_size(level: str) -> int:
     }.get(level, 46)
 
 
+def wind_stride_for_shape(shape: tuple[int, int], level: str) -> int:
+    """Choose a readable quiver stride for a regional ERA5 subset."""
+    target = {
+        "country": 32,
+        "key_region": 30,
+        "province": 28,
+        "city": 24,
+        "county": 20,
+    }.get(level, 24)
+    return max(1, round(max(shape) / target))
+
+
+def _nice_wind_reference(speed: np.ndarray) -> float:
+    """Return a compact, human-readable quiver-key magnitude."""
+    value = float(np.nanpercentile(speed, 75))
+    if value <= 0:
+        return 1.0
+    magnitude = 10 ** np.floor(np.log10(value))
+    scaled = value / magnitude
+    nice = 1.0 if scaled <= 1 else 2.0 if scaled <= 2 else 5.0
+    return nice * magnitude
+
+
 def plot_station(
     data: StationData,
     region: RegionInfo,
     *,
+    wind: WindFieldData | None = None,
+    wind_stride: int = 1,
+    wind_scale: float | None = None,
+    wind_width: float = 0.004,
+    wind_cmap: str = "viridis",
+    wind_vmin: float | None = None,
+    wind_vmax: float | None = None,
     threshold: float | None = None,
     dpi: int = 300,
     basemap: bool | None = None,
@@ -86,6 +118,52 @@ def plot_station(
     # --- Basemap tiles ---
     if tiles is not None:
         ax.add_image(tiles, params.zoom)
+
+    # --- ERA5 wind vectors (above basemap, below boundaries and stations) ---
+    wind_quiver = None
+    if wind is not None:
+        step = max(1, wind_stride)
+        sample = np.s_[::step, ::step]
+        sampled_speed = wind.speed[sample]
+        finite_speed = sampled_speed[np.isfinite(sampled_speed)]
+        if len(finite_speed) > 0:
+            use_wind_vmin = (
+                wind_vmin if wind_vmin is not None else 0.0
+            )
+            use_wind_vmax = (
+                wind_vmax
+                if wind_vmax is not None
+                else float(np.nanpercentile(finite_speed, 95))
+            )
+            if use_wind_vmax <= use_wind_vmin:
+                use_wind_vmax = use_wind_vmin + 1.0
+            wind_norm = mcolors.Normalize(use_wind_vmin, use_wind_vmax)
+            wind_quiver = ax.quiver(
+                wind.lon[sample],
+                wind.lat[sample],
+                wind.u[sample],
+                wind.v[sample],
+                sampled_speed,
+                transform=ccrs.PlateCarree(),
+                cmap=wind_cmap,
+                norm=wind_norm,
+                scale=wind_scale,
+                pivot="middle",
+                width=wind_width,
+                alpha=0.9,
+                zorder=3,
+            )
+            reference = _nice_wind_reference(finite_speed)
+            ax.quiverkey(
+                wind_quiver,
+                0.86,
+                0.035,
+                reference,
+                f"{reference:g} {wind.unit}",
+                labelpos="E",
+                coordinates="axes",
+                fontproperties={"size": 8},
+            )
 
     # --- Detail boundaries (counties in province view, dotted) ---
     if (
@@ -139,6 +217,7 @@ def plot_station(
     lat = data.lat[valid]
     vals = data.values[valid]
 
+    sc = None
     if len(vals) == 0:
         ax.text(
             0.5, 0.5, "No valid data",
@@ -161,7 +240,7 @@ def plot_station(
             p5 = float(np.nanpercentile(vals, 5))
             p95 = float(np.nanpercentile(vals, 95))
             sc = ax.scatter(
-                lon, lat, c=vals, cmap="YlOrRd",
+                lon, lat, c=vals, cmap=STATION_CONCENTRATION_CMAP,
                 vmin=p5, vmax=p95,
                 s=marker_size, edgecolors="#333", linewidths=0.3,
                 transform=ccrs.PlateCarree(), zorder=5,
@@ -181,12 +260,6 @@ def plot_station(
                     transform=ccrs.PlateCarree(),
                     zorder=6,
                 )
-
-        # --- Colorbar ---
-        shrink = 0.6 if region.level in ("country", "key_region", "province") else 0.7
-        cb = plt.colorbar(sc, ax=ax, shrink=shrink, pad=0.05)
-        if colorbar_label:
-            cb.set_label(colorbar_label)
 
     # --- Map decorations ---
     if not use_basemap:
@@ -210,12 +283,43 @@ def plot_station(
     gl.xlocator = mticker.MultipleLocator(params.grid_step)
     gl.ylocator = mticker.MultipleLocator(params.grid_step)
 
+    # --- Colorbars ---
+    if sc is not None and wind_quiver is not None:
+        cax_station = ax.inset_axes([1.03, 0.54, 0.025, 0.42])
+        cb_station = fig.colorbar(sc, cax=cax_station)
+        if colorbar_label:
+            cb_station.set_label(colorbar_label, fontsize=9)
+        cb_station.ax.tick_params(labelsize=8)
+
+        cax_wind = ax.inset_axes([1.03, 0.04, 0.025, 0.42])
+        cb_wind = fig.colorbar(wind_quiver, cax=cax_wind)
+        cb_wind.set_label(f"Wind speed ({wind.unit})", fontsize=9)
+        cb_wind.ax.tick_params(labelsize=8)
+    elif sc is not None:
+        shrink = (
+            0.6
+            if region.level in ("country", "key_region", "province")
+            else 0.7
+        )
+        cb_station = fig.colorbar(sc, ax=ax, shrink=shrink, pad=0.05)
+        if colorbar_label:
+            cb_station.set_label(colorbar_label)
+    elif wind_quiver is not None:
+        cb_wind = fig.colorbar(wind_quiver, ax=ax, shrink=0.7, pad=0.05)
+        cb_wind.set_label(f"Wind speed ({wind.unit})")
+
     # Title
     if title is None:
-        title = f"{data.var_name} - {region.name}"
+        if wind is None:
+            title = f"{data.var_name} - {region.name}"
+        else:
+            title = f"{data.var_name} + ERA5 {wind.level} wind - {region.name}"
     ax.set_title(title, fontsize=14)
 
-    plt.tight_layout()
+    if wind_quiver is not None and sc is not None:
+        fig.tight_layout(rect=[0, 0, 0.9, 1])
+    else:
+        plt.tight_layout()
 
     # --- Output ---
     if output:
