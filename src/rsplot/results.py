@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from rsplot.geo.boundaries import RegionInfo
     from rsplot.readers import ProductInfo
     from rsplot.readers.era5_wind import WindFieldData
+    from rsplot.readers.forecast import ForecastData
     from rsplot.readers.guokong import StationData
 
 
@@ -149,9 +150,11 @@ def build_raster_result(
     n_days_requested/n_days_found/n_min/dates_failed/coverage_days) for
     window-mean runs.
     """
-    finite = grid[np.isfinite(grid)]
-    total = grid.size
-    coverage_pct = round(100 * len(finite) / total, 1) if total else 0.0
+    from rsplot.geo.gridding import grid_coverage_in_region
+
+    coverage_pct, n_valid_region, total_region_pixels = (
+        grid_coverage_in_region(LON, LAT, grid, region.geometry)
+    )
 
     result: dict[str, Any] = {
         "command": "raster",
@@ -169,11 +172,72 @@ def build_raster_result(
         "stats": {
             "grid_shape": list(grid.shape),
             "coverage_pct": coverage_pct,
+            "valid_region_pixels": n_valid_region,
+            "total_region_pixels": total_region_pixels,
             **_basic_stats(grid),
         },
     }
     if window is not None:
         result["window"] = window
+
+    sub_gdf = region.sub_boundary_gdf
+    if sub_gdf is not None and len(sub_gdf) > 0:
+        result["spatial_summary"] = _grid_per_city_stats(LON, LAT, grid, sub_gdf)
+        result["hotspots"] = _top_hotspots(LON, LAT, grid, sub_gdf, n=5)
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Forecast
+# ---------------------------------------------------------------------------
+def build_forecast_result(
+    *,
+    region: RegionInfo,
+    data: ForecastData,
+    LON: np.ndarray,
+    LAT: np.ndarray,
+    grid: np.ndarray,
+    vmin: float,
+    vmax: float,
+    output: str,
+) -> dict[str, Any]:
+    """Build the JSON sidecar payload for a forecast run."""
+    from rsplot.geo.gridding import grid_coverage_in_region
+
+    coverage_pct, n_valid_region, total_region_pixels = (
+        grid_coverage_in_region(LON, LAT, grid, region.geometry)
+    )
+
+    result: dict[str, Any] = {
+        "command": "forecast",
+        "image": output,
+        "region": {
+            "name": region.name,
+            "level": region.level,
+            "extent": [round(x, 3) for x in region.extent],
+        },
+        "variable": data.variable,
+        "label": data.label,
+        "unit": data.unit,
+        "forecast": {
+            "source": "forecast",
+            "init_datetime": data.init_datetime,
+            "lead_hour": data.lead_hour,
+            "valid_datetime": data.valid_datetime,
+            "source_file": data.source_file,
+        },
+        "vrange": {"vmin": _round(vmin), "vmax": _round(vmax)},
+        "stats": {
+            "grid_shape": list(grid.shape),
+            "coverage_pct": coverage_pct,
+            "n_region_cells": total_region_pixels,
+            "n_valid": n_valid_region,
+            "n_read_cells": int(data.n_cells),
+            "n_read_valid": int(data.n_valid),
+            **_basic_stats(grid),
+        },
+    }
 
     sub_gdf = region.sub_boundary_gdf
     if sub_gdf is not None and len(sub_gdf) > 0:

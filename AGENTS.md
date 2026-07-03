@@ -15,7 +15,8 @@ The package uses a `src/` layout and exposes the console command:
 rsplot = rsplot.__main__:app
 ```
 
-Primary CLI commands are `raster`, `station`, `overlay`, `recent`, and `fnr`.
+Primary CLI commands are `raster`, `forecast`, `station`, `overlay`,
+`recent`, and `fnr`.
 The `station` command can optionally overlay ERA5 horizontal wind vectors with
 `--wind-level`.
 The `recent` command writes JSON only; the other plotting commands write a PNG
@@ -35,6 +36,8 @@ and a same-basename `.json` sidecar.
 - `src/rsplot/readers/`: TROPOMI and station data readers.
 - `src/rsplot/readers/era5_wind.py`: paired U/V ERA5 wind reader with station
   timezone to ERA5 UTC conversion.
+- `src/rsplot/readers/forecast.py`: gridded air-quality forecast reader for
+  `forecast6/12/24/48/72` NetCDF files.
 - `src/rsplot/readers/__init__.py`: product registry and plotting defaults for
   `no2`, `o3`, `o3pr`, and `hcho`.
 - `src/rsplot/geo/`: administrative boundary resolution and gridding helpers.
@@ -86,6 +89,7 @@ export RSPLOT_DATA_DIR_O3PR="/path/to/o3pr"
 export RSPLOT_DATA_DIR_HCHO="/path/to/hcho"
 export RSPLOT_DATA_DIR_GUOKONG="/path/to/guokong"
 export RSPLOT_DATA_DIR_ERA5="/path/to/era5"
+export RSPLOT_DATA_DIR_FORECAST="/path/to/forecast"
 export RSPLOT_HCHO_CMAP_FILE="/path/to/256x3_rgb_table.txt"
 ```
 
@@ -192,3 +196,6 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
 - ERA5 files are indexed in UTC, while station filenames default to
   `Asia/Shanghai` for wind matching. Use `--station-timezone` when a station
   archive follows a different convention.
+- Forecast files are grouped as
+  `forecast{lead}/{YYYYMMDDHH}_forecast{lead}.nc`, where the filename time is
+  treated as initialization time and `valid_datetime = init + lead hours`.

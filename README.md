@@ -54,6 +54,7 @@ o3pr = "/path/to/O3PR"
 hcho = "/path/to/HCHO"
 guokong = "/path/to/guokong_combine"
 era5 = "/path/to/era5"
+forecast = "/path/to/forecast"
 
 # Optional satellite basemap key. Leave commented unless you have a real key.
 # [tianditu]
@@ -78,6 +79,7 @@ export RSPLOT_DATA_DIR_O3PR="/path/to/O3PR"
 export RSPLOT_DATA_DIR_HCHO="/path/to/HCHO"
 export RSPLOT_DATA_DIR_GUOKONG="/path/to/guokong_combine"
 export RSPLOT_DATA_DIR_ERA5="/path/to/era5"
+export RSPLOT_DATA_DIR_FORECAST="/path/to/forecast"
 export RSPLOT_HCHO_CMAP_FILE="/path/to/256x3_rgb_table.txt"
 ```
 
@@ -104,6 +106,12 @@ rsplot raster 安徽 20260227 -p o3pr -o o3pr_anhui_20260227.png
 
 # Plot an explicit TROPOMI date range.
 rsplot raster 长三角 20260101-20260131 -p no2 -o no2_yrd_202601.png
+
+# Plot gridded air-quality forecast initialized at a specific hour.
+rsplot forecast 安徽 2026063000 --lead 24 --var O3 -o forecast_anhui_o3.png
+
+# Date-only forecast input automatically selects the latest initialized hour.
+rsplot forecast 合肥 20260630 --lead 72 --var PM2.5 -o forecast_hefei_pm25.png
 
 # Plot national monitoring station observations.
 rsplot station 合肥 2026041415 --var O3 -o station_hefei_o3.png

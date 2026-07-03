@@ -22,7 +22,15 @@ else:
 # ---------------------------------------------------------------------------
 # Safe built-in path defaults
 # ---------------------------------------------------------------------------
-KNOWN_DATA_PRODUCTS = ("no2", "o3", "o3pr", "hcho", "guokong", "era5")
+KNOWN_DATA_PRODUCTS = (
+    "no2",
+    "o3",
+    "o3pr",
+    "hcho",
+    "guokong",
+    "era5",
+    "forecast",
+)
 
 DEFAULT_DATA_DIRS: dict[str, str] = {}
 DEFAULT_GEOJSON_DIR = None

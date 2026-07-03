@@ -152,6 +152,7 @@ def raster(
     from rsplot.geo.gridding import (
         fill_nan_gaps,
         grid_data,
+        grid_coverage_in_region,
         mask_to_region,
         smooth_grid,
     )
@@ -360,8 +361,6 @@ def raster(
             "coverage_days": coverage_days,
         }
 
-    coverage = float(np.isfinite(grid_masked).mean()) * 100
-    console.print(f"  → 网格 {grid_masked.shape}, 覆盖率 {coverage:.1f}%")
     if not np.isfinite(grid_masked).any():
         console.print(
             "[red]窗口均值全区无有效像元，可能原因：窗口内覆盖不足，"
@@ -374,6 +373,13 @@ def raster(
         grid_masked = smooth_grid(
             grid_masked, info.geometry, LON, LAT, sigma=use_smooth
         )
+    coverage, n_valid_region, total_region_pixels = grid_coverage_in_region(
+        LON, LAT, grid_masked, info.geometry
+    )
+    console.print(
+        f"  → 网格 {grid_masked.shape}, 区域内覆盖率 {coverage:.1f}% "
+        f"({n_valid_region}/{total_region_pixels})"
+    )
 
     # --- 6. Determine vmin/vmax (CLI > product default > auto) ---
     if vmin is not None and vmax is not None:
@@ -435,6 +441,254 @@ def raster(
         vmax=use_vmax,
         output=output,
         window=window_meta,
+    )
+    emit_result(result, output)
+
+
+@app.command()
+def forecast(
+    region: str = typer.Argument(
+        ..., help="区域名称，如 中国、安徽、合肥、YRD、合肥/蜀山"
+    ),
+    datetime_str: str = typer.Argument(
+        ..., help="起报时次 YYYYMMDDHH，或 YYYYMMDD 自动取当天最新小时"
+    ),
+    var: str = typer.Option(
+        "o3",
+        "--var",
+        "-v",
+        help="预报变量: PM2.5 / PM10 / SO2 / NO2 / CO / O3",
+    ),
+    lead: int = typer.Option(
+        24,
+        "--lead",
+        help="预报时效: 6 / 12 / 24 / 48 / 72 小时",
+    ),
+    level: str | None = typer.Option(
+        None,
+        "--level",
+        "-l",
+        help="强制指定级别: country / key_region / province / city / county",
+    ),
+    data_dir: str | None = typer.Option(
+        None,
+        "--data-dir",
+        "-d",
+        help="预报数据目录 (覆盖配置中的 forecast 路径)",
+    ),
+    output: str | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="输出文件路径",
+    ),
+    dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
+    basemap: str | None = typer.Option(
+        None,
+        "--basemap",
+        "-b",
+        help="底图控制: satellite / none (覆盖级别默认)",
+    ),
+    vmin: float | None = typer.Option(None, "--vmin", help="Colorbar 最小值"),
+    vmax: float | None = typer.Option(None, "--vmax", help="Colorbar 最大值"),
+    cmap: str | None = typer.Option(None, "--cmap", help="Colormap 名称"),
+    smooth: float | None = typer.Option(
+        None, "--smooth", help="高斯平滑 sigma"
+    ),
+    title: str | None = typer.Option(None, "--title", help="自定义标题"),
+) -> None:
+    """绘制空气质量预报栅格图。
+
+    示例:
+        rsplot forecast 安徽 2026063000 --lead 24 --var O3
+        rsplot forecast 合肥 20260630 --lead 72 --var PM2.5
+    """
+    from pathlib import Path
+
+    from rsplot.geo.boundaries import resolve_region
+    from rsplot.geo.gridding import (
+        grid_coverage_in_region,
+        mask_to_region,
+        smooth_grid,
+    )
+    from rsplot.plotting.colormaps import STATION_CONCENTRATION_CMAP
+    from rsplot.plotting.raster import plot_raster
+    from rsplot.plotting.styles import setup_fonts
+    from rsplot.readers.forecast import (
+        auto_forecast_vrange,
+        get_forecast_var_info,
+        read_forecast,
+    )
+    from rsplot.results import build_forecast_result, emit_result
+
+    # --- 1. Load config ---
+    cfg = AppConfig.load()
+    setup_fonts(cfg.font_dir)
+
+    # --- 2. Resolve region ---
+    console.print(f"[bold]解析区域:[/bold] {region}")
+    info = resolve_region(region, cfg, level_override=level)
+    console.print(f"  → [green]{info.name}[/green] (级别: {info.level})")
+    console.print(
+        f"  → 范围: {info.extent[0]:.2f}°~{info.extent[1]:.2f}°E, "
+        f"{info.extent[2]:.2f}°~{info.extent[3]:.2f}°N"
+    )
+
+    # --- 3. Merge params ---
+    params = info.params
+    use_dpi = dpi if dpi is not None else cfg.dpi
+    use_cmap = cmap if cmap is not None else STATION_CONCENTRATION_CMAP
+
+    if basemap is not None:
+        use_basemap: bool | None = basemap.lower() == "satellite"
+    else:
+        use_basemap = None
+    _warn_missing_tianditu_key(
+        basemap=use_basemap,
+        default_basemap=params.basemap,
+        tianditu_key=cfg.tianditu_key,
+    )
+
+    if smooth is not None and smooth < 0:
+        console.print("[red]--smooth 必须大于等于 0。[/red]")
+        raise typer.Exit(1)
+    if vmin is not None and vmax is not None and vmax <= vmin:
+        console.print("[red]--vmax 必须大于 --vmin。[/red]")
+        raise typer.Exit(1)
+
+    try:
+        var_info = get_forecast_var_info(var)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from e
+
+    try:
+        use_data_dir = (
+            data_dir
+            if data_dir is not None
+            else cfg.get_data_dir("forecast")
+        )
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from e
+
+    # --- 4. Read forecast grid ---
+    buf = 0.5
+    read_extent = (
+        info.extent[0] - buf,
+        info.extent[1] + buf,
+        info.extent[2] - buf,
+        info.extent[3] + buf,
+    )
+    console.print(
+        f"\n[bold]读取预报数据:[/bold] {use_data_dir} "
+        f"(变量: {var_info.label}, 时效: {lead}h)"
+    )
+    console.print(f"  起报时次: {datetime_str}")
+    try:
+        forecast_data, resolved_dt = read_forecast(
+            use_data_dir,
+            datetime_str,
+            lead,
+            var,
+            read_extent,
+        )
+    except (FileNotFoundError, ValueError) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from e
+
+    if resolved_dt != datetime_str:
+        console.print(f"  → 自动选择最新起报: [cyan]{resolved_dt}[/cyan]")
+    console.print(
+        f"  → 预报有效时次: [cyan]{forecast_data.valid_datetime}[/cyan], "
+        f"有效网格: [green]{forecast_data.n_valid}[/green] / "
+        f"{forecast_data.n_cells}"
+    )
+
+    # --- 5. Mask, optional smooth, and color scale ---
+    grid_masked = mask_to_region(
+        forecast_data.lon,
+        forecast_data.lat,
+        forecast_data.values,
+        info.geometry,
+    )
+    if not np.isfinite(grid_masked).any():
+        console.print("[red]目标区域内没有有效预报网格。[/red]")
+        raise typer.Exit(1)
+
+    if smooth is not None and smooth > 0:
+        console.print(f"  → 高斯平滑 sigma={smooth}")
+        grid_masked = smooth_grid(
+            grid_masked,
+            info.geometry,
+            forecast_data.lon,
+            forecast_data.lat,
+            sigma=smooth,
+        )
+    coverage, n_valid_region, total_region_pixels = grid_coverage_in_region(
+        forecast_data.lon,
+        forecast_data.lat,
+        grid_masked,
+        info.geometry,
+    )
+    console.print(
+        f"  → 区域网格 {grid_masked.shape}, 区域内覆盖率 {coverage:.1f}% "
+        f"({n_valid_region}/{total_region_pixels})"
+    )
+
+    auto_min, auto_max = auto_forecast_vrange(grid_masked, var_info)
+    use_vmin = vmin if vmin is not None else auto_min
+    use_vmax = vmax if vmax is not None else auto_max
+    if use_vmax <= use_vmin:
+        console.print("[red]色标范围无效：vmax 必须大于 vmin。[/red]")
+        raise typer.Exit(1)
+    console.print(f"  → 色标范围: {use_vmin:.1f} ~ {use_vmax:.1f}")
+
+    # --- 6. Plot ---
+    if output is None:
+        output = (
+            f"/tmp/rsplot_forecast_{info.name}_{forecast_data.variable}_"
+            f"{forecast_data.init_datetime}_f{forecast_data.lead_hour}.png"
+        )
+    Path(output).parent.mkdir(parents=True, exist_ok=True)
+
+    if title is None:
+        title = (
+            f"Forecast {forecast_data.label} - {info.name} "
+            f"(valid {forecast_data.valid_datetime}, "
+            f"+{forecast_data.lead_hour}h)"
+        )
+
+    console.print("\n[bold]绘图中...[/bold]")
+    plot_raster(
+        forecast_data.lon,
+        forecast_data.lat,
+        grid_masked,
+        info,
+        dpi=use_dpi,
+        cmap=use_cmap,
+        vmin=use_vmin,
+        vmax=use_vmax,
+        basemap=use_basemap,
+        tianditu_key=cfg.tianditu_key,
+        hcho_cmap_file=cfg.hcho_cmap_file,
+        title=title,
+        output=output,
+        colorbar_label=var_info.colorbar_label,
+    )
+
+    console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
+
+    # --- 7. Emit structured result for downstream agents ---
+    result = build_forecast_result(
+        region=info,
+        data=forecast_data,
+        LON=forecast_data.lon,
+        LAT=forecast_data.lat,
+        grid=grid_masked,
+        vmin=use_vmin,
+        vmax=use_vmax,
+        output=output,
     )
     emit_result(result, output)
 
@@ -821,6 +1075,7 @@ def overlay(
     from rsplot.geo.gridding import (
         fill_nan_gaps,
         grid_data,
+        grid_coverage_in_region,
         mask_to_region,
         smooth_grid,
     )
@@ -922,13 +1177,17 @@ def overlay(
     )
     grid_filled = fill_nan_gaps(LON, LAT, grid_raw)
     grid_masked = mask_to_region(LON, LAT, grid_filled, info.geometry)
-    coverage = float(np.isfinite(grid_masked).mean()) * 100
-    console.print(f"  → 网格 {grid_masked.shape}, 覆盖率 {coverage:.1f}%")
-
     if use_smooth is not None:
         grid_masked = smooth_grid(
             grid_masked, info.geometry, LON, LAT, sigma=use_smooth
         )
+    coverage, n_valid_region, total_region_pixels = grid_coverage_in_region(
+        LON, LAT, grid_masked, info.geometry
+    )
+    console.print(
+        f"  → 网格 {grid_masked.shape}, 区域内覆盖率 {coverage:.1f}% "
+        f"({n_valid_region}/{total_region_pixels})"
+    )
 
     # --- 8. Raster vmin/vmax ---
     if vmin is not None and vmax is not None:
@@ -1310,6 +1569,7 @@ def fnr(
         validate_fnr_thresholds,
     )
     from rsplot.geo.boundaries import resolve_region
+    from rsplot.geo.gridding import grid_coverage_in_region
     from rsplot.plotting.fnr import plot_fnr
     from rsplot.plotting.styles import setup_fonts
     from rsplot.results import build_fnr_result, emit_result
@@ -1432,9 +1692,14 @@ def fnr(
         )
         raise typer.Exit(1)
 
-    coverage_pct = 100 * len(finite) / fnr_out.fnr.size
+    coverage_pct, n_valid_region, total_region_pixels = (
+        grid_coverage_in_region(
+            fnr_out.LON, fnr_out.LAT, fnr_out.fnr, info.geometry
+        )
+    )
     console.print(
-        f"  → FNR 覆盖率 {coverage_pct:.1f}%, "
+        f"  → FNR 区域内覆盖率 {coverage_pct:.1f}% "
+        f"({n_valid_region}/{total_region_pixels}), "
         f"中位数 {float(np.median(finite)):.2f}"
     )
 

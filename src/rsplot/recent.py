@@ -19,7 +19,12 @@ from rich.console import Console
 from rich.progress import track
 
 from rsplot.config import STATION_VAR_META, get_exceedance_threshold
-from rsplot.geo.gridding import fill_nan_gaps, grid_data, mask_to_region
+from rsplot.geo.gridding import (
+    fill_nan_gaps,
+    grid_coverage_in_region,
+    grid_data,
+    mask_to_region,
+)
 from rsplot.readers import ProductInfo
 from rsplot.readers.guokong import (
     mask_stations_to_region,
@@ -97,7 +102,7 @@ def summarize_recent_raster(
             grid = mask_to_region(
                 LON, LAT, fill_nan_gaps(LON, LAT, grid_raw), region.geometry
             )
-            stats = _grid_stats(grid)
+            stats = _grid_stats(LON, LAT, grid, region.geometry)
             if not stats:
                 raise ValueError(f"{d} 区域内无有效网格")
             out.append(
@@ -357,11 +362,20 @@ def _summarize_rows(rows: list[RecentDaily]) -> dict[str, Any]:
     return stats
 
 
-def _grid_stats(grid: np.ndarray) -> dict[str, Any]:
-    total = int(grid.size)
+def _grid_stats(
+    LON: np.ndarray,
+    LAT: np.ndarray,
+    grid: np.ndarray,
+    geometry: Any,
+) -> dict[str, Any]:
     stats = _array_stats(grid[np.isfinite(grid)])
     if stats:
-        stats["coverage_pct"] = round(100 * stats["n"] / total, 1)
+        coverage_pct, n_valid_region, total_region_pixels = (
+            grid_coverage_in_region(LON, LAT, grid, geometry)
+        )
+        stats["coverage_pct"] = coverage_pct
+        stats["valid_region_pixels"] = n_valid_region
+        stats["total_region_pixels"] = total_region_pixels
         stats["grid_shape"] = list(grid.shape)
     return stats
 

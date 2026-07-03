@@ -86,11 +86,34 @@ def mask_to_region(
     grid: np.ndarray,
     geometry: BaseGeometry,
 ) -> np.ndarray:
-    """Mask grid to region boundary using shapely vectorized contains."""
-    from shapely.vectorized import contains
-
-    region_mask = contains(geometry, LON, LAT)
+    """Mask grid to region boundary using grid-center containment."""
+    region_mask = region_grid_mask(LON, LAT, geometry)
     return np.where(region_mask, grid, np.nan)
+
+
+def region_grid_mask(
+    LON: np.ndarray,
+    LAT: np.ndarray,
+    geometry: BaseGeometry,
+) -> np.ndarray:
+    """Return True for grid centers inside the administrative geometry."""
+    from shapely import contains_xy
+
+    return contains_xy(geometry, LON, LAT)
+
+
+def grid_coverage_in_region(
+    LON: np.ndarray,
+    LAT: np.ndarray,
+    grid: np.ndarray,
+    geometry: BaseGeometry,
+) -> tuple[float, int, int]:
+    """Return valid-pixel coverage using only region-interior grid centers."""
+    region_mask = region_grid_mask(LON, LAT, geometry)
+    total = int(region_mask.sum())
+    valid = int((region_mask & np.isfinite(grid)).sum())
+    pct = round(100 * valid / total, 1) if total else 0.0
+    return pct, valid, total
 
 
 def smooth_grid(
