@@ -201,6 +201,11 @@ def build_forecast_result(
     vmin: float,
     vmax: float,
     output: str,
+    station_data: StationData | None = None,
+    station_datetime: str | None = None,
+    station_threshold: float | None = None,
+    station_unit: str = "",
+    cities_gdf: gpd.GeoDataFrame | None = None,
 ) -> dict[str, Any]:
     """Build the JSON sidecar payload for a forecast run."""
     from rsplot.geo.gridding import grid_coverage_in_region
@@ -211,6 +216,11 @@ def build_forecast_result(
 
     result: dict[str, Any] = {
         "command": "forecast",
+        "mode": (
+            "forecast_station_overlay"
+            if station_data is not None
+            else "forecast"
+        ),
         "image": output,
         "region": {
             "name": region.name,
@@ -238,6 +248,20 @@ def build_forecast_result(
             **_basic_stats(grid),
         },
     }
+
+    if station_data is not None:
+        station_block = build_station_result(
+            region=region,
+            data=station_data,
+            datetime_str=station_datetime or data.valid_datetime,
+            threshold=station_threshold,
+            unit=station_unit,
+            cities_gdf=cities_gdf,
+            output=output,
+        )
+        for key in ("command", "image", "region"):
+            station_block.pop(key, None)
+        result["station"] = station_block
 
     sub_gdf = region.sub_boundary_gdf
     if sub_gdf is not None and len(sub_gdf) > 0:

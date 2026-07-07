@@ -1,8 +1,8 @@
 """Combined raster + station overlay plotting.
 
-Satellite raster as the background colored field, 国控 station observations
-on top as colored dots. Each layer keeps its own colorbar so the two
-quantity scales stay independent.
+A gridded raster layer (satellite or forecast) is drawn as the background
+colored field, with 国控 station observations on top as colored dots. Each
+layer keeps its own colorbar so the two quantity scales stay independent.
 """
 
 from __future__ import annotations

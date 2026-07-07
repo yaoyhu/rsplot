@@ -17,6 +17,9 @@ rsplot = rsplot.__main__:app
 
 Primary CLI commands are `raster`, `forecast`, `station`, `overlay`,
 `recent`, and `fnr`.
+The `forecast` command can optionally overlay station observations with
+`--station-overlay`; its JSON uses `mode` to distinguish pure forecast from
+forecast/station overlay output.
 The `station` command can optionally overlay ERA5 horizontal wind vectors with
 `--wind-level`.
 The `recent` command writes JSON only; the other plotting commands write a PNG
@@ -199,3 +202,6 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
 - Forecast files are grouped as
   `forecast{lead}/{YYYYMMDDHH}_forecast{lead}.nc`, where the filename time is
   treated as initialization time and `valid_datetime = init + lead hours`.
+- Forecast station overlays default the station datetime to
+  `forecast.valid_datetime`. Use `--station-datetime` only when intentionally
+  comparing against a different observation hour.

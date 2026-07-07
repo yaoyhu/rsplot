@@ -113,6 +113,9 @@ rsplot forecast 安徽 2026063000 --lead 24 --var O3 -o forecast_anhui_o3.png
 # Date-only forecast input automatically selects the latest initialized hour.
 rsplot forecast 合肥 20260630 --lead 72 --var PM2.5 -o forecast_hefei_pm25.png
 
+# Overlay station observations on the forecast valid time.
+rsplot forecast 合肥 2026041409 --lead 6 --var O3 --station-overlay -o forecast_station_hefei_o3.png
+
 # Plot national monitoring station observations.
 rsplot station 合肥 2026041415 --var O3 -o station_hefei_o3.png
 

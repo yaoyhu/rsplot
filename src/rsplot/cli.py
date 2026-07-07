@@ -445,6 +445,21 @@ def raster(
     emit_result(result, output)
 
 
+# ---------------------------------------------------------------------------
+# Forecast variable defaults that pair naturally with station observations.
+# Used when the user asks for a forecast/station overlay but doesn't specify
+# --station-var explicitly.
+# ---------------------------------------------------------------------------
+_FORECAST_STATION_PAIR: dict[str, str] = {
+    "pm25": "PM2.5",
+    "pm10": "PM10",
+    "so2": "SO2",
+    "no2": "NO2",
+    "co": "CO",
+    "o3": "O3",
+}
+
+
 @app.command()
 def forecast(
     region: str = typer.Argument(
@@ -476,6 +491,26 @@ def forecast(
         "-d",
         help="预报数据目录 (覆盖配置中的 forecast 路径)",
     ),
+    station_overlay: bool = typer.Option(
+        False,
+        "--station-overlay",
+        help="叠加同有效时次的国控站点散点",
+    ),
+    station_var: str | None = typer.Option(
+        None,
+        "--station-var",
+        help="站点变量名；默认按预报变量自动匹配 PM2.5/PM10/SO2/NO2/CO/O3",
+    ),
+    station_data_dir: str | None = typer.Option(
+        None,
+        "--station-data-dir",
+        help="国控站点数据目录 (覆盖配置中的 guokong 路径)",
+    ),
+    station_datetime: str | None = typer.Option(
+        None,
+        "--station-datetime",
+        help="站点时次 YYYYMMDDHH 或 YYYYMMDD；默认使用预报有效时次",
+    ),
     output: str | None = typer.Option(
         None,
         "--output",
@@ -502,16 +537,23 @@ def forecast(
     示例:
         rsplot forecast 安徽 2026063000 --lead 24 --var O3
         rsplot forecast 合肥 20260630 --lead 72 --var PM2.5
+        rsplot forecast 合肥 2026041409 --lead 6 --var O3 --station-overlay
     """
     from pathlib import Path
 
-    from rsplot.geo.boundaries import resolve_region
+    from rsplot.config import (
+        STATION_VAR_LABELS,
+        STATION_VAR_META,
+        get_exceedance_threshold,
+    )
+    from rsplot.geo.boundaries import _load_city, resolve_region
     from rsplot.geo.gridding import (
         grid_coverage_in_region,
         mask_to_region,
         smooth_grid,
     )
     from rsplot.plotting.colormaps import STATION_CONCENTRATION_CMAP
+    from rsplot.plotting.overlay import plot_overlay
     from rsplot.plotting.raster import plot_raster
     from rsplot.plotting.styles import setup_fonts
     from rsplot.readers.forecast import (
@@ -519,6 +561,7 @@ def forecast(
         get_forecast_var_info,
         read_forecast,
     )
+    from rsplot.readers.guokong import mask_stations_to_region, read_stations
     from rsplot.results import build_forecast_result, emit_result
 
     # --- 1. Load config ---
@@ -644,42 +687,159 @@ def forecast(
         raise typer.Exit(1)
     console.print(f"  → 色标范围: {use_vmin:.1f} ~ {use_vmax:.1f}")
 
-    # --- 6. Plot ---
+    # --- 6. Optional station overlay ---
+    station_data = None
+    station_resolved_dt = None
+    station_threshold = None
+    station_unit = ""
+    station_colorbar_label = ""
+    use_station_overlay = (
+        station_overlay
+        or station_var is not None
+        or station_data_dir is not None
+        or station_datetime is not None
+    )
+    if use_station_overlay:
+        use_station_var = station_var or _FORECAST_STATION_PAIR[var_info.name]
+        if use_station_var not in STATION_VAR_META:
+            available = ", ".join(STATION_VAR_META)
+            console.print(
+                f"[red]未知站点变量 '{use_station_var}'[/red]。"
+                f"可用: {available}"
+            )
+            raise typer.Exit(1)
+
+        try:
+            use_station_data_dir = (
+                station_data_dir
+                if station_data_dir is not None
+                else cfg.get_data_dir("guokong")
+            )
+        except ValueError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(1) from e
+
+        use_station_datetime = station_datetime or forecast_data.valid_datetime
+        console.print(
+            f"\n[bold]读取站点数据:[/bold] {use_station_data_dir}"
+        )
+        console.print(
+            f"  时间: {use_station_datetime}, 变量: {use_station_var}"
+        )
+        try:
+            station_data, station_resolved_dt = read_stations(
+                use_station_data_dir,
+                use_station_datetime,
+                use_station_var,
+                extent=read_extent,
+            )
+        except (FileNotFoundError, KeyError, ValueError) as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(1) from e
+        station_data = mask_stations_to_region(station_data, info.geometry)
+        if station_resolved_dt != use_station_datetime:
+            console.print(
+                f"  → 自动选择最新站点时次: [cyan]{station_resolved_dt}[/cyan]"
+            )
+        console.print(
+            f"  → [green]{station_data.n_valid}[/green] 有效站点 "
+            f"(共 {station_data.n_stations} 站)"
+        )
+
+        station_threshold = get_exceedance_threshold(use_station_var)
+        if station_threshold is not None:
+            n_exceed = int(
+                np.sum(
+                    station_data.values[np.isfinite(station_data.values)]
+                    > station_threshold
+                )
+            )
+            console.print(
+                f"  → 超标阈值: {station_threshold}, "
+                f"超标站点: [red]{n_exceed}[/red]"
+            )
+
+        station_unit = STATION_VAR_META[use_station_var][0]
+        station_display_var = STATION_VAR_LABELS.get(
+            use_station_var, use_station_var
+        )
+        station_colorbar_label = (
+            f"{station_display_var} ({station_unit})"
+            if station_unit
+            else station_display_var
+        )
+
+    # --- 7. Plot ---
     if output is None:
+        station_suffix = (
+            f"_station{station_data.var_name}"
+            if station_data is not None
+            else ""
+        )
         output = (
             f"/tmp/rsplot_forecast_{info.name}_{forecast_data.variable}_"
-            f"{forecast_data.init_datetime}_f{forecast_data.lead_hour}.png"
+            f"{forecast_data.init_datetime}_f{forecast_data.lead_hour}"
+            f"{station_suffix}.png"
         )
     Path(output).parent.mkdir(parents=True, exist_ok=True)
 
     if title is None:
-        title = (
-            f"Forecast {forecast_data.label} - {info.name} "
-            f"(valid {forecast_data.valid_datetime}, "
-            f"+{forecast_data.lead_hour}h)"
-        )
+        if station_data is None:
+            title = (
+                f"Forecast {forecast_data.label} - {info.name} "
+                f"(valid {forecast_data.valid_datetime}, "
+                f"+{forecast_data.lead_hour}h)"
+            )
+        else:
+            title = (
+                f"Forecast {forecast_data.label} + Station "
+                f"{station_data.var_name} - {info.name} "
+                f"(valid {forecast_data.valid_datetime}, "
+                f"+{forecast_data.lead_hour}h)"
+            )
 
     console.print("\n[bold]绘图中...[/bold]")
-    plot_raster(
-        forecast_data.lon,
-        forecast_data.lat,
-        grid_masked,
-        info,
-        dpi=use_dpi,
-        cmap=use_cmap,
-        vmin=use_vmin,
-        vmax=use_vmax,
-        basemap=use_basemap,
-        tianditu_key=cfg.tianditu_key,
-        hcho_cmap_file=cfg.hcho_cmap_file,
-        title=title,
-        output=output,
-        colorbar_label=var_info.colorbar_label,
-    )
+    if station_data is None:
+        plot_raster(
+            forecast_data.lon,
+            forecast_data.lat,
+            grid_masked,
+            info,
+            dpi=use_dpi,
+            cmap=use_cmap,
+            vmin=use_vmin,
+            vmax=use_vmax,
+            basemap=use_basemap,
+            tianditu_key=cfg.tianditu_key,
+            hcho_cmap_file=cfg.hcho_cmap_file,
+            title=title,
+            output=output,
+            colorbar_label=var_info.colorbar_label,
+        )
+    else:
+        plot_overlay(
+            forecast_data.lon,
+            forecast_data.lat,
+            grid_masked,
+            station_data,
+            info,
+            raster_cmap=use_cmap,
+            raster_vmin=use_vmin,
+            raster_vmax=use_vmax,
+            raster_label=var_info.colorbar_label,
+            station_threshold=station_threshold,
+            station_label=station_colorbar_label,
+            dpi=use_dpi,
+            basemap=use_basemap,
+            tianditu_key=cfg.tianditu_key,
+            hcho_cmap_file=cfg.hcho_cmap_file,
+            title=title,
+            output=output,
+        )
 
     console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
 
-    # --- 7. Emit structured result for downstream agents ---
+    # --- 8. Emit structured result for downstream agents ---
     result = build_forecast_result(
         region=info,
         data=forecast_data,
@@ -689,6 +849,15 @@ def forecast(
         vmin=use_vmin,
         vmax=use_vmax,
         output=output,
+        station_data=station_data,
+        station_datetime=station_resolved_dt,
+        station_threshold=station_threshold,
+        station_unit=station_unit,
+        cities_gdf=(
+            _load_city(cfg.require_geojson_dir())
+            if station_data is not None
+            else None
+        ),
     )
     emit_result(result, output)
 
