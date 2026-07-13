@@ -1,0 +1,215 @@
+"""Shared map-frame setup for rsplot's Cartopy renderers.
+
+This module owns the common figure, boundary, geographic decoration, and
+output lifecycle used by raster, station, overlay, and FNR plots.  Data
+layers and colorbars remain in their domain-specific renderers so their
+draw order stays explicit.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+import matplotlib.patheffects as pe
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+from cartopy.feature import ShapelyFeature
+from cartopy.mpl.gridliner import LATITUDE_FORMATTER, LONGITUDE_FORMATTER
+
+from rsplot.tiles.tianditu import TianDiTuTiles
+
+if TYPE_CHECKING:
+    from cartopy.mpl.geoaxes import GeoAxes
+    from matplotlib.figure import Figure
+
+    from rsplot.geo.boundaries import RegionInfo
+
+
+@dataclass(frozen=True)
+class MapFrame:
+    """Figure state shared by the plotting pipelines."""
+
+    fig: Figure
+    ax: GeoAxes
+    tiles: TianDiTuTiles | None
+    use_basemap: bool
+
+
+def figure_size_for_level(level: str) -> tuple[float, float]:
+    """Choose the established figure size for an administrative level."""
+    return {
+        "country": (14, 12),
+        "key_region": (12, 10),
+        "province": (10, 10),
+        "city": (10, 8),
+        "county": (8, 7),
+    }.get(level, (10, 8))
+
+
+def create_map_frame(
+    region: RegionInfo,
+    *,
+    dpi: int,
+    basemap: bool | None,
+    tianditu_key: str | None,
+) -> MapFrame:
+    """Create a figure using the region's basemap and projection rules."""
+    use_basemap = basemap if basemap is not None else region.params.basemap
+    if use_basemap and tianditu_key:
+        tiles = TianDiTuTiles(tk=tianditu_key, layer="img")
+        projection = tiles.crs
+    else:
+        tiles = None
+        projection = ccrs.PlateCarree()
+
+    fig, ax = plt.subplots(
+        figsize=figure_size_for_level(region.level),
+        dpi=dpi,
+        subplot_kw={"projection": projection},
+    )
+    return MapFrame(
+        fig=fig,
+        ax=ax,
+        tiles=tiles,
+        use_basemap=use_basemap,
+    )
+
+
+def add_basemap_tiles(frame: MapFrame, region: RegionInfo) -> None:
+    """Add configured TianDiTu imagery at the caller-selected layer order."""
+    if frame.tiles is not None:
+        frame.ax.add_image(frame.tiles, region.params.zoom)
+
+
+def add_region_boundaries(ax: GeoAxes, region: RegionInfo) -> None:
+    """Draw detail, subdivision, and main boundaries in established order."""
+    if (
+        region.detail_boundary_gdf is not None
+        and len(region.detail_boundary_gdf) > 0
+    ):
+        ax.add_feature(
+            ShapelyFeature(
+                region.detail_boundary_gdf.geometry,
+                ccrs.PlateCarree(),
+                edgecolor="#aaa",
+                facecolor="none",
+                linewidth=0.25,
+                linestyle=":",
+            )
+        )
+
+    if (
+        region.sub_boundary_gdf is not None
+        and len(region.sub_boundary_gdf) > 0
+    ):
+        is_county_sub = region.level == "city"
+        ax.add_feature(
+            ShapelyFeature(
+                region.sub_boundary_gdf.geometry,
+                ccrs.PlateCarree(),
+                edgecolor="#888" if not is_county_sub else "#666",
+                facecolor="none",
+                linewidth=0.4 if not is_county_sub else 0.6,
+                linestyle="-" if not is_county_sub else "--",
+            )
+        )
+        add_subdivision_labels(ax, region)
+
+    if region.main_boundary_gdf is not None:
+        ax.add_feature(
+            ShapelyFeature(
+                region.main_boundary_gdf.geometry,
+                ccrs.PlateCarree(),
+                edgecolor="red",
+                facecolor="none",
+                linewidth=region.params.boundary_linewidth,
+            )
+        )
+
+
+def add_subdivision_labels(ax: GeoAxes, region: RegionInfo) -> None:
+    """Add name labels for a region's subdivision features."""
+    gdf = region.sub_boundary_gdf
+    if gdf is None or len(gdf) == 0:
+        return
+
+    name_field = region.sub_name_field
+    fontsize = region.params.label_fontsize
+
+    for _, row in gdf.iterrows():
+        point = row.geometry.representative_point()
+        if region.level in (
+            "key_region",
+            "province",
+        ) and not region.geometry.contains(point):
+            continue
+
+        label = row[name_field]
+        if region.level in ("key_region", "province"):
+            label = label.replace("市", "")
+
+        ax.text(
+            point.x,
+            point.y,
+            label,
+            transform=ccrs.PlateCarree(),
+            fontsize=fontsize,
+            ha="center",
+            va="center",
+            color="#222",
+            path_effects=[pe.withStroke(linewidth=2, foreground="white")],
+        )
+
+
+def configure_map_axes(
+    ax: GeoAxes,
+    region: RegionInfo,
+    *,
+    use_basemap: bool,
+) -> None:
+    """Apply coast/ocean, padded extent, and geographic gridlines."""
+    if not use_basemap:
+        ax.coastlines(linewidth=0.5, color="#333")
+        ax.add_feature(cfeature.OCEAN, facecolor="#e6f2ff", zorder=0)
+
+    lon_min, lon_max, lat_min, lat_max = region.extent
+    pad = region.params.pad
+    ax.set_extent(
+        [lon_min - pad, lon_max + pad, lat_min - pad, lat_max + pad],
+        crs=ccrs.PlateCarree(),
+    )
+
+    gridlines = ax.gridlines(
+        draw_labels=True,
+        linewidth=0.2,
+        linestyle="--",
+        alpha=0.5,
+    )
+    gridlines.top_labels = gridlines.right_labels = False
+    gridlines.xformatter = LONGITUDE_FORMATTER
+    gridlines.yformatter = LATITUDE_FORMATTER
+    gridlines.xlocator = mticker.MultipleLocator(region.params.grid_step)
+    gridlines.ylocator = mticker.MultipleLocator(region.params.grid_step)
+
+
+def finalize_map_figure(
+    fig: Figure,
+    *,
+    dpi: int,
+    output: str | None,
+    layout_rect: tuple[float, float, float, float] | None = None,
+) -> None:
+    """Lay out and then save/close or display a completed map figure."""
+    if layout_rect is None:
+        plt.tight_layout()
+    else:
+        fig.tight_layout(rect=layout_rect)
+
+    if output:
+        fig.savefig(output, dpi=dpi, bbox_inches="tight")
+        plt.close(fig)
+    else:
+        plt.show()

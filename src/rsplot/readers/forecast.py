@@ -10,15 +10,12 @@ The valid time is computed as initialization time plus the forecast lead.
 
 from __future__ import annotations
 
-import glob
-import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
 import xarray as xr
-
 
 FORECAST_LEADS = (6, 12, 24, 48, 72)
 
@@ -192,9 +189,12 @@ def _resolve_forecast_path(
 
     lead_dir = root / f"forecast{lead_hour}"
     if len(datetime_str) == 8:
-        pattern = str(lead_dir / f"{datetime_str}??_forecast{lead_hour}.nc")
+        relative_pattern = f"{datetime_str}??_forecast{lead_hour}.nc"
+        pattern = str(lead_dir / relative_pattern)
         matches = [
-            Path(p) for p in sorted(glob.glob(pattern)) if os.path.getsize(p) > 0
+            path
+            for path in sorted(lead_dir.glob(relative_pattern))
+            if path.stat().st_size > 0
         ]
         if not matches:
             raise FileNotFoundError(
@@ -208,8 +208,7 @@ def _resolve_forecast_path(
     path = lead_dir / f"{datetime_str}_forecast{lead_hour}.nc"
     if not path.exists():
         raise FileNotFoundError(
-            f"未找到预报文件: {path}\n"
-            "请检查 datetime、--lead 和 --data-dir。"
+            f"未找到预报文件: {path}\n请检查 datetime、--lead 和 --data-dir。"
         )
     return path, datetime_str
 

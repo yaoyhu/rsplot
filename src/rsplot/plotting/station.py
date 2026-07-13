@@ -9,18 +9,18 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import cartopy.crs as ccrs
-import cartopy.feature as cfeature
 import matplotlib.colors as mcolors
-import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
 import numpy as np
-from cartopy.feature import ShapelyFeature
-from cartopy.mpl.gridliner import LATITUDE_FORMATTER, LONGITUDE_FORMATTER
 
 from rsplot.config import AQI_COLORS
 from rsplot.plotting.colormaps import STATION_CONCENTRATION_CMAP
-from rsplot.plotting.raster import _add_sub_labels, _figsize_for_level
-from rsplot.tiles.tianditu import TianDiTuTiles
+from rsplot.plotting.map_frame import (
+    add_basemap_tiles,
+    add_region_boundaries,
+    configure_map_axes,
+    create_map_frame,
+    finalize_map_figure,
+)
 
 if TYPE_CHECKING:
     from rsplot.geo.boundaries import RegionInfo
@@ -28,7 +28,9 @@ if TYPE_CHECKING:
     from rsplot.readers.guokong import StationData
 
 
-def _build_aqi_cmap() -> tuple[mcolors.ListedColormap, mcolors.BoundaryNorm]:
+def build_aqi_colormap() -> tuple[
+    mcolors.ListedColormap, mcolors.BoundaryNorm
+]:
     """Build a discrete colormap matching official AQI color bands."""
     bounds = [0] + [b for b, _ in AQI_COLORS]
     colors = [c for _, c in AQI_COLORS]
@@ -37,7 +39,7 @@ def _build_aqi_cmap() -> tuple[mcolors.ListedColormap, mcolors.BoundaryNorm]:
     return cmap, norm
 
 
-def _station_marker_size(level: str) -> int:
+def station_marker_size(level: str) -> int:
     """Marker area by region level, in points squared."""
     return {
         "country": 18,
@@ -46,6 +48,11 @@ def _station_marker_size(level: str) -> int:
         "city": 76,
         "county": 110,
     }.get(level, 46)
+
+
+# Compatibility aliases for callers that used these pre-refactor helpers.
+_build_aqi_cmap = build_aqi_colormap
+_station_marker_size = station_marker_size
 
 
 def wind_stride_for_shape(shape: tuple[int, int], level: str) -> int:
@@ -98,26 +105,18 @@ def plot_station(
     region : RegionInfo from resolve_region.
     threshold : value above which a red exceedance circle is drawn.
     """
-    params = region.params
-    use_basemap = basemap if basemap is not None else params.basemap
-
     # --- Figure setup ---
-    if use_basemap and tianditu_key:
-        tiles = TianDiTuTiles(tk=tianditu_key, layer="img")
-        projection = tiles.crs
-    else:
-        tiles = None
-        projection = ccrs.PlateCarree()
-
-    fig, ax = plt.subplots(
-        figsize=_figsize_for_level(region.level),
+    frame = create_map_frame(
+        region,
         dpi=dpi,
-        subplot_kw={"projection": projection},
+        basemap=basemap,
+        tianditu_key=tianditu_key,
     )
+    fig = frame.fig
+    ax = frame.ax
 
     # --- Basemap tiles ---
-    if tiles is not None:
-        ax.add_image(tiles, params.zoom)
+    add_basemap_tiles(frame, region)
 
     # --- ERA5 wind vectors (above basemap, below boundaries and stations) ---
     wind_quiver = None
@@ -127,9 +126,7 @@ def plot_station(
         sampled_speed = wind.speed[sample]
         finite_speed = sampled_speed[np.isfinite(sampled_speed)]
         if len(finite_speed) > 0:
-            use_wind_vmin = (
-                wind_vmin if wind_vmin is not None else 0.0
-            )
+            use_wind_vmin = wind_vmin if wind_vmin is not None else 0.0
             use_wind_vmax = (
                 wind_vmax
                 if wind_vmax is not None
@@ -165,51 +162,7 @@ def plot_station(
                 fontproperties={"size": 8},
             )
 
-    # --- Detail boundaries (counties in province view, dotted) ---
-    if (
-        region.detail_boundary_gdf is not None
-        and len(region.detail_boundary_gdf) > 0
-    ):
-        ax.add_feature(
-            ShapelyFeature(
-                region.detail_boundary_gdf.geometry,
-                ccrs.PlateCarree(),
-                edgecolor="#aaa",
-                facecolor="none",
-                linewidth=0.25,
-                linestyle=":",
-            )
-        )
-
-    # --- Sub-boundaries (grey) ---
-    if (
-        region.sub_boundary_gdf is not None
-        and len(region.sub_boundary_gdf) > 0
-    ):
-        is_county_sub = region.level == "city"
-        ax.add_feature(
-            ShapelyFeature(
-                region.sub_boundary_gdf.geometry,
-                ccrs.PlateCarree(),
-                edgecolor="#888" if not is_county_sub else "#666",
-                facecolor="none",
-                linewidth=0.4 if not is_county_sub else 0.6,
-                linestyle="-" if not is_county_sub else "--",
-            )
-        )
-        _add_sub_labels(ax, region)
-
-    # --- Main boundary (red) ---
-    if region.main_boundary_gdf is not None:
-        ax.add_feature(
-            ShapelyFeature(
-                region.main_boundary_gdf.geometry,
-                ccrs.PlateCarree(),
-                edgecolor="red",
-                facecolor="none",
-                linewidth=params.boundary_linewidth,
-            )
-        )
+    add_region_boundaries(ax, region)
 
     # --- Filter to valid data ---
     valid = np.isfinite(data.values)
@@ -220,30 +173,48 @@ def plot_station(
     sc = None
     if len(vals) == 0:
         ax.text(
-            0.5, 0.5, "No valid data",
-            transform=ax.transAxes, ha="center", fontsize=14,
+            0.5,
+            0.5,
+            "No valid data",
+            transform=ax.transAxes,
+            ha="center",
+            fontsize=14,
         )
     else:
         # --- Marker size by level ---
-        marker_size = _station_marker_size(region.level)
+        marker_size = station_marker_size(region.level)
 
         # --- Colormap / norm ---
         is_aqi = data.var_name == "AQI"
         if is_aqi:
-            cmap, norm = _build_aqi_cmap()
+            cmap, norm = build_aqi_colormap()
             sc = ax.scatter(
-                lon, lat, c=vals, cmap=cmap, norm=norm,
-                s=marker_size, edgecolors="#333", linewidths=0.3,
-                transform=ccrs.PlateCarree(), zorder=5,
+                lon,
+                lat,
+                c=vals,
+                cmap=cmap,
+                norm=norm,
+                s=marker_size,
+                edgecolors="#333",
+                linewidths=0.3,
+                transform=ccrs.PlateCarree(),
+                zorder=5,
             )
         else:
             p5 = float(np.nanpercentile(vals, 5))
             p95 = float(np.nanpercentile(vals, 95))
             sc = ax.scatter(
-                lon, lat, c=vals, cmap=STATION_CONCENTRATION_CMAP,
-                vmin=p5, vmax=p95,
-                s=marker_size, edgecolors="#333", linewidths=0.3,
-                transform=ccrs.PlateCarree(), zorder=5,
+                lon,
+                lat,
+                c=vals,
+                cmap=STATION_CONCENTRATION_CMAP,
+                vmin=p5,
+                vmax=p95,
+                s=marker_size,
+                edgecolors="#333",
+                linewidths=0.3,
+                transform=ccrs.PlateCarree(),
+                zorder=5,
             )
 
         # --- Red circles for exceedance ---
@@ -261,27 +232,7 @@ def plot_station(
                     zorder=6,
                 )
 
-    # --- Map decorations ---
-    if not use_basemap:
-        ax.coastlines(linewidth=0.5, color="#333")
-        ax.add_feature(cfeature.OCEAN, facecolor="#e6f2ff", zorder=0)
-
-    lon_min, lon_max, lat_min, lat_max = region.extent
-    pad = params.pad
-    ax.set_extent(
-        [lon_min - pad, lon_max + pad, lat_min - pad, lat_max + pad],
-        crs=ccrs.PlateCarree(),
-    )
-
-    # Gridlines
-    gl = ax.gridlines(
-        draw_labels=True, linewidth=0.2, linestyle="--", alpha=0.5
-    )
-    gl.top_labels = gl.right_labels = False
-    gl.xformatter = LONGITUDE_FORMATTER
-    gl.yformatter = LATITUDE_FORMATTER
-    gl.xlocator = mticker.MultipleLocator(params.grid_step)
-    gl.ylocator = mticker.MultipleLocator(params.grid_step)
+    configure_map_axes(ax, region, use_basemap=frame.use_basemap)
 
     # --- Colorbars ---
     if sc is not None and wind_quiver is not None:
@@ -316,14 +267,12 @@ def plot_station(
             title = f"{data.var_name} + ERA5 {wind.level} wind - {region.name}"
     ax.set_title(title, fontsize=14)
 
-    if wind_quiver is not None and sc is not None:
-        fig.tight_layout(rect=[0, 0, 0.9, 1])
-    else:
-        plt.tight_layout()
-
-    # --- Output ---
-    if output:
-        fig.savefig(output, dpi=dpi, bbox_inches="tight")
-        plt.close(fig)
-    else:
-        plt.show()
+    layout_rect = (
+        (0, 0, 0.9, 1) if wind_quiver is not None and sc is not None else None
+    )
+    finalize_map_figure(
+        fig,
+        dpi=dpi,
+        output=output,
+        layout_rect=layout_rect,
+    )

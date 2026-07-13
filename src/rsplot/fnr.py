@@ -25,23 +25,37 @@ dimensionless and directly comparable with the literature.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 import numpy as np
 from rich.console import Console
-from rich.progress import track
 
 from rsplot.geo.gridding import (
     fill_nan_gaps,
-    grid_data,
     mask_to_region,
     smooth_grid,
 )
 from rsplot.readers import get_product_info
+from rsplot.temporal import (
+    WindowResult,
+    compute_window_mean,
+    parse_date_window,
+)
 
 if TYPE_CHECKING:
     from rsplot.geo.boundaries import RegionInfo
+
+
+__all__ = [
+    "FnrResult",
+    "WindowResult",
+    "classify_regime",
+    "compute_fnr",
+    "compute_window_mean",
+    "parse_date_window",
+    "regime_percentages",
+    "validate_fnr_thresholds",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -89,151 +103,6 @@ def validate_fnr_thresholds(
 
 
 # ---------------------------------------------------------------------------
-# Date window parsing
-# ---------------------------------------------------------------------------
-def _parse_yyyymmdd(value: str, label: str = "日期") -> datetime:
-    """Parse a YYYYMMDD string and report invalid calendar dates clearly."""
-    try:
-        return datetime.strptime(value, "%Y%m%d")
-    except ValueError as e:
-        raise ValueError(
-            f"{label}无效: '{value}'，请检查年月日是否真实存在 "
-            f"(原始错误: {e})"
-        ) from e
-
-
-def parse_date_window(arg: str, default_days: int) -> list[str]:
-    """Parse a ``YYYYMMDD`` or ``YYYYMMDD-YYYYMMDD`` argument into a date list.
-
-    - Single date → window is the ``default_days``-day period ending on
-      that date (inclusive).
-    - ``START-END`` → inclusive range; ``START`` and ``END`` can be equal.
-
-    Returns YYYYMMDD strings in ascending order.
-    """
-    if "-" in arg:
-        parts = arg.split("-")
-        if len(parts) != 2 or any(len(p) != 8 or not p.isdigit() for p in parts):
-            raise ValueError(
-                f"日期范围格式错误: '{arg}'，应为 YYYYMMDD-YYYYMMDD"
-            )
-        start = _parse_yyyymmdd(parts[0], "开始日期")
-        end = _parse_yyyymmdd(parts[1], "结束日期")
-        if end < start:
-            raise ValueError(f"日期范围起止颠倒: {arg}")
-    else:
-        if len(arg) != 8 or not arg.isdigit():
-            raise ValueError(
-                f"日期格式错误: '{arg}'，应为 YYYYMMDD 或 YYYYMMDD-YYYYMMDD"
-            )
-        end = _parse_yyyymmdd(arg)
-        start = end - timedelta(days=default_days - 1)
-
-    out = []
-    cur = start
-    while cur <= end:
-        out.append(cur.strftime("%Y%m%d"))
-        cur += timedelta(days=1)
-    return out
-
-
-# ---------------------------------------------------------------------------
-# Window-mean helper (used by both `rsplot fnr` and `rsplot raster --days`)
-# ---------------------------------------------------------------------------
-@dataclass
-class WindowResult:
-    """Per-product time-averaged grid over a date window.
-
-    The mean field is *not* coverage-masked — callers apply their own
-    ``n_min`` threshold against :attr:`n_valid` (FNR uses a combined
-    NO2 ∧ HCHO mask; raster uses its own product-only threshold).
-    """
-
-    LON: np.ndarray
-    LAT: np.ndarray
-    grid: np.ndarray            # time-mean, NaN where every day was missing
-    n_valid: np.ndarray         # int count of valid days per pixel
-    dates_requested: list[str]
-    dates_found: list[str]
-    dates_failed: dict[str, str]
-    n_pixels_total: int         # sum of swath pixels read across days
-    n_files_total: int          # sum of swath files scanned
-    n_broken_total: int         # sum of unreadable files
-
-
-def compute_window_mean(
-    *,
-    reader,
-    data_dir: str,
-    dates: list[str],
-    extent: tuple[float, float, float, float],
-    res: float,
-    qa_threshold: float,
-    label: str = "数据",
-    console: Console | None = None,
-) -> WindowResult:
-    """Read each date, regrid, return time-mean + per-pixel valid-day count.
-
-    Each day that succeeds contributes one ``(ny, nx)`` grid to the stack;
-    failed days (missing files / no valid pixels) become all-NaN slabs
-    so the caller can still tell which dates fell out.
-    """
-    if console is None:
-        console = Console()
-
-    stack: list[np.ndarray | None] = []
-    dates_found: list[str] = []
-    dates_failed: dict[str, str] = {}
-    n_pix_total = 0
-    n_files_total = 0
-    n_broken_total = 0
-    LON: np.ndarray | None = None
-    LAT: np.ndarray | None = None
-
-    for d in track(dates, description=f"[cyan]读取 {label} 窗口..."):
-        try:
-            s = reader.read(data_dir, d, extent, qa_threshold=qa_threshold)
-            _LON, _LAT, g = grid_data(s.lon, s.lat, s.values, extent, res)
-            LON, LAT = _LON, _LAT
-            stack.append(g)
-            dates_found.append(d)
-            n_pix_total += int(s.n_pixels)
-            n_files_total += int(s.n_files)
-            n_broken_total += int(s.n_broken)
-        except (FileNotFoundError, ValueError) as e:
-            dates_failed[d] = str(e).splitlines()[0]
-            stack.append(None)
-
-    if LON is None or LAT is None:
-        first_errors = "\n  ".join(
-            f"{d}: {msg}" for d, msg in list(dates_failed.items())[:5]
-        )
-        raise ValueError(
-            f"窗口 {dates[0]}~{dates[-1]} 内 {label} 全部失败：\n  {first_errors}"
-        )
-
-    shape = LON.shape
-    filled = [g if g is not None else np.full(shape, np.nan) for g in stack]
-    arr = np.stack(filled, axis=0)  # (n_days, ny, nx)
-    with np.errstate(invalid="ignore"):
-        mean = np.nanmean(arr, axis=0)
-    n_valid = np.isfinite(arr).sum(axis=0).astype(np.int16)
-
-    return WindowResult(
-        LON=LON,
-        LAT=LAT,
-        grid=mean,
-        n_valid=n_valid,
-        dates_requested=list(dates),
-        dates_found=dates_found,
-        dates_failed=dates_failed,
-        n_pixels_total=n_pix_total,
-        n_files_total=n_files_total,
-        n_broken_total=n_broken_total,
-    )
-
-
-# ---------------------------------------------------------------------------
 # FNR result container
 # ---------------------------------------------------------------------------
 @dataclass
@@ -245,13 +114,13 @@ class FnrResult:
 
     LON: np.ndarray
     LAT: np.ndarray
-    fnr: np.ndarray           # HCHO_mean / NO2_mean, masked
-    hcho_mean: np.ndarray     # raw masked mean, 10^15 molec/cm²
-    no2_mean: np.ndarray      # raw masked mean, 10^15 molec/cm²
+    fnr: np.ndarray  # HCHO_mean / NO2_mean, masked
+    hcho_mean: np.ndarray  # raw masked mean, 10^15 molec/cm²
+    no2_mean: np.ndarray  # raw masked mean, 10^15 molec/cm²
     hcho_mean_filled: np.ndarray  # small-gap-filled diagnostic field
-    no2_mean_filled: np.ndarray   # small-gap-filled diagnostic field
+    no2_mean_filled: np.ndarray  # small-gap-filled diagnostic field
     n_valid_hcho: np.ndarray  # int count of valid days per pixel
-    n_valid_no2: np.ndarray   # same for NO2
+    n_valid_no2: np.ndarray  # same for NO2
     dates_requested: list[str]
     dates_found_hcho: list[str]
     dates_found_no2: list[str]

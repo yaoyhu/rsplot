@@ -129,7 +129,7 @@ def smooth_grid(
     boundary dilution that scipy.ndimage.gaussian_filter causes.
     """
     from astropy.convolution import Gaussian2DKernel, convolve
-    from shapely.vectorized import contains
+    from shapely import contains_xy
 
     kernel = Gaussian2DKernel(x_stddev=sigma)
     smoothed = convolve(
@@ -137,7 +137,7 @@ def smooth_grid(
     )
 
     # Re-mask to region boundary (smoothing bleeds outside)
-    region_mask = contains(geometry, LON, LAT)
+    region_mask = contains_xy(geometry, LON, LAT)
     smoothed[~region_mask] = np.nan
 
     return smoothed

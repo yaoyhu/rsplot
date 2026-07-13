@@ -10,20 +10,23 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import cartopy.crs as ccrs
-import cartopy.feature as cfeature
-import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
 import numpy as np
-from cartopy.feature import ShapelyFeature
-from cartopy.mpl.gridliner import LATITUDE_FORMATTER, LONGITUDE_FORMATTER
 
 from rsplot.plotting.colormaps import (
     STATION_CONCENTRATION_CMAP,
     register_rsplot_colormaps,
 )
-from rsplot.plotting.raster import _add_sub_labels, _figsize_for_level
-from rsplot.plotting.station import _build_aqi_cmap, _station_marker_size
-from rsplot.tiles.tianditu import TianDiTuTiles
+from rsplot.plotting.map_frame import (
+    add_basemap_tiles,
+    add_region_boundaries,
+    configure_map_axes,
+    create_map_frame,
+    finalize_map_figure,
+)
+from rsplot.plotting.station import (
+    build_aqi_colormap,
+    station_marker_size,
+)
 
 if TYPE_CHECKING:
     from rsplot.geo.boundaries import RegionInfo
@@ -60,26 +63,20 @@ def plot_overlay(
     colorbars share the right side — raster on top, stations below —
     so each quantity keeps its own scale.
     """
-    params = region.params
-    use_basemap = basemap if basemap is not None else params.basemap
     register_rsplot_colormaps(hcho_cmap_file)
 
     # --- Figure setup ---
-    if use_basemap and tianditu_key:
-        tiles = TianDiTuTiles(tk=tianditu_key, layer="img")
-        projection = tiles.crs
-    else:
-        tiles = None
-        projection = ccrs.PlateCarree()
-
-    fig, ax = plt.subplots(
-        figsize=_figsize_for_level(region.level),
+    frame = create_map_frame(
+        region,
         dpi=dpi,
-        subplot_kw={"projection": projection},
+        basemap=basemap,
+        tianditu_key=tianditu_key,
     )
+    fig = frame.fig
+    ax = frame.ax
 
     # --- Raster layer (beneath everything else) ---
-    raster_alpha = 0.45 if use_basemap else 0.7
+    raster_alpha = 0.45 if frame.use_basemap else 0.7
     im = ax.pcolormesh(
         LON,
         LAT,
@@ -94,54 +91,8 @@ def plot_overlay(
     )
 
     # --- Basemap tiles ---
-    if tiles is not None:
-        ax.add_image(tiles, params.zoom)
-
-    # --- Detail boundaries (dotted) ---
-    if (
-        region.detail_boundary_gdf is not None
-        and len(region.detail_boundary_gdf) > 0
-    ):
-        ax.add_feature(
-            ShapelyFeature(
-                region.detail_boundary_gdf.geometry,
-                ccrs.PlateCarree(),
-                edgecolor="#aaa",
-                facecolor="none",
-                linewidth=0.25,
-                linestyle=":",
-            )
-        )
-
-    # --- Sub-boundaries ---
-    if (
-        region.sub_boundary_gdf is not None
-        and len(region.sub_boundary_gdf) > 0
-    ):
-        is_county_sub = region.level == "city"
-        ax.add_feature(
-            ShapelyFeature(
-                region.sub_boundary_gdf.geometry,
-                ccrs.PlateCarree(),
-                edgecolor="#888" if not is_county_sub else "#666",
-                facecolor="none",
-                linewidth=0.4 if not is_county_sub else 0.6,
-                linestyle="-" if not is_county_sub else "--",
-            )
-        )
-        _add_sub_labels(ax, region)
-
-    # --- Main boundary (red) ---
-    if region.main_boundary_gdf is not None:
-        ax.add_feature(
-            ShapelyFeature(
-                region.main_boundary_gdf.geometry,
-                ccrs.PlateCarree(),
-                edgecolor="red",
-                facecolor="none",
-                linewidth=params.boundary_linewidth,
-            )
-        )
+    add_basemap_tiles(frame, region)
+    add_region_boundaries(ax, region)
 
     # --- Station overlay ---
     valid = np.isfinite(data.values)
@@ -151,11 +102,11 @@ def plot_overlay(
 
     sc = None
     if len(vals) > 0:
-        marker_size = _station_marker_size(region.level)
+        marker_size = station_marker_size(region.level)
 
         is_aqi = data.var_name == "AQI"
         if is_aqi:
-            cmap, norm = _build_aqi_cmap()
+            cmap, norm = build_aqi_colormap()
             sc = ax.scatter(
                 lon,
                 lat,
@@ -200,26 +151,7 @@ def plot_overlay(
                     zorder=6,
                 )
 
-    # --- Map decorations ---
-    if not use_basemap:
-        ax.coastlines(linewidth=0.5, color="#333")
-        ax.add_feature(cfeature.OCEAN, facecolor="#e6f2ff", zorder=0)
-
-    lon_min, lon_max, lat_min, lat_max = region.extent
-    pad = params.pad
-    ax.set_extent(
-        [lon_min - pad, lon_max + pad, lat_min - pad, lat_max + pad],
-        crs=ccrs.PlateCarree(),
-    )
-
-    gl = ax.gridlines(
-        draw_labels=True, linewidth=0.2, linestyle="--", alpha=0.5
-    )
-    gl.top_labels = gl.right_labels = False
-    gl.xformatter = LONGITUDE_FORMATTER
-    gl.yformatter = LATITUDE_FORMATTER
-    gl.xlocator = mticker.MultipleLocator(params.grid_step)
-    gl.ylocator = mticker.MultipleLocator(params.grid_step)
+    configure_map_axes(ax, region, use_basemap=frame.use_basemap)
 
     # --- Twin colorbars, hugging the right edge of the map ---
     # Using ax.inset_axes keeps the bars next to the plot instead of
@@ -244,13 +176,10 @@ def plot_overlay(
         title = f"{region.name} · raster + stations"
     ax.set_title(title, fontsize=14)
 
-    # Reserve room on the right for the two inset colorbars — plain
-    # tight_layout() ignores inset_axes and would crop them off.
-    fig.tight_layout(rect=[0, 0, 0.9, 1])
-
-    # --- Output ---
-    if output:
-        fig.savefig(output, dpi=dpi, bbox_inches="tight")
-        plt.close(fig)
-    else:
-        plt.show()
+    # Reserve room on the right for the two inset colorbars.
+    finalize_map_figure(
+        fig,
+        dpi=dpi,
+        output=output,
+        layout_rect=(0, 0, 0.9, 1),
+    )

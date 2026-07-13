@@ -33,7 +33,9 @@ class ProductInfo:
     cmap: str
     vmin: float | None  # None = auto from data percentiles
     vmax: float | None
-    min_range: float  # minimum vmax-vmin to avoid exaggerating small differences
+    min_range: (
+        float  # minimum vmax-vmin to avoid exaggerating small differences
+    )
     level_defaults: dict[str, ProductPlotDefaults] = field(
         default_factory=dict
     )

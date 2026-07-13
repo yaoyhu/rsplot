@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-import math
 from importlib.metadata import PackageNotFoundError, version
-from typing import Any
 
-import numpy as np
 import typer
 from rich.console import Console
-
-from rsplot.config import AppConfig
 
 console = Console()
 app = typer.Typer(
@@ -18,34 +13,6 @@ app = typer.Typer(
     help="CLI tool for Remote sensing raster plotting.",
     no_args_is_help=True,
 )
-
-
-def _warn_missing_tianditu_key(
-    *,
-    basemap: bool | None,
-    default_basemap: bool,
-    tianditu_key: str | None,
-) -> None:
-    """Warn when a requested TianDiTu basemap cannot be loaded."""
-    use_basemap = basemap if basemap is not None else default_basemap
-    if use_basemap and not tianditu_key:
-        console.print(
-            "[yellow]未设置天地图 API key，底图将不会加载。请设置 "
-            "TIANDITU_API_KEY，或使用 --basemap none。[/yellow]"
-        )
-
-
-def _default_raster_n_min(product: str, window_n: int) -> int:
-    """Return the product-aware default valid-day threshold for raster means.
-
-    HCHO has much sparser day-to-day coverage than NO2/O3 after QA/cloud
-    filtering. Requiring half the window for HCHO makes otherwise useful
-    monthly means look holey, so use a softer default while still avoiding
-    one-off pixels.
-    """
-    if product.lower() == "hcho":
-        return max(3, math.ceil(window_n * 0.25))
-    return max(3, window_n // 2)
 
 
 def _get_version() -> str:
@@ -147,317 +114,28 @@ def raster(
         rsplot raster 安徽    20260131 -p hcho --days 30                 # 月均（推荐 HCHO）
         rsplot raster 长三角  20260101-20260131 -p no2                   # 显式区间
     """
-    from rsplot.fnr import compute_window_mean, parse_date_window
-    from rsplot.geo.boundaries import resolve_region
-    from rsplot.geo.gridding import (
-        fill_nan_gaps,
-        grid_data,
-        grid_coverage_in_region,
-        mask_to_region,
-        smooth_grid,
-    )
-    from rsplot.plotting.raster import plot_raster
-    from rsplot.plotting.styles import setup_fonts
-    from rsplot.readers import auto_vrange, get_product_info
-    from rsplot.results import build_raster_result, emit_result
+    from rsplot.commands.raster import run_raster
 
-    # --- 0. Decide: single-day or window mode ---
-    is_range = "-" in date_arg
-    try:
-        if is_range:
-            dates = parse_date_window(date_arg, default_days=0)
-        elif days is not None:
-            dates = parse_date_window(date_arg, default_days=days)
-        else:
-            # Single date + no --days → single-day mode (validated below)
-            if len(date_arg) != 8 or not date_arg.isdigit():
-                raise ValueError(
-                    f"日期格式错误: '{date_arg}'，"
-                    f"应为 YYYYMMDD 或 YYYYMMDD-YYYYMMDD"
-                )
-            dates = [date_arg]
-    except ValueError as e:
-        console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1) from e
-
-    window_mode = len(dates) > 1
-    if window_mode:
-        window_n = len(dates)
-        use_n_min = (
-            n_min
-            if n_min is not None
-            else _default_raster_n_min(product, window_n)
-        )
-        if use_n_min > window_n:
-            console.print(
-                f"[red]--n-min ({use_n_min}) 大于窗口天数 ({window_n})[/red]"
-            )
-            raise typer.Exit(1)
-
-    # --- 1. Load config ---
-    cfg = AppConfig.load()
-    setup_fonts(cfg.font_dir)
-
-    # --- 2. Resolve region ---
-    console.print(f"[bold]解析区域:[/bold] {region}")
-    info = resolve_region(region, cfg, level_override=level)
-    console.print(f"  → [green]{info.name}[/green] (级别: {info.level})")
-    console.print(
-        f"  → 范围: {info.extent[0]:.2f}°~{info.extent[1]:.2f}°E, "
-        f"{info.extent[2]:.2f}°~{info.extent[3]:.2f}°N"
-    )
-
-    # --- 3. Merge params (level defaults + CLI overrides) ---
-    params = info.params
-    use_dpi = dpi if dpi is not None else cfg.dpi
-    prod_info = get_product_info(product)
-    product_defaults = prod_info.defaults_for_level(info.level)
-    use_res = (
-        res
-        if res is not None
-        else product_defaults.res
-        if product_defaults.res is not None
-        else params.res
-    )
-    use_cmap = cmap if cmap is not None else prod_info.cmap
-    use_qa = qa if qa is not None else cfg.qa_threshold
-    use_smooth = (
-        smooth
-        if smooth is not None
-        else product_defaults.smooth_sigma
-        if product_defaults.smooth_sigma is not None
-        else params.smooth_sigma
-    )
-
-    if basemap is not None:
-        use_basemap: bool | None = basemap.lower() == "satellite"
-    else:
-        use_basemap = None
-    _warn_missing_tianditu_key(
-        basemap=use_basemap,
-        default_basemap=params.basemap,
-        tianditu_key=cfg.tianditu_key,
-    )
-
-    # --- 4. Read extent (with buffer to avoid edge artifacts) ---
-    buf = 1.0
-    read_extent = (
-        info.extent[0] - buf,
-        info.extent[1] + buf,
-        info.extent[2] - buf,
-        info.extent[3] + buf,
-    )
-
-    use_data_dir = (
-        data_dir if data_dir is not None else cfg.get_data_dir(product)
-    )
-    reader = prod_info.reader_cls()
-    colorbar_label = prod_info.colorbar_label
-
-    # --- 5. Read + grid (branches on mode) ---
-    swath_meta: dict[str, Any]
-    window_meta: dict[str, Any] | None = None
-
-    if not window_mode:
-        # ---- Single-day path (unchanged) ----
-        console.print(
-            f"\n[bold]读取数据:[/bold] {use_data_dir} (产品: {product})"
-        )
-        console.print(f"  日期: {dates[0]}, QA > {use_qa}")
-        swath = reader.read(
-            use_data_dir, dates[0], read_extent, qa_threshold=use_qa
-        )
-        console.print(
-            f"  → [green]{swath.n_pixels}[/green] 有效像元 "
-            f"({swath.n_files} 文件, {swath.n_broken} 损坏)"
-        )
-
-        console.print(f"\n[bold]网格化:[/bold] {use_res}° 分辨率")
-        LON, LAT, grid_raw = grid_data(
-            swath.lon, swath.lat, swath.values, read_extent, use_res
-        )
-        grid_filled = fill_nan_gaps(LON, LAT, grid_raw)
-        grid_masked = mask_to_region(LON, LAT, grid_filled, info.geometry)
-
-        swath_meta = {
-            "n_pixels": int(swath.n_pixels),
-            "n_files": int(swath.n_files),
-            "n_broken": int(swath.n_broken),
-            "qa_threshold": use_qa,
-            "resolution_deg": use_res,
-        }
-    else:
-        # ---- Window-mean path ----
-        console.print(
-            f"\n[bold]时间窗口:[/bold] {dates[0]} ~ {dates[-1]} "
-            f"({window_n} 天，每像元至少 {use_n_min} 天有效)"
-        )
-        console.print(
-            f"\n[bold]读取数据:[/bold] {use_data_dir} (产品: {product})"
-        )
-        console.print(f"  QA > {use_qa}")
-
-        win = compute_window_mean(
-            reader=reader,
-            data_dir=use_data_dir,
-            dates=dates,
-            extent=read_extent,
-            res=use_res,
-            qa_threshold=use_qa,
-            label=product.upper(),
-            console=console,
-        )
-        n_failed = len(win.dates_failed)
-        console.print(
-            f"  → 有效天数 [green]{len(win.dates_found)}[/green] / "
-            f"{window_n} (失败 {n_failed})，累计 "
-            f"[green]{win.n_pixels_total}[/green] 像元 "
-            f"({win.n_files_total} 文件, {win.n_broken_total} 损坏)"
-        )
-
-        LON, LAT = win.LON, win.LAT
-        grid_mean = win.grid.copy()
-        # Apply n_min mask: pixels below threshold → NaN
-        grid_mean[win.n_valid < use_n_min] = np.nan
-
-        # Same post-processing as single-day path (fill small gaps from
-        # neighbours, then region mask) so visual treatment stays consistent.
-        grid_filled = fill_nan_gaps(LON, LAT, grid_mean)
-        grid_masked = mask_to_region(LON, LAT, grid_filled, info.geometry)
-
-        # Per-pixel coverage stats (where any day was valid)
-        covered = win.n_valid[win.n_valid > 0]
-        coverage_days = {
-            "min": int(covered.min()) if len(covered) else 0,
-            "max": int(covered.max()) if len(covered) else 0,
-            "mean": (round(float(covered.mean()), 1) if len(covered) else 0.0),
-        }
-        if len(covered):
-            coverage_days.update(
-                {
-                    "p10": int(np.percentile(covered, 10)),
-                    "p25": int(np.percentile(covered, 25)),
-                    "median": int(np.percentile(covered, 50)),
-                    "p75": int(np.percentile(covered, 75)),
-                    "p90": int(np.percentile(covered, 90)),
-                }
-            )
-
-        swath_meta = {
-            "n_pixels_total": int(win.n_pixels_total),
-            "n_files_total": int(win.n_files_total),
-            "n_broken_total": int(win.n_broken_total),
-            "qa_threshold": use_qa,
-            "resolution_deg": use_res,
-        }
-        window_meta = {
-            "start": dates[0],
-            "end": dates[-1],
-            "n_days_requested": window_n,
-            "n_days_found": len(win.dates_found),
-            "n_min": use_n_min,
-            "n_min_default": n_min is None,
-            "dates_failed": win.dates_failed,
-            "coverage_days": coverage_days,
-        }
-
-    if not np.isfinite(grid_masked).any():
-        console.print(
-            "[red]窗口均值全区无有效像元，可能原因：窗口内覆盖不足，"
-            "或 --n-min 太严。可放宽 --n-min / 扩大窗口。[/red]"
-        )
-        raise typer.Exit(1)
-
-    if use_smooth is not None:
-        console.print(f"  → 高斯平滑 sigma={use_smooth}")
-        grid_masked = smooth_grid(
-            grid_masked, info.geometry, LON, LAT, sigma=use_smooth
-        )
-    coverage, n_valid_region, total_region_pixels = grid_coverage_in_region(
-        LON, LAT, grid_masked, info.geometry
-    )
-    console.print(
-        f"  → 网格 {grid_masked.shape}, 区域内覆盖率 {coverage:.1f}% "
-        f"({n_valid_region}/{total_region_pixels})"
-    )
-
-    # --- 6. Determine vmin/vmax (CLI > product default > auto) ---
-    if vmin is not None and vmax is not None:
-        use_vmin, use_vmax = vmin, vmax
-    elif prod_info.vmin is not None and prod_info.vmax is not None:
-        use_vmin = vmin if vmin is not None else prod_info.vmin
-        use_vmax = vmax if vmax is not None else prod_info.vmax
-    else:
-        auto_min, auto_max = auto_vrange(grid_masked, prod_info)
-        use_vmin = vmin if vmin is not None else auto_min
-        use_vmax = vmax if vmax is not None else auto_max
-
-    console.print(f"  → 色标范围: {use_vmin:.1f} ~ {use_vmax:.1f}")
-
-    # --- 7. Plot ---
-    if output is None:
-        if window_mode:
-            output = f"/tmp/rsplot_{info.name}_{dates[0]}_{dates[-1]}.png"
-        else:
-            output = f"/tmp/rsplot_{info.name}_{dates[0]}.png"
-
-    if title is None and window_mode:
-        title = (
-            f"TROPOMI {product.upper()} - {info.name} "
-            f"({dates[0]}~{dates[-1]}, {window_n}d mean)"
-        )
-
-    console.print("\n[bold]绘图中...[/bold]")
-    plot_raster(
-        LON,
-        LAT,
-        grid_masked,
-        info,
-        dpi=use_dpi,
-        cmap=use_cmap,
-        vmin=use_vmin,
-        vmax=use_vmax,
-        basemap=use_basemap,
-        tianditu_key=cfg.tianditu_key,
-        hcho_cmap_file=cfg.hcho_cmap_file,
-        title=title,
-        output=output,
-        colorbar_label=colorbar_label,
-    )
-
-    console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
-
-    # --- 8. Emit structured result for downstream agents ---
-    result = build_raster_result(
-        region=info,
+    run_raster(
+        region=region,
+        date_arg=date_arg,
         product=product,
-        date=dates[0] if not window_mode else dates[-1],
-        prod_info=prod_info,
-        LON=LON,
-        LAT=LAT,
-        grid=grid_masked,
-        swath_meta=swath_meta,
-        vmin=use_vmin,
-        vmax=use_vmax,
+        days=days,
+        n_min=n_min,
+        level=level,
+        data_dir=data_dir,
         output=output,
-        window=window_meta,
+        dpi=dpi,
+        res=res,
+        basemap=basemap,
+        vmin=vmin,
+        vmax=vmax,
+        cmap=cmap,
+        smooth=smooth,
+        title=title,
+        qa=qa,
+        console=console,
     )
-    emit_result(result, output)
-
-
-# ---------------------------------------------------------------------------
-# Forecast variable defaults that pair naturally with station observations.
-# Used when the user asks for a forecast/station overlay but doesn't specify
-# --station-var explicitly.
-# ---------------------------------------------------------------------------
-_FORECAST_STATION_PAIR: dict[str, str] = {
-    "pm25": "PM2.5",
-    "pm10": "PM10",
-    "so2": "SO2",
-    "no2": "NO2",
-    "co": "CO",
-    "o3": "O3",
-}
 
 
 @app.command()
@@ -539,327 +217,29 @@ def forecast(
         rsplot forecast 合肥 20260630 --lead 72 --var PM2.5
         rsplot forecast 合肥 2026041409 --lead 6 --var O3 --station-overlay
     """
-    from pathlib import Path
+    from rsplot.commands.forecast import run_forecast
 
-    from rsplot.config import (
-        STATION_VAR_LABELS,
-        STATION_VAR_META,
-        get_exceedance_threshold,
-    )
-    from rsplot.geo.boundaries import _load_city, resolve_region
-    from rsplot.geo.gridding import (
-        grid_coverage_in_region,
-        mask_to_region,
-        smooth_grid,
-    )
-    from rsplot.plotting.colormaps import STATION_CONCENTRATION_CMAP
-    from rsplot.plotting.overlay import plot_overlay
-    from rsplot.plotting.raster import plot_raster
-    from rsplot.plotting.styles import setup_fonts
-    from rsplot.readers.forecast import (
-        auto_forecast_vrange,
-        get_forecast_var_info,
-        read_forecast,
-    )
-    from rsplot.readers.guokong import mask_stations_to_region, read_stations
-    from rsplot.results import build_forecast_result, emit_result
-
-    # --- 1. Load config ---
-    cfg = AppConfig.load()
-    setup_fonts(cfg.font_dir)
-
-    # --- 2. Resolve region ---
-    console.print(f"[bold]解析区域:[/bold] {region}")
-    info = resolve_region(region, cfg, level_override=level)
-    console.print(f"  → [green]{info.name}[/green] (级别: {info.level})")
-    console.print(
-        f"  → 范围: {info.extent[0]:.2f}°~{info.extent[1]:.2f}°E, "
-        f"{info.extent[2]:.2f}°~{info.extent[3]:.2f}°N"
-    )
-
-    # --- 3. Merge params ---
-    params = info.params
-    use_dpi = dpi if dpi is not None else cfg.dpi
-    use_cmap = cmap if cmap is not None else STATION_CONCENTRATION_CMAP
-
-    if basemap is not None:
-        use_basemap: bool | None = basemap.lower() == "satellite"
-    else:
-        use_basemap = None
-    _warn_missing_tianditu_key(
-        basemap=use_basemap,
-        default_basemap=params.basemap,
-        tianditu_key=cfg.tianditu_key,
-    )
-
-    if smooth is not None and smooth < 0:
-        console.print("[red]--smooth 必须大于等于 0。[/red]")
-        raise typer.Exit(1)
-    if vmin is not None and vmax is not None and vmax <= vmin:
-        console.print("[red]--vmax 必须大于 --vmin。[/red]")
-        raise typer.Exit(1)
-
-    try:
-        var_info = get_forecast_var_info(var)
-    except ValueError as e:
-        console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1) from e
-
-    try:
-        use_data_dir = (
-            data_dir
-            if data_dir is not None
-            else cfg.get_data_dir("forecast")
-        )
-    except ValueError as e:
-        console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1) from e
-
-    # --- 4. Read forecast grid ---
-    buf = 0.5
-    read_extent = (
-        info.extent[0] - buf,
-        info.extent[1] + buf,
-        info.extent[2] - buf,
-        info.extent[3] + buf,
-    )
-    console.print(
-        f"\n[bold]读取预报数据:[/bold] {use_data_dir} "
-        f"(变量: {var_info.label}, 时效: {lead}h)"
-    )
-    console.print(f"  起报时次: {datetime_str}")
-    try:
-        forecast_data, resolved_dt = read_forecast(
-            use_data_dir,
-            datetime_str,
-            lead,
-            var,
-            read_extent,
-        )
-    except (FileNotFoundError, ValueError) as e:
-        console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1) from e
-
-    if resolved_dt != datetime_str:
-        console.print(f"  → 自动选择最新起报: [cyan]{resolved_dt}[/cyan]")
-    console.print(
-        f"  → 预报有效时次: [cyan]{forecast_data.valid_datetime}[/cyan], "
-        f"有效网格: [green]{forecast_data.n_valid}[/green] / "
-        f"{forecast_data.n_cells}"
-    )
-
-    # --- 5. Mask, optional smooth, and color scale ---
-    grid_masked = mask_to_region(
-        forecast_data.lon,
-        forecast_data.lat,
-        forecast_data.values,
-        info.geometry,
-    )
-    if not np.isfinite(grid_masked).any():
-        console.print("[red]目标区域内没有有效预报网格。[/red]")
-        raise typer.Exit(1)
-
-    if smooth is not None and smooth > 0:
-        console.print(f"  → 高斯平滑 sigma={smooth}")
-        grid_masked = smooth_grid(
-            grid_masked,
-            info.geometry,
-            forecast_data.lon,
-            forecast_data.lat,
-            sigma=smooth,
-        )
-    coverage, n_valid_region, total_region_pixels = grid_coverage_in_region(
-        forecast_data.lon,
-        forecast_data.lat,
-        grid_masked,
-        info.geometry,
-    )
-    console.print(
-        f"  → 区域网格 {grid_masked.shape}, 区域内覆盖率 {coverage:.1f}% "
-        f"({n_valid_region}/{total_region_pixels})"
-    )
-
-    auto_min, auto_max = auto_forecast_vrange(grid_masked, var_info)
-    use_vmin = vmin if vmin is not None else auto_min
-    use_vmax = vmax if vmax is not None else auto_max
-    if use_vmax <= use_vmin:
-        console.print("[red]色标范围无效：vmax 必须大于 vmin。[/red]")
-        raise typer.Exit(1)
-    console.print(f"  → 色标范围: {use_vmin:.1f} ~ {use_vmax:.1f}")
-
-    # --- 6. Optional station overlay ---
-    station_data = None
-    station_resolved_dt = None
-    station_threshold = None
-    station_unit = ""
-    station_colorbar_label = ""
-    use_station_overlay = (
-        station_overlay
-        or station_var is not None
-        or station_data_dir is not None
-        or station_datetime is not None
-    )
-    if use_station_overlay:
-        use_station_var = station_var or _FORECAST_STATION_PAIR[var_info.name]
-        if use_station_var not in STATION_VAR_META:
-            available = ", ".join(STATION_VAR_META)
-            console.print(
-                f"[red]未知站点变量 '{use_station_var}'[/red]。"
-                f"可用: {available}"
-            )
-            raise typer.Exit(1)
-
-        try:
-            use_station_data_dir = (
-                station_data_dir
-                if station_data_dir is not None
-                else cfg.get_data_dir("guokong")
-            )
-        except ValueError as e:
-            console.print(f"[red]{e}[/red]")
-            raise typer.Exit(1) from e
-
-        use_station_datetime = station_datetime or forecast_data.valid_datetime
-        console.print(
-            f"\n[bold]读取站点数据:[/bold] {use_station_data_dir}"
-        )
-        console.print(
-            f"  时间: {use_station_datetime}, 变量: {use_station_var}"
-        )
-        try:
-            station_data, station_resolved_dt = read_stations(
-                use_station_data_dir,
-                use_station_datetime,
-                use_station_var,
-                extent=read_extent,
-            )
-        except (FileNotFoundError, KeyError, ValueError) as e:
-            console.print(f"[red]{e}[/red]")
-            raise typer.Exit(1) from e
-        station_data = mask_stations_to_region(station_data, info.geometry)
-        if station_resolved_dt != use_station_datetime:
-            console.print(
-                f"  → 自动选择最新站点时次: [cyan]{station_resolved_dt}[/cyan]"
-            )
-        console.print(
-            f"  → [green]{station_data.n_valid}[/green] 有效站点 "
-            f"(共 {station_data.n_stations} 站)"
-        )
-
-        station_threshold = get_exceedance_threshold(use_station_var)
-        if station_threshold is not None:
-            n_exceed = int(
-                np.sum(
-                    station_data.values[np.isfinite(station_data.values)]
-                    > station_threshold
-                )
-            )
-            console.print(
-                f"  → 超标阈值: {station_threshold}, "
-                f"超标站点: [red]{n_exceed}[/red]"
-            )
-
-        station_unit = STATION_VAR_META[use_station_var][0]
-        station_display_var = STATION_VAR_LABELS.get(
-            use_station_var, use_station_var
-        )
-        station_colorbar_label = (
-            f"{station_display_var} ({station_unit})"
-            if station_unit
-            else station_display_var
-        )
-
-    # --- 7. Plot ---
-    if output is None:
-        station_suffix = (
-            f"_station{station_data.var_name}"
-            if station_data is not None
-            else ""
-        )
-        output = (
-            f"/tmp/rsplot_forecast_{info.name}_{forecast_data.variable}_"
-            f"{forecast_data.init_datetime}_f{forecast_data.lead_hour}"
-            f"{station_suffix}.png"
-        )
-    Path(output).parent.mkdir(parents=True, exist_ok=True)
-
-    if title is None:
-        if station_data is None:
-            title = (
-                f"Forecast {forecast_data.label} - {info.name} "
-                f"(valid {forecast_data.valid_datetime}, "
-                f"+{forecast_data.lead_hour}h)"
-            )
-        else:
-            title = (
-                f"Forecast {forecast_data.label} + Station "
-                f"{station_data.var_name} - {info.name} "
-                f"(valid {forecast_data.valid_datetime}, "
-                f"+{forecast_data.lead_hour}h)"
-            )
-
-    console.print("\n[bold]绘图中...[/bold]")
-    if station_data is None:
-        plot_raster(
-            forecast_data.lon,
-            forecast_data.lat,
-            grid_masked,
-            info,
-            dpi=use_dpi,
-            cmap=use_cmap,
-            vmin=use_vmin,
-            vmax=use_vmax,
-            basemap=use_basemap,
-            tianditu_key=cfg.tianditu_key,
-            hcho_cmap_file=cfg.hcho_cmap_file,
-            title=title,
-            output=output,
-            colorbar_label=var_info.colorbar_label,
-        )
-    else:
-        plot_overlay(
-            forecast_data.lon,
-            forecast_data.lat,
-            grid_masked,
-            station_data,
-            info,
-            raster_cmap=use_cmap,
-            raster_vmin=use_vmin,
-            raster_vmax=use_vmax,
-            raster_label=var_info.colorbar_label,
-            station_threshold=station_threshold,
-            station_label=station_colorbar_label,
-            dpi=use_dpi,
-            basemap=use_basemap,
-            tianditu_key=cfg.tianditu_key,
-            hcho_cmap_file=cfg.hcho_cmap_file,
-            title=title,
-            output=output,
-        )
-
-    console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
-
-    # --- 8. Emit structured result for downstream agents ---
-    result = build_forecast_result(
-        region=info,
-        data=forecast_data,
-        LON=forecast_data.lon,
-        LAT=forecast_data.lat,
-        grid=grid_masked,
-        vmin=use_vmin,
-        vmax=use_vmax,
+    run_forecast(
+        region=region,
+        datetime_str=datetime_str,
+        var=var,
+        lead=lead,
+        level=level,
+        data_dir=data_dir,
+        station_overlay=station_overlay,
+        station_var=station_var,
+        station_data_dir=station_data_dir,
+        station_datetime=station_datetime,
         output=output,
-        station_data=station_data,
-        station_datetime=station_resolved_dt,
-        station_threshold=station_threshold,
-        station_unit=station_unit,
-        cities_gdf=(
-            _load_city(cfg.require_geojson_dir())
-            if station_data is not None
-            else None
-        ),
+        dpi=dpi,
+        basemap=basemap,
+        vmin=vmin,
+        vmax=vmax,
+        cmap=cmap,
+        smooth=smooth,
+        title=title,
+        console=console,
     )
-    emit_result(result, output)
 
 
 @app.command()
@@ -952,212 +332,29 @@ def station(
         rsplot station YRD 2026041415 --var NO2 -o logs/yrd_no2.png
         rsplot station 合肥 2026041415 --var O3 --wind-level 10m
     """
-    from rsplot.config import (
-        STATION_VAR_LABELS,
-        STATION_VAR_META,
-        get_exceedance_threshold,
-    )
-    from rsplot.geo.boundaries import resolve_region
-    from rsplot.plotting.station import plot_station, wind_stride_for_shape
-    from rsplot.plotting.styles import setup_fonts
-    from rsplot.readers.era5_wind import (
-        mask_wind_to_region,
-        read_era5_wind,
-    )
-    from rsplot.readers.guokong import mask_stations_to_region, read_stations
+    from rsplot.commands.station import run_station
 
-    # --- 1. Load config ---
-    cfg = AppConfig.load()
-    setup_fonts(cfg.font_dir)
-
-    # --- 2. Validate variable ---
-    if var not in STATION_VAR_META:
-        available = ", ".join(STATION_VAR_META)
-        console.print(f"[red]未知变量 '{var}'[/red]。可用: {available}")
-        raise typer.Exit(1)
-
-    # --- 3. Resolve region ---
-    console.print(f"[bold]解析区域:[/bold] {region}")
-    info = resolve_region(region, cfg, level_override=level)
-    console.print(f"  → [green]{info.name}[/green] (级别: {info.level})")
-    params = info.params
-
-    # --- 4. Read station data ---
-    use_data_dir = (
-        data_dir if data_dir is not None else cfg.get_data_dir("guokong")
-    )
-    console.print(f"\n[bold]读取站点数据:[/bold] {use_data_dir}")
-    console.print(f"  时间: {datetime_str}, 变量: {var}")
-
-    # Read with buffer for edge stations
-    buf = 0.5
-    read_extent = (
-        info.extent[0] - buf,
-        info.extent[1] + buf,
-        info.extent[2] - buf,
-        info.extent[3] + buf,
-    )
-    data, resolved_dt = read_stations(
-        use_data_dir, datetime_str, var, extent=read_extent
-    )
-    data = mask_stations_to_region(data, info.geometry)
-    if resolved_dt != datetime_str:
-        console.print(f"  → 自动选择最新时次: [cyan]{resolved_dt}[/cyan]")
-    console.print(
-        f"  → [green]{data.n_valid}[/green] 有效站点 (共 {data.n_stations} 站)"
-    )
-
-    # --- 5. Exceedance threshold ---
-    threshold = get_exceedance_threshold(var)
-    if threshold is not None:
-        n_exceed = int(
-            np.sum(data.values[np.isfinite(data.values)] > threshold)
-        )
-        console.print(
-            f"  → 超标阈值: {threshold}, 超标站点: [red]{n_exceed}[/red]"
-        )
-
-    # --- 6. Optional ERA5 wind overlay ---
-    wind_data = None
-    use_wind_stride = None
-    if wind_level is not None:
-        if wind_stride is not None and wind_stride < 1:
-            console.print("[red]--wind-stride 必须大于等于 1。[/red]")
-            raise typer.Exit(1)
-        if wind_scale is not None and wind_scale <= 0:
-            console.print("[red]--wind-scale 必须大于 0。[/red]")
-            raise typer.Exit(1)
-        if wind_width <= 0:
-            console.print("[red]--wind-width 必须大于 0。[/red]")
-            raise typer.Exit(1)
-        if (
-            wind_vmin is not None
-            and wind_vmax is not None
-            and wind_vmax <= wind_vmin
-        ):
-            console.print("[red]--wind-vmax 必须大于 --wind-vmin。[/red]")
-            raise typer.Exit(1)
-
-        use_wind_data_dir = (
-            wind_data_dir
-            if wind_data_dir is not None
-            else cfg.get_data_dir("era5")
-        )
-        console.print(
-            f"\n[bold]读取 ERA5 风场:[/bold] {use_wind_data_dir}"
-        )
-        console.print(
-            f"  站点时次: {resolved_dt} ({station_timezone}), "
-            f"层次: {wind_level}"
-        )
-        try:
-            wind_data = read_era5_wind(
-                use_wind_data_dir,
-                resolved_dt,
-                wind_level,
-                read_extent,
-                station_timezone=station_timezone,
-            )
-            wind_data = mask_wind_to_region(wind_data, info.geometry)
-        except (FileNotFoundError, ValueError) as e:
-            console.print(f"[red]{e}[/red]")
-            raise typer.Exit(1) from e
-        if wind_data.n_valid == 0:
-            console.print("[red]目标区域内没有有效 ERA5 风矢量。[/red]")
-            raise typer.Exit(1)
-
-        use_wind_stride = (
-            wind_stride
-            if wind_stride is not None
-            else wind_stride_for_shape(wind_data.speed.shape, info.level)
-        )
-        console.print(
-            f"  → ERA5 UTC 时次: [cyan]{wind_data.datetime_utc}[/cyan], "
-            f"有效网格: [green]{wind_data.n_valid}[/green], "
-            f"抽稀步长: {use_wind_stride}"
-        )
-
-    # --- 7. Plot ---
-    use_dpi = dpi if dpi is not None else cfg.dpi
-
-    if basemap is not None:
-        use_basemap: bool | None = basemap.lower() == "satellite"
-    else:
-        use_basemap = None
-    _warn_missing_tianditu_key(
-        basemap=use_basemap,
-        default_basemap=params.basemap,
-        tianditu_key=cfg.tianditu_key,
-    )
-
-    unit = STATION_VAR_META[var][0]
-    display_var = STATION_VAR_LABELS.get(var, var)
-    colorbar_label = f"{display_var} ({unit})" if unit else display_var
-    use_title = title
-    if use_title is None and display_var != var:
-        if wind_data is None:
-            use_title = f"{display_var} - {info.name}"
-        else:
-            use_title = (
-                f"{display_var} + ERA5 {wind_data.level} wind - {info.name}"
-            )
-
-    if output is None:
-        wind_suffix = f"_wind{wind_data.level}" if wind_data is not None else ""
-        output = (
-            f"/tmp/rsplot_station_{info.name}_{var}_{resolved_dt}"
-            f"{wind_suffix}.png"
-        )
-
-    console.print("\n[bold]绘图中...[/bold]")
-    plot_station(
-        data,
-        info,
-        wind=wind_data,
-        wind_stride=use_wind_stride or 1,
+    run_station(
+        region=region,
+        datetime_str=datetime_str,
+        var=var,
+        level=level,
+        data_dir=data_dir,
+        output=output,
+        dpi=dpi,
+        basemap=basemap,
+        wind_level=wind_level,
+        wind_data_dir=wind_data_dir,
+        station_timezone=station_timezone,
+        wind_stride=wind_stride,
         wind_scale=wind_scale,
         wind_width=wind_width,
         wind_cmap=wind_cmap,
         wind_vmin=wind_vmin,
         wind_vmax=wind_vmax,
-        threshold=threshold,
-        dpi=use_dpi,
-        basemap=use_basemap,
-        tianditu_key=cfg.tianditu_key,
-        title=use_title,
-        output=output,
-        colorbar_label=colorbar_label,
+        title=title,
+        console=console,
     )
-
-    console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
-
-    # --- 8. Emit structured result for downstream agents ---
-    from rsplot.geo.boundaries import _load_city
-    from rsplot.results import build_station_result, emit_result
-
-    result = build_station_result(
-        region=info,
-        data=data,
-        datetime_str=resolved_dt,
-        threshold=threshold,
-        unit=unit,
-        cities_gdf=_load_city(cfg.require_geojson_dir()),
-        output=output,
-        wind=wind_data,
-        wind_stride=use_wind_stride,
-    )
-    emit_result(result, output)
-
-
-# ---------------------------------------------------------------------------
-# Station variable defaults that pair naturally with each satellite product.
-# Used when the user asks for an overlay but doesn't specify --var explicitly.
-# ---------------------------------------------------------------------------
-_PRODUCT_STATION_PAIR: dict[str, str] = {
-    "no2": "NO2",
-    "o3": "O3",
-    "o3pr": "O3",
-}
 
 
 @app.command()
@@ -1239,226 +436,28 @@ def overlay(
         rsplot overlay 安徽   2026041415 -p o3  -v O3_8h
         rsplot overlay 中国   20260208   -p no2 -o logs/overlay/china_no2.png
     """
-    from rsplot.config import STATION_VAR_META, get_exceedance_threshold
-    from rsplot.geo.boundaries import _load_city, resolve_region
-    from rsplot.geo.gridding import (
-        fill_nan_gaps,
-        grid_data,
-        grid_coverage_in_region,
-        mask_to_region,
-        smooth_grid,
-    )
-    from rsplot.plotting.overlay import plot_overlay
-    from rsplot.plotting.styles import setup_fonts
-    from rsplot.readers import auto_vrange, get_product_info
-    from rsplot.readers.guokong import mask_stations_to_region, read_stations
-    from rsplot.results import build_overlay_result, emit_result
+    from rsplot.commands.overlay import run_overlay
 
-    # --- 1. Load config ---
-    cfg = AppConfig.load()
-    setup_fonts(cfg.font_dir)
-
-    # --- 2. Resolve station variable default from product ---
-    if var is None:
-        var = _PRODUCT_STATION_PAIR.get(product.lower(), "AQI")
-    if var not in STATION_VAR_META:
-        available = ", ".join(STATION_VAR_META)
-        console.print(f"[red]未知站点变量 '{var}'[/red]。可用: {available}")
-        raise typer.Exit(1)
-
-    # --- 3. Split datetime: first 8 chars = date for satellite ---
-    if not datetime_str.isdigit() or len(datetime_str) not in (8, 10):
-        console.print(
-            f"[red]datetime 参数 '{datetime_str}' 格式不正确[/red]，"
-            f"请使用 YYYYMMDD 或 YYYYMMDDHH。"
-        )
-        raise typer.Exit(1)
-    date = datetime_str[:8]
-
-    # --- 4. Resolve region ---
-    console.print(f"[bold]解析区域:[/bold] {region}")
-    info = resolve_region(region, cfg, level_override=level)
-    console.print(f"  → [green]{info.name}[/green] (级别: {info.level})")
-    console.print(
-        f"  → 范围: {info.extent[0]:.2f}°~{info.extent[1]:.2f}°E, "
-        f"{info.extent[2]:.2f}°~{info.extent[3]:.2f}°N"
-    )
-
-    # --- 5. Merge params ---
-    params = info.params
-    use_dpi = dpi if dpi is not None else cfg.dpi
-    prod_info = get_product_info(product)
-    product_defaults = prod_info.defaults_for_level(info.level)
-    use_res = (
-        res
-        if res is not None
-        else product_defaults.res
-        if product_defaults.res is not None
-        else params.res
-    )
-    use_cmap = cmap if cmap is not None else prod_info.cmap
-    use_qa = qa if qa is not None else cfg.qa_threshold
-    use_smooth = (
-        smooth
-        if smooth is not None
-        else product_defaults.smooth_sigma
-        if product_defaults.smooth_sigma is not None
-        else params.smooth_sigma
-    )
-
-    if basemap is not None:
-        use_basemap: bool | None = basemap.lower() == "satellite"
-    else:
-        use_basemap = None
-    _warn_missing_tianditu_key(
-        basemap=use_basemap,
-        default_basemap=params.basemap,
-        tianditu_key=cfg.tianditu_key,
-    )
-
-    # --- 6. Read satellite swath ---
-    use_raster_dir = (
-        raster_dir if raster_dir is not None else cfg.get_data_dir(product)
-    )
-    reader = prod_info.reader_cls()
-    raster_label = prod_info.colorbar_label
-    buf = 1.0
-    read_extent = (
-        info.extent[0] - buf,
-        info.extent[1] + buf,
-        info.extent[2] - buf,
-        info.extent[3] + buf,
-    )
-    console.print(
-        f"\n[bold]读取卫星数据:[/bold] {use_raster_dir} (产品: {product})"
-    )
-    console.print(f"  日期: {date}, QA > {use_qa}")
-    swath = reader.read(use_raster_dir, date, read_extent, qa_threshold=use_qa)
-    console.print(
-        f"  → [green]{swath.n_pixels}[/green] 有效像元 "
-        f"({swath.n_files} 文件, {swath.n_broken} 损坏)"
-    )
-
-    # --- 7. Grid + mask + smooth ---
-    console.print(f"\n[bold]网格化:[/bold] {use_res}° 分辨率")
-    LON, LAT, grid_raw = grid_data(
-        swath.lon, swath.lat, swath.values, read_extent, use_res
-    )
-    grid_filled = fill_nan_gaps(LON, LAT, grid_raw)
-    grid_masked = mask_to_region(LON, LAT, grid_filled, info.geometry)
-    if use_smooth is not None:
-        grid_masked = smooth_grid(
-            grid_masked, info.geometry, LON, LAT, sigma=use_smooth
-        )
-    coverage, n_valid_region, total_region_pixels = grid_coverage_in_region(
-        LON, LAT, grid_masked, info.geometry
-    )
-    console.print(
-        f"  → 网格 {grid_masked.shape}, 区域内覆盖率 {coverage:.1f}% "
-        f"({n_valid_region}/{total_region_pixels})"
-    )
-
-    # --- 8. Raster vmin/vmax ---
-    if vmin is not None and vmax is not None:
-        use_vmin, use_vmax = vmin, vmax
-    elif prod_info.vmin is not None and prod_info.vmax is not None:
-        use_vmin = vmin if vmin is not None else prod_info.vmin
-        use_vmax = vmax if vmax is not None else prod_info.vmax
-    else:
-        auto_min, auto_max = auto_vrange(grid_masked, prod_info)
-        use_vmin = vmin if vmin is not None else auto_min
-        use_vmax = vmax if vmax is not None else auto_max
-    console.print(f"  → 色标范围: {use_vmin:.1f} ~ {use_vmax:.1f}")
-
-    # --- 9. Read station data ---
-    use_station_dir = (
-        station_dir if station_dir is not None else cfg.get_data_dir("guokong")
-    )
-    console.print(f"\n[bold]读取站点数据:[/bold] {use_station_dir}")
-    console.print(f"  时间: {datetime_str}, 变量: {var}")
-    station_buf = 0.5
-    station_extent = (
-        info.extent[0] - station_buf,
-        info.extent[1] + station_buf,
-        info.extent[2] - station_buf,
-        info.extent[3] + station_buf,
-    )
-    data, resolved_dt = read_stations(
-        use_station_dir, datetime_str, var, extent=station_extent
-    )
-    data = mask_stations_to_region(data, info.geometry)
-    if resolved_dt != datetime_str:
-        console.print(f"  → 自动选择最新时次: [cyan]{resolved_dt}[/cyan]")
-    console.print(
-        f"  → [green]{data.n_valid}[/green] 有效站点 (共 {data.n_stations} 站)"
-    )
-
-    # --- 10. Exceedance threshold ---
-    threshold = get_exceedance_threshold(var)
-    if threshold is not None:
-        n_exceed = int(
-            np.sum(data.values[np.isfinite(data.values)] > threshold)
-        )
-        console.print(
-            f"  → 超标阈值: {threshold}, 超标站点: [red]{n_exceed}[/red]"
-        )
-
-    # --- 11. Plot ---
-    if output is None:
-        output = f"/tmp/rsplot_overlay_{info.name}_{product}_{resolved_dt}.png"
-
-    unit = STATION_VAR_META[var][0]
-    station_label = f"{var} ({unit})" if unit else var
-
-    console.print("\n[bold]绘图中...[/bold]")
-    plot_overlay(
-        LON,
-        LAT,
-        grid_masked,
-        data,
-        info,
-        raster_cmap=use_cmap,
-        raster_vmin=use_vmin,
-        raster_vmax=use_vmax,
-        raster_label=raster_label,
-        station_threshold=threshold,
-        station_label=station_label,
-        dpi=use_dpi,
-        basemap=use_basemap,
-        tianditu_key=cfg.tianditu_key,
-        hcho_cmap_file=cfg.hcho_cmap_file,
-        title=title,
-        output=output,
-    )
-
-    console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
-
-    # --- 12. Emit combined result ---
-    result = build_overlay_result(
-        region=info,
+    run_overlay(
+        region=region,
+        datetime_str=datetime_str,
         product=product,
-        date=date,
-        prod_info=prod_info,
-        LON=LON,
-        LAT=LAT,
-        grid=grid_masked,
-        swath_meta={
-            "n_pixels": int(swath.n_pixels),
-            "n_files": int(swath.n_files),
-            "n_broken": int(swath.n_broken),
-            "qa_threshold": use_qa,
-            "resolution_deg": use_res,
-        },
-        raster_vmin=use_vmin,
-        raster_vmax=use_vmax,
-        data=data,
-        datetime_str=resolved_dt,
-        threshold=threshold,
-        unit=unit,
-        cities_gdf=_load_city(cfg.require_geojson_dir()),
+        var=var,
+        level=level,
+        raster_dir=raster_dir,
+        station_dir=station_dir,
         output=output,
+        dpi=dpi,
+        res=res,
+        basemap=basemap,
+        vmin=vmin,
+        vmax=vmax,
+        cmap=cmap,
+        smooth=smooth,
+        qa=qa,
+        title=title,
+        console=console,
     )
-    emit_result(result, output)
 
 
 @app.command()
@@ -1518,124 +517,21 @@ def recent(
         rsplot recent 合肥 20260428 --days 30 -p hcho -o recent.json
         rsplot recent 安徽 20260428 --days 7 --source station --var O3
     """
-    from rsplot.config import STATION_VAR_META
-    from rsplot.geo.boundaries import resolve_region
-    from rsplot.readers import get_product_info
-    from rsplot.recent import (
-        build_recent_result,
-        parse_recent_dates,
-        summarize_recent_raster,
-        summarize_recent_station,
-        write_recent_result,
-    )
+    from rsplot.commands.recent import run_recent
 
-    use_source = source.lower()
-    if use_source not in ("raster", "station"):
-        console.print("[red]--source 仅支持 raster / station[/red]")
-        raise typer.Exit(1)
-
-    try:
-        dates = parse_recent_dates(end_date, days)
-    except ValueError as e:
-        console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1) from e
-
-    cfg = AppConfig.load()
-    console.print(f"[bold]解析区域:[/bold] {region}")
-    info = resolve_region(region, cfg, level_override=level)
-    console.print(f"  → [green]{info.name}[/green] (级别: {info.level})")
-    console.print(
-        f"[bold]统计窗口:[/bold] {dates[0]} ~ {dates[-1]} ({len(dates)} 天)"
-    )
-
-    if output is None:
-        if use_source == "raster":
-            output = (
-                f"/tmp/rsplot_recent_{info.name}_{product}_"
-                f"{dates[0]}_{dates[-1]}.json"
-            )
-        else:
-            output = (
-                f"/tmp/rsplot_recent_{info.name}_{var}_"
-                f"{dates[0]}_{dates[-1]}.json"
-            )
-
-    if use_source == "raster":
-        prod_info = get_product_info(product)
-        product_defaults = prod_info.defaults_for_level(info.level)
-        use_res = (
-            res
-            if res is not None
-            else product_defaults.res
-            if product_defaults.res is not None
-            else info.params.res
-        )
-        use_qa = qa if qa is not None else cfg.qa_threshold
-        use_data_dir = (
-            data_dir if data_dir is not None else cfg.get_data_dir(product)
-        )
-        console.print(
-            f"\n[bold]统计栅格:[/bold] {use_data_dir} "
-            f"(产品: {product}, QA > {use_qa}, res={use_res})"
-        )
-        daily = summarize_recent_raster(
-            region=info,
-            product=product,
-            prod_info=prod_info,
-            data_dir=use_data_dir,
-            dates=dates,
-            res=use_res,
-            qa_threshold=use_qa,
-            console=console,
-        )
-        result = build_recent_result(
-            region=info,
-            source=use_source,
-            dates=dates,
-            daily=daily,
-            params={
-                "data_dir": use_data_dir,
-                "qa_threshold": use_qa,
-                "resolution_deg": use_res,
-            },
-            product=product,
-            unit=prod_info.colorbar_label,
-            output=output,
-        )
-    else:
-        if var not in STATION_VAR_META:
-            available = ", ".join(STATION_VAR_META)
-            console.print(f"[red]未知变量 '{var}'[/red]。可用: {available}")
-            raise typer.Exit(1)
-        use_data_dir = (
-            data_dir if data_dir is not None else cfg.get_data_dir("guokong")
-        )
-        unit = STATION_VAR_META[var][0]
-        console.print(f"\n[bold]统计站点:[/bold] {use_data_dir} (变量: {var})")
-        daily = summarize_recent_station(
-            region=info,
-            data_dir=use_data_dir,
-            dates=dates,
-            var_name=var,
-            console=console,
-        )
-        result = build_recent_result(
-            region=info,
-            source=use_source,
-            dates=dates,
-            daily=daily,
-            params={"data_dir": use_data_dir},
-            variable=var,
-            unit=unit or None,
-            output=output,
-        )
-
-    write_recent_result(result, output)
-    found = result["availability"]["days_found"]
-    failed = result["availability"]["days_failed"]
-    console.print(
-        f"\n[bold green]✓ 已保存:[/bold green] {output} "
-        f"(有效 {found}/{len(dates)} 天，失败 {failed})"
+    run_recent(
+        region=region,
+        end_date=end_date,
+        days=days,
+        source=source,
+        product=product,
+        var=var,
+        level=level,
+        data_dir=data_dir,
+        output=output,
+        res=res,
+        qa=qa,
+        console=console,
     )
 
 
@@ -1732,208 +628,26 @@ def fnr(
         rsplot fnr 安徽   20260131 --days 30      (30日窗口)
         rsplot fnr 长三角 20260101-20260130       (显式范围)
     """
-    from rsplot.fnr import (
-        compute_fnr,
-        parse_date_window,
-        validate_fnr_thresholds,
-    )
-    from rsplot.geo.boundaries import resolve_region
-    from rsplot.geo.gridding import grid_coverage_in_region
-    from rsplot.plotting.fnr import plot_fnr
-    from rsplot.plotting.styles import setup_fonts
-    from rsplot.results import build_fnr_result, emit_result
+    from rsplot.commands.fnr import run_fnr
 
-    # --- 1. Load config ---
-    cfg = AppConfig.load()
-    setup_fonts(cfg.font_dir)
-
-    # --- 2. Parse date window ---
-    try:
-        dates = parse_date_window(date_arg, default_days=days)
-    except ValueError as e:
-        console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1) from e
-
-    window_n = len(dates)
-    use_n_min = n_min if n_min is not None else max(3, window_n // 2)
-    if use_n_min > window_n:
-        console.print(
-            f"[red]--n-min ({use_n_min}) 大于窗口天数 ({window_n})[/red]"
-        )
-        raise typer.Exit(1)
-    try:
-        use_voc_threshold, use_nox_threshold, use_display_max = (
-            validate_fnr_thresholds(
-                voc_threshold=voc_threshold,
-                nox_threshold=nox_threshold,
-                display_max=display_max,
-            )
-        )
-    except ValueError as e:
-        console.print(f"[red]FNR 阈值错误: {e}[/red]")
-        raise typer.Exit(1) from e
-
-    console.print(
-        f"[bold]时间窗口:[/bold] {dates[0]} ~ {dates[-1]} "
-        f"({window_n} 天，每像元至少 {use_n_min} 天有效)"
-    )
-    console.print(
-        f"[bold]FNR 分级:[/bold] VOC<{use_voc_threshold:g}, "
-        f"transition {use_voc_threshold:g}~{use_nox_threshold:g}, "
-        f"NOx>{use_nox_threshold:g}"
-    )
-
-    # --- 3. Resolve region ---
-    console.print(f"[bold]解析区域:[/bold] {region}")
-    info = resolve_region(region, cfg, level_override=level)
-    console.print(f"  → [green]{info.name}[/green] (级别: {info.level})")
-
-    # --- 4. Merge params ---
-    params = info.params
-    use_res = res if res is not None else params.res
-    use_dpi = dpi if dpi is not None else cfg.dpi
-    use_qa = qa if qa is not None else cfg.qa_threshold
-    use_smooth = smooth if smooth is not None else params.smooth_sigma
-
-    if basemap is not None:
-        use_basemap: bool | None = basemap.lower() == "satellite"
-    else:
-        use_basemap = None
-    _warn_missing_tianditu_key(
-        basemap=use_basemap,
-        default_basemap=params.basemap,
-        tianditu_key=cfg.tianditu_key,
-    )
-
-    # --- 5. Resolve data dirs ---
-    use_no2_dir = (
-        raster_dir_no2
-        if raster_dir_no2 is not None
-        else cfg.get_data_dir("no2")
-    )
-    use_hcho_dir = (
-        raster_dir_hcho
-        if raster_dir_hcho is not None
-        else cfg.get_data_dir("hcho")
-    )
-    console.print("\n[bold]读取数据:[/bold]")
-    console.print(f"  NO2 : {use_no2_dir}")
-    console.print(f"  HCHO: {use_hcho_dir}")
-
-    # --- 6. Compute FNR ---
-    fnr_out = compute_fnr(
-        info,
-        dates,
-        res=use_res,
-        qa_threshold=use_qa,
-        n_min=use_n_min,
-        raster_dir_no2=use_no2_dir,
-        raster_dir_hcho=use_hcho_dir,
-        no2_min_column=no2_min,
-        smooth_sigma=use_smooth,
+    run_fnr(
+        region=region,
+        date_arg=date_arg,
+        days=days,
+        n_min=n_min,
+        no2_min=no2_min,
+        voc_threshold=voc_threshold,
+        nox_threshold=nox_threshold,
+        display_max=display_max,
+        level=level,
+        raster_dir_no2=raster_dir_no2,
+        raster_dir_hcho=raster_dir_hcho,
+        output=output,
+        dpi=dpi,
+        res=res,
+        basemap=basemap,
+        smooth=smooth,
+        qa=qa,
+        title=title,
         console=console,
     )
-
-    n_fail_no2 = len(fnr_out.dates_failed_no2)
-    n_fail_hcho = len(fnr_out.dates_failed_hcho)
-    n_found_no2 = len(fnr_out.dates_found_no2)
-    n_found_hcho = len(fnr_out.dates_found_hcho)
-    console.print(
-        f"  → NO2 有效天数 {n_found_no2}/{window_n} (失败 {n_fail_no2})"
-    )
-    console.print(
-        f"  → HCHO 有效天数 {n_found_hcho}/{window_n} (失败 {n_fail_hcho})"
-    )
-    if use_n_min > min(n_found_no2, n_found_hcho):
-        console.print(
-            f"  → [yellow]注意:[/yellow] n_min={use_n_min} 大于 NO2/HCHO "
-            f"共同可用天数上限 {min(n_found_no2, n_found_hcho)}，"
-            "本次不可能产生有效 FNR 像元。"
-        )
-
-    finite = fnr_out.fnr[np.isfinite(fnr_out.fnr)]
-    if len(finite) == 0:
-        _print_failed_dates("NO2", fnr_out.dates_failed_no2)
-        _print_failed_dates("HCHO", fnr_out.dates_failed_hcho)
-        console.print(
-            "[red]FNR 全区无有效像元，可能原因：窗口内 NO2/HCHO 都覆盖不足，"
-            "或 --n-min 太严。可放宽 --n-min / 扩大窗口。[/red]"
-        )
-        raise typer.Exit(1)
-
-    coverage_pct, n_valid_region, total_region_pixels = (
-        grid_coverage_in_region(
-            fnr_out.LON, fnr_out.LAT, fnr_out.fnr, info.geometry
-        )
-    )
-    console.print(
-        f"  → FNR 区域内覆盖率 {coverage_pct:.1f}% "
-        f"({n_valid_region}/{total_region_pixels}), "
-        f"中位数 {float(np.median(finite)):.2f}"
-    )
-
-    from rsplot.fnr import regime_percentages
-
-    pct = regime_percentages(
-        fnr_out.fnr,
-        voc_threshold=use_voc_threshold,
-        nox_threshold=use_nox_threshold,
-    )
-    console.print(
-        f"  → Regime: [red]VOC-limited {pct['voc_limited']}%[/red] | "
-        f"[yellow]transition {pct['transition']}%[/yellow] | "
-        f"[blue]NOx-limited {pct['nox_limited']}%[/blue]"
-    )
-
-    # --- 7. Plot ---
-    if output is None:
-        output = f"/tmp/rsplot_fnr_{info.name}_{dates[0]}_{dates[-1]}.png"
-
-    subtitle = (
-        f"{dates[0]}~{dates[-1]}  ·  N_days={window_n} "
-        f"(n_min={use_n_min})  ·  NO2≥{no2_min:g}×10¹⁵ molec/cm²"
-    )
-
-    console.print("\n[bold]绘图中...[/bold]")
-    plot_fnr(
-        fnr_out.LON,
-        fnr_out.LAT,
-        fnr_out.fnr,
-        info,
-        dpi=use_dpi,
-        basemap=use_basemap,
-        tianditu_key=cfg.tianditu_key,
-        title=title,
-        output=output,
-        subtitle=subtitle,
-        voc_threshold=use_voc_threshold,
-        nox_threshold=use_nox_threshold,
-        display_max=use_display_max,
-    )
-    console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
-
-    # --- 8. JSON sidecar ---
-    result = build_fnr_result(
-        region=info,
-        fnr_out=fnr_out,
-        res=use_res,
-        output=output,
-        voc_threshold=use_voc_threshold,
-        nox_threshold=use_nox_threshold,
-        display_max=use_display_max,
-    )
-    emit_result(result, output)
-
-
-def _print_failed_dates(
-    label: str, failed: dict[str, str], max_items: int = 8
-) -> None:
-    """Print a compact failed-date summary for window commands."""
-    if not failed:
-        return
-    console.print(f"  → [yellow]{label} 失败日期示例:[/yellow]")
-    items = list(failed.items())
-    for d, msg in items[:max_items]:
-        console.print(f"    - {d}: {msg}")
-    if len(items) > max_items:
-        console.print(f"    ... 另有 {len(items) - max_items} 天")

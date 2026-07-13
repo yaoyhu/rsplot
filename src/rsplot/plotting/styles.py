@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import os
+from pathlib import Path
 
 import matplotlib as mpl
 from matplotlib import font_manager
@@ -23,15 +23,16 @@ def setup_fonts(
         register_rsplot_colormaps(hcho_cmap_file)
         return
 
+    font_root = Path(font_dir)
     candidates = [
-        os.path.join(font_dir, "MicrosoftYaHei", "微软雅黑.ttf"),
-        os.path.join(font_dir, "MicrosoftYaHei", "微软雅黑粗体.ttf"),
+        font_root / "MicrosoftYaHei" / "微软雅黑.ttf",
+        font_root / "MicrosoftYaHei" / "微软雅黑粗体.ttf",
     ]
 
     registered = False
-    for fp in candidates:
-        if os.path.exists(fp):
-            font_manager.fontManager.addfont(fp)
+    for path in candidates:
+        if path.exists():
+            font_manager.fontManager.addfont(str(path))
             registered = True
 
     if registered:

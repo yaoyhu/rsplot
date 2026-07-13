@@ -18,18 +18,15 @@ import numpy as np
 from rich.console import Console
 from rich.progress import track
 
-from rsplot.config import STATION_VAR_META, get_exceedance_threshold
-from rsplot.geo.gridding import (
-    fill_nan_gaps,
-    grid_coverage_in_region,
-    grid_data,
-    mask_to_region,
-)
+from rsplot.config import get_exceedance_threshold
+from rsplot.geo.gridding import grid_coverage_in_region
+from rsplot.geo.processing import buffered_extent, prepare_swath_grid
 from rsplot.readers import ProductInfo
 from rsplot.readers.guokong import (
     mask_stations_to_region,
     read_stations,
 )
+from rsplot.stats import basic_stats
 
 if TYPE_CHECKING:
     from rsplot.geo.boundaries import RegionInfo
@@ -57,20 +54,18 @@ def parse_recent_dates(end_date: str, days: int) -> list[str]:
         end = datetime.strptime(end_date, "%Y%m%d")
     except ValueError as e:
         raise ValueError(
-            f"日期无效: '{end_date}'，请检查年月日是否真实存在 "
-            f"(原始错误: {e})"
+            f"日期无效: '{end_date}'，请检查年月日是否真实存在 (原始错误: {e})"
         ) from e
 
     start = end - timedelta(days=days - 1)
     return [
-        (start + timedelta(days=i)).strftime("%Y%m%d")
-        for i in range(days)
+        (start + timedelta(days=i)).strftime("%Y%m%d") for i in range(days)
     ]
 
 
 def summarize_recent_raster(
     *,
-    region: "RegionInfo",
+    region: RegionInfo,
     product: str,
     prod_info: ProductInfo,
     data_dir: str,
@@ -84,25 +79,28 @@ def summarize_recent_raster(
         console = Console()
 
     reader = prod_info.reader_cls()
-    buf = 1.0
-    read_extent = (
-        region.extent[0] - buf,
-        region.extent[1] + buf,
-        region.extent[2] - buf,
-        region.extent[3] + buf,
-    )
+    read_extent = buffered_extent(region.extent, 1.0)
     out: list[RecentDaily] = []
 
-    for d in track(dates, description=f"[cyan]统计 {product.upper()} 最近数据..."):
+    for d in track(
+        dates, description=f"[cyan]统计 {product.upper()} 最近数据..."
+    ):
         try:
             swath = reader.read(data_dir, d, read_extent, qa_threshold)
-            LON, LAT, grid_raw = grid_data(
-                swath.lon, swath.lat, swath.values, read_extent, res
+            prepared = prepare_swath_grid(
+                swath.lon,
+                swath.lat,
+                swath.values,
+                read_extent,
+                res,
+                region.geometry,
             )
-            grid = mask_to_region(
-                LON, LAT, fill_nan_gaps(LON, LAT, grid_raw), region.geometry
+            stats = _grid_stats(
+                prepared.lon,
+                prepared.lat,
+                prepared.values,
+                region.geometry,
             )
-            stats = _grid_stats(LON, LAT, grid, region.geometry)
             if not stats:
                 raise ValueError(f"{d} 区域内无有效网格")
             out.append(
@@ -135,7 +133,7 @@ def summarize_recent_raster(
 
 def summarize_recent_station(
     *,
-    region: "RegionInfo",
+    region: RegionInfo,
     data_dir: str,
     dates: list[str],
     var_name: str,
@@ -145,17 +143,13 @@ def summarize_recent_station(
     if console is None:
         console = Console()
 
-    buf = 0.5
-    read_extent = (
-        region.extent[0] - buf,
-        region.extent[1] + buf,
-        region.extent[2] - buf,
-        region.extent[3] + buf,
-    )
+    read_extent = buffered_extent(region.extent, 0.5)
     threshold = get_exceedance_threshold(var_name)
     out: list[RecentDaily] = []
 
-    for d in track(dates, description=f"[cyan]统计 {var_name} 站点最近数据..."):
+    for d in track(
+        dates, description=f"[cyan]统计 {var_name} 站点最近数据..."
+    ):
         try:
             data, resolved_dt = read_stations(
                 data_dir, d, var_name, extent=read_extent
@@ -202,7 +196,7 @@ def summarize_recent_station(
 
 def build_recent_result(
     *,
-    region: "RegionInfo",
+    region: RegionInfo,
     source: str,
     dates: list[str],
     daily: list[RecentDaily],
@@ -329,8 +323,14 @@ def _trend_summary(daily: list[RecentDaily]) -> dict[str, Any]:
             xs.append(i)
             ys.append(float(row.value))
     if len(ys) < 2:
-        return {"valid_days": len(ys), "slope_per_day": None, "direction": "flat"}
-    slope = float(np.polyfit(np.asarray(xs, dtype=float), np.asarray(ys), 1)[0])
+        return {
+            "valid_days": len(ys),
+            "slope_per_day": None,
+            "direction": "flat",
+        }
+    slope = float(
+        np.polyfit(np.asarray(xs, dtype=float), np.asarray(ys), 1)[0]
+    )
     return {
         "valid_days": len(ys),
         "slope_per_day": round(slope, 4),
@@ -357,8 +357,8 @@ def _summarize_rows(rows: list[RecentDaily]) -> dict[str, Any]:
         dtype=float,
     )
     stats = _array_stats(values)
-    stats["valid_days"] = int(len(values))
-    stats["requested_days"] = int(len(rows))
+    stats["valid_days"] = len(values)
+    stats["requested_days"] = len(rows)
     return stats
 
 
@@ -381,27 +381,7 @@ def _grid_stats(
 
 
 def _array_stats(values: np.ndarray) -> dict[str, Any]:
-    finite = np.asarray(values, dtype=float)
-    finite = finite[np.isfinite(finite)]
-    if len(finite) == 0:
-        return {}
-    return {
-        "n": int(len(finite)),
-        "min": _round(np.min(finite)),
-        "max": _round(np.max(finite)),
-        "mean": _round(np.mean(finite)),
-        "median": _round(np.median(finite)),
-        "p10": _round(np.percentile(finite, 10)),
-        "p25": _round(np.percentile(finite, 25)),
-        "p75": _round(np.percentile(finite, 75)),
-        "p90": _round(np.percentile(finite, 90)),
-    }
-
-
-def _round(value: float, ndigits: int = 2) -> float | None:
-    if not np.isfinite(value):
-        return None
-    return round(float(value), ndigits)
+    return basic_stats(np.asarray(values, dtype=float))
 
 
 def _direction(delta: float) -> str:

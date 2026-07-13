@@ -8,9 +8,8 @@ Accepts both YYYYMMDDHH (exact hour) and YYYYMMDD (auto-picks latest hour).
 
 from __future__ import annotations
 
-import glob
-import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -59,18 +58,20 @@ def read_stations(
         )
 
     # If 8-digit date, find the latest available hourly file for that day
+    root = Path(data_dir)
     if len(datetime_str) == 8:
-        pattern = os.path.join(data_dir, f"{datetime_str}??.nc")
-        matches = sorted(glob.glob(pattern))
+        relative_pattern = f"{datetime_str}??.nc"
+        pattern = str(root / relative_pattern)
+        matches = sorted(root.glob(relative_pattern))
         if not matches:
             raise FileNotFoundError(
                 f"未找到 {datetime_str} 当天的站点数据文件: {pattern}\n"
                 f"请检查日期和 --data-dir 路径。"
             )
         path = matches[-1]  # latest hour
-        datetime_str = os.path.basename(path).removesuffix(".nc")
+        datetime_str = path.stem
     else:
-        path = os.path.join(data_dir, f"{datetime_str}.nc")
+        path = root / f"{datetime_str}.nc"
 
     try:
         ds = xr.open_dataset(path)
@@ -124,9 +125,9 @@ def mask_stations_to_region(
     data: StationData, geometry: BaseGeometry
 ) -> StationData:
     """Keep only stations inside the focus region geometry."""
-    from shapely.vectorized import contains
+    from shapely import contains_xy
 
-    inside = contains(geometry.buffer(1e-9), data.lon, data.lat)
+    inside = contains_xy(geometry.buffer(1e-9), data.lon, data.lat)
     return _subset_stations(data, inside)
 
 
