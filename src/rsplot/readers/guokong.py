@@ -8,7 +8,7 @@ Accepts both YYYYMMDDHH (exact hour) and YYYYMMDD (auto-picks latest hour).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -30,6 +30,30 @@ class StationData:
     var_name: str
     n_stations: int
     n_valid: int
+
+
+@dataclass
+class StationSeries:
+    """Hourly observations for one station and one variable."""
+
+    station_id: str
+    lon: float
+    lat: float
+    timestamps: list[str]
+    values: np.ndarray
+    var_name: str
+    source_files: list[str] = field(default_factory=list)
+    missing_files: list[str] = field(default_factory=list)
+    failed_files: dict[str, str] = field(default_factory=dict)
+    station_missing_hours: list[str] = field(default_factory=list)
+
+    @property
+    def n_hours(self) -> int:
+        return len(self.timestamps)
+
+    @property
+    def n_valid(self) -> int:
+        return int(np.isfinite(self.values).sum())
 
 
 def read_stations(
@@ -129,6 +153,107 @@ def read_stations(
     ), datetime_str
 
 
+def read_station_series(
+    data_dir: str,
+    station_id: str,
+    dates: list[str],
+    var_name: str,
+) -> StationSeries:
+    """Read a complete hourly series for one station over the given dates.
+
+    Missing, unreadable, or station-less hours remain NaN so plotting retains
+    visible gaps instead of connecting observations across missing data.
+    """
+    if not station_id.strip():
+        raise ValueError("站点 ID 不能为空")
+    if not dates:
+        raise ValueError("日期窗口不能为空")
+
+    root = Path(data_dir)
+    timestamps = [f"{date}{hour:02d}" for date in dates for hour in range(24)]
+    values = np.full(len(timestamps), np.nan, dtype=float)
+    target = station_id.strip().upper()
+    source_files: list[str] = []
+    missing_files: list[str] = []
+    failed_files: dict[str, str] = {}
+    station_missing_hours: list[str] = []
+    canonical_id: str | None = None
+    station_lon: float | None = None
+    station_lat: float | None = None
+    opened_files = 0
+
+    for index, timestamp in enumerate(timestamps):
+        path = root / f"{timestamp}.nc"
+        if not path.exists():
+            missing_files.append(timestamp)
+            continue
+
+        try:
+            with xr.open_dataset(path) as ds:
+                opened_files += 1
+                required = ("id", "lon", "lat", var_name)
+                missing_vars = [name for name in required if name not in ds]
+                if missing_vars:
+                    raise KeyError(f"缺少变量: {', '.join(missing_vars)}")
+
+                ids = _normalize_station_ids(ds["id"].values)
+                matches = np.flatnonzero(
+                    np.char.upper(ids.astype(str)) == target
+                )
+                if len(matches) == 0:
+                    station_missing_hours.append(timestamp)
+                    continue
+
+                station_index = int(matches[0])
+                canonical_id = str(ids[station_index])
+                station_lon = float(
+                    np.asarray(ds["lon"].values)[station_index]
+                )
+                station_lat = float(
+                    np.asarray(ds["lat"].values)[station_index]
+                )
+                raw = float(
+                    np.asarray(ds[var_name].values, dtype=float)[station_index]
+                )
+                if np.isfinite(raw) and raw < 65534:
+                    values[index] = raw
+                source_files.append(str(path))
+        except (OSError, KeyError, ValueError, IndexError) as error:
+            failed_files[timestamp] = str(error).splitlines()[0]
+
+    if opened_files == 0:
+        raise FileNotFoundError(
+            f"窗口 {dates[0]}~{dates[-1]} 内未找到可读取的站点文件: "
+            f"{root}/YYYYMMDDHH.nc"
+        )
+    if canonical_id is None or station_lon is None or station_lat is None:
+        if failed_files and not station_missing_hours:
+            examples = "; ".join(
+                f"{timestamp}: {message}"
+                for timestamp, message in list(failed_files.items())[:3]
+            )
+            raise ValueError(
+                f"窗口 {dates[0]}~{dates[-1]} 内无法读取变量 "
+                f"'{var_name}': {examples}"
+            )
+        raise ValueError(
+            f"窗口 {dates[0]}~{dates[-1]} 内未找到站点 '{station_id}'"
+        )
+
+    return StationSeries(
+        station_id=canonical_id,
+        lon=station_lon,
+        lat=station_lat,
+        timestamps=timestamps,
+        values=values,
+        var_name=var_name,
+        source_files=source_files,
+        missing_files=missing_files,
+        failed_files=failed_files,
+        station_missing_hours=station_missing_hours,
+    )
+
+
 def mask_stations_to_region(
     data: StationData, geometry: BaseGeometry
 ) -> StationData:
@@ -150,3 +275,15 @@ def _subset_stations(data: StationData, mask: np.ndarray) -> StationData:
         n_stations=int(mask.sum()),
         n_valid=int(np.isfinite(values).sum()),
     )
+
+
+def _normalize_station_ids(values: np.ndarray) -> np.ndarray:
+    """Return stripped text IDs for string, byte, and object arrays."""
+    normalized = []
+    for value in np.asarray(values).ravel():
+        if isinstance(value, bytes):
+            text = value.decode("utf-8", errors="replace")
+        else:
+            text = str(value)
+        normalized.append(text.strip())
+    return np.asarray(normalized, dtype=str)

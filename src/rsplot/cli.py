@@ -358,6 +358,61 @@ def station(
 
 
 @app.command()
+def station_trend(
+    station_id: str = typer.Argument(..., help="国控站点 ID，如 3347A"),
+    date_arg: str = typer.Argument(
+        ...,
+        help="结束日期 YYYYMMDD，或显式范围 YYYYMMDD-YYYYMMDD",
+    ),
+    days: int = typer.Option(
+        7,
+        "--days",
+        help="最近天数；仅当 DATE 为单日时生效，默认 7",
+    ),
+    var: str = typer.Option(
+        "O3_8h_24h",
+        "--var",
+        "-v",
+        help="变量名: AQI, PM2.5, PM10, NO2, O3, SO2, CO, O3_8h, O3_8h_24h",
+    ),
+    data_dir: str | None = typer.Option(
+        None,
+        "--data-dir",
+        "-d",
+        help="国控站点数据目录 (覆盖配置默认值)",
+    ),
+    output: str | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="PNG 输出文件路径",
+    ),
+    dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
+    title: str | None = typer.Option(None, "--title", help="自定义标题"),
+) -> None:
+    """绘制单个国控站点一日或多日的小时观测折线图。
+
+    示例:
+        rsplot station-trend 3347A 20260520 --days 1 --var O3
+        rsplot station-trend 3347A 20260520 --days 7 --var PM2.5
+        rsplot station-trend 3347A 20260501-20260507 --var O3
+    """
+    from rsplot.commands.station_trend import run_station_trend
+
+    run_station_trend(
+        station_id=station_id,
+        date_arg=date_arg,
+        days=days,
+        var=var,
+        data_dir=data_dir,
+        output=output,
+        dpi=dpi,
+        title=title,
+        console=console,
+    )
+
+
+@app.command()
 def overlay(
     region: str = typer.Argument(
         ..., help="区域名称，如 中国、安徽、合肥、YRD、合肥/蜀山"

@@ -119,6 +119,13 @@ rsplot forecast 合肥 2026041409 --lead 6 --var O3 --station-overlay -o forecas
 # Plot national monitoring station observations.
 rsplot station 合肥 2026041415 --var O3 -o station_hefei_o3.png
 
+# Plot one station's hourly observations over the latest seven days.
+rsplot station-trend 3347A 20260520 --days 7 --var O3 -o station_3347A_o3_7d.png
+
+# A single day and an explicit date range are also supported.
+rsplot station-trend 3347A 20260520 --days 1 --var O3 -o station_3347A_o3_day.png
+rsplot station-trend 3347A 20260501-20260507 --var PM2.5 -o station_3347A_pm25.png
+
 # Overlay hourly ERA5 10 m wind vectors on station observations.
 # Station timestamps default to Asia/Shanghai and are matched to ERA5 UTC.
 rsplot station 合肥 2026041415 --var O3 --wind-level 10m -o station_wind_hefei_o3.png

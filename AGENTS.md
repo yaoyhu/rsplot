@@ -15,13 +15,16 @@ The package uses a `src/` layout and exposes the console command:
 rsplot = rsplot.__main__:app
 ```
 
-Primary CLI commands are `raster`, `forecast`, `station`, `overlay`,
-`recent`, and `fnr`.
+Primary CLI commands are `raster`, `forecast`, `station`,
+`station-trend`, `overlay`, `recent`, and `fnr`.
 The `forecast` command can optionally overlay station observations with
 `--station-overlay`; its JSON uses `mode` to distinguish pure forecast from
 forecast/station overlay output.
 The `station` command can optionally overlay ERA5 horizontal wind vectors with
 `--wind-level`.
+The `station-trend` command plots an hourly line chart for one station ID
+over a trailing or explicit date window. Missing hours remain gaps in the
+line, and its JSON sidecar records missing/failed files and hourly values.
 The `recent` command writes JSON only; the other plotting commands write a PNG
 and a same-basename `.json` sidecar.
 
@@ -39,6 +42,7 @@ and a same-basename `.json` sidecar.
 - `src/rsplot/readers/`: TROPOMI and station data readers.
 - `src/rsplot/readers/era5_wind.py`: paired U/V ERA5 wind reader with station
   timezone to ERA5 UTC conversion.
+- `src/rsplot/plotting/station_trend.py`: single-station hourly line charts.
 - `src/rsplot/readers/forecast.py`: gridded air-quality forecast reader for
   `forecast6/12/24/48/72` NetCDF files.
 - `src/rsplot/readers/__init__.py`: product registry and plotting defaults for
