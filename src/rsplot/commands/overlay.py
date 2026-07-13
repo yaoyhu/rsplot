@@ -39,6 +39,7 @@ def run_overlay(
     cmap: str | None,
     smooth: float | None,
     qa: float | None,
+    cf: float = 0.5,
     title: str | None,
     console: Console,
 ) -> None:
@@ -115,11 +116,12 @@ def run_overlay(
         raster_dir if raster_dir is not None else cfg.get_data_dir(product)
     )
     reader = prod_info.reader_cls()
+    reader.cloud_fraction_max = cf
     read_extent = buffered_extent(info.extent, 1.0)
     console.print(
         f"\n[bold]读取卫星数据:[/bold] {use_raster_dir} (产品: {product})"
     )
-    console.print(f"  日期: {date}, QA > {use_qa}")
+    console.print(f"  日期: {date}, QA > {use_qa}, CF <= {cf}")
     swath = reader.read(
         use_raster_dir,
         date,
@@ -226,6 +228,7 @@ def run_overlay(
             "n_files": int(swath.n_files),
             "n_broken": int(swath.n_broken),
             "qa_threshold": use_qa,
+            "cloud_fraction_max": cf,
             "resolution_deg": use_res,
         },
         raster_vmin=use_vmin,

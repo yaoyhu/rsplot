@@ -62,6 +62,7 @@ def run_raster(
     smooth: float | None,
     title: str | None,
     qa: float | None,
+    cf: float = 0.5,
     console: Console,
 ) -> None:
     """Execute raster orchestration without owning the Typer signature."""
@@ -143,6 +144,7 @@ def run_raster(
         data_dir if data_dir is not None else cfg.get_data_dir(product)
     )
     reader = prod_info.reader_cls()
+    reader.cloud_fraction_max = cf
     swath_meta: dict[str, Any]
     window_meta: dict[str, Any] | None = None
 
@@ -150,7 +152,7 @@ def run_raster(
         console.print(
             f"\n[bold]读取数据:[/bold] {use_data_dir} (产品: {product})"
         )
-        console.print(f"  日期: {dates[0]}, QA > {use_qa}")
+        console.print(f"  日期: {dates[0]}, QA > {use_qa}, CF <= {cf}")
         swath = reader.read(
             use_data_dir,
             dates[0],
@@ -175,6 +177,7 @@ def run_raster(
             "n_files": int(swath.n_files),
             "n_broken": int(swath.n_broken),
             "qa_threshold": use_qa,
+            "cloud_fraction_max": cf,
             "resolution_deg": use_res,
         }
     else:
@@ -186,7 +189,7 @@ def run_raster(
         console.print(
             f"\n[bold]读取数据:[/bold] {use_data_dir} (产品: {product})"
         )
-        console.print(f"  QA > {use_qa}")
+        console.print(f"  QA > {use_qa}, CF <= {cf}")
         window = compute_window_mean(
             reader=reader,
             data_dir=use_data_dir,
@@ -234,6 +237,7 @@ def run_raster(
             "n_files_total": int(window.n_files_total),
             "n_broken_total": int(window.n_broken_total),
             "qa_threshold": use_qa,
+            "cloud_fraction_max": cf,
             "resolution_deg": use_res,
         }
         window_meta = {

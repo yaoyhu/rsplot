@@ -25,6 +25,7 @@ def run_recent(
     output: str | None,
     res: float | None,
     qa: float | None,
+    cf: float = 0.5,
     console: Console,
 ) -> None:
     """Execute recent-day summaries without owning the Typer signature."""
@@ -86,7 +87,8 @@ def run_recent(
         )
         console.print(
             f"\n[bold]统计栅格:[/bold] {use_data_dir} "
-            f"(产品: {product}, QA > {use_qa}, res={use_res})"
+            f"(产品: {product}, QA > {use_qa}, "
+            f"CF <= {cf}, res={use_res})"
         )
         daily = summarize_recent_raster(
             region=info,
@@ -96,6 +98,7 @@ def run_recent(
             dates=dates,
             res=use_res,
             qa_threshold=use_qa,
+            cloud_fraction_max=cf,
             console=console,
         )
         result = build_recent_result(
@@ -106,6 +109,7 @@ def run_recent(
             params={
                 "data_dir": use_data_dir,
                 "qa_threshold": use_qa,
+                "cloud_fraction_max": cf,
                 "resolution_deg": use_res,
             },
             product=product,

@@ -36,6 +36,7 @@ def run_fnr(
     basemap: str | None,
     smooth: float | None,
     qa: float | None,
+    cf: float = 0.5,
     title: str | None,
     console: Console,
 ) -> None:
@@ -123,12 +124,14 @@ def run_fnr(
     console.print("\n[bold]读取数据:[/bold]")
     console.print(f"  NO2 : {use_no2_dir}")
     console.print(f"  HCHO: {use_hcho_dir}")
+    console.print(f"  QA > {use_qa}, CF <= {cf}")
 
     fnr_out = compute_fnr(
         info,
         dates,
         res=use_res,
         qa_threshold=use_qa,
+        cloud_fraction_max=cf,
         n_min=use_n_min,
         raster_dir_no2=use_no2_dir,
         raster_dir_hcho=use_hcho_dir,
@@ -227,6 +230,8 @@ def run_fnr(
         fnr_out=fnr_out,
         res=use_res,
         output=output,
+        qa_threshold=use_qa,
+        cloud_fraction_max=cf,
         voc_threshold=use_voc_threshold,
         nox_threshold=use_nox_threshold,
         display_max=use_display_max,

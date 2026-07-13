@@ -141,6 +141,7 @@ def compute_fnr(
     *,
     res: float,
     qa_threshold: float,
+    cloud_fraction_max: float = 0.5,
     n_min: int,
     raster_dir_no2: str,
     raster_dir_hcho: str,
@@ -168,6 +169,8 @@ def compute_fnr(
 
     no2_reader = get_product_info("no2").reader_cls()
     hcho_reader = get_product_info("hcho").reader_cls()
+    no2_reader.cloud_fraction_max = cloud_fraction_max
+    hcho_reader.cloud_fraction_max = cloud_fraction_max
 
     # --- Read each product over the window via the shared helper ---
     no2_win = compute_window_mean(

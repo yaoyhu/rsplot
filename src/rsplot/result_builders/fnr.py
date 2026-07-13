@@ -75,6 +75,8 @@ def build_fnr_result(
     fnr_out: FnrResult,
     res: float,
     output: str,
+    qa_threshold: float | None = None,
+    cloud_fraction_max: float | None = None,
     voc_threshold: float = FNR_VOC_LIMIT,
     nox_threshold: float = FNR_NOX_LIMIT,
     display_max: float = FNR_DISPLAY_MAX,
@@ -83,6 +85,13 @@ def build_fnr_result(
     from shapely import contains_xy
 
     from rsplot.fnr import regime_percentages, validate_fnr_thresholds
+    from rsplot.readers._tropomi import CLOUD_FRACTION_MAX
+
+    use_cloud_fraction_max = (
+        CLOUD_FRACTION_MAX
+        if cloud_fraction_max is None
+        else cloud_fraction_max
+    )
 
     voc_threshold, nox_threshold, display_max = validate_fnr_thresholds(
         voc_threshold=voc_threshold,
@@ -140,6 +149,7 @@ def build_fnr_result(
             "nox_threshold": nox_threshold,
             "display_max": display_max,
             "resolution_deg": res,
+            "cloud_fraction_max": use_cloud_fraction_max,
         },
         "stats": {
             "grid_shape": list(fnr.shape),
@@ -162,6 +172,8 @@ def build_fnr_result(
             "no2_mean_filled_stats": basic_stats(fnr_out.no2_mean_filled),
         },
     }
+    if qa_threshold is not None:
+        result["params"]["qa_threshold"] = qa_threshold
 
     sub_gdf = region.sub_boundary_gdf
     if sub_gdf is not None and len(sub_gdf) > 0:

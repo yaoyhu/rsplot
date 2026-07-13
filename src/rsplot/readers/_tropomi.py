@@ -12,8 +12,10 @@ from rich.progress import track
 from rsplot.readers.base import (
     BaseReader,
     SwathData,
-    read_tropomi_product_arrays,
+    read_tropomi_product_arrays_with_cloud,
 )
+
+CLOUD_FRACTION_MAX = 0.5
 
 
 @dataclass(frozen=True)
@@ -32,6 +34,7 @@ class TropomiReader(BaseReader):
     """Base implementation shared by concrete TROPOMI products."""
 
     spec: ClassVar[TropomiReaderSpec]
+    cloud_fraction_max: float = CLOUD_FRACTION_MAX
 
     def read(
         self,
@@ -71,9 +74,11 @@ class TropomiReader(BaseReader):
 
         for path in track(files, description=spec.progress_description):
             try:
-                lon, lat, values, qa = read_tropomi_product_arrays(
-                    path,
-                    spec.value_name,
+                lon, lat, values, qa, cloud_fraction = (
+                    read_tropomi_product_arrays_with_cloud(
+                        path,
+                        spec.value_name,
+                    )
                 )
             except (OSError, ValueError, KeyError) as error:
                 broken += 1
@@ -85,6 +90,8 @@ class TropomiReader(BaseReader):
 
             mask = (
                 (qa > qa_threshold)
+                & np.isfinite(cloud_fraction)
+                & (cloud_fraction <= self.cloud_fraction_max)
                 & (lon >= lon_min)
                 & (lon <= lon_max)
                 & (lat >= lat_min)

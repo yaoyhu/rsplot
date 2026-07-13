@@ -94,3 +94,69 @@ def read_tropomi_product_arrays(
 
     msg = "; ".join(str(e).splitlines()[0] for e in errors)
     raise ValueError(f"无法读取 TROPOMI PRODUCT 变量: {msg}")
+
+
+def read_tropomi_product_arrays_with_cloud(
+    path: str,
+    value_name: str,
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+]:
+    """Read core TROPOMI arrays plus the retrieval cloud fraction.
+
+    OFFL products generally expose ``cloud_fraction_crb`` while some NRT
+    products use ``cloud_fraction``. Both grouped official files and flattened
+    local archives are supported. The original four-array helper remains
+    unchanged for callers that do not need cloud filtering.
+    """
+    lon, lat, values, qa = read_tropomi_product_arrays(path, value_name)
+    cloud_fraction = _read_tropomi_cloud_fraction(path)
+    if cloud_fraction.shape != values.shape:
+        raise ValueError(
+            "TROPOMI 云量变量形状不匹配: "
+            f"cloud={cloud_fraction.shape}, value={values.shape}"
+        )
+    return lon, lat, values, qa, cloud_fraction
+
+
+def _read_tropomi_cloud_fraction(path: str) -> np.ndarray:
+    """Read cloud fraction from known grouped and flattened layouts."""
+    flat_names = (
+        "PRODUCT_SUPPORT_DATA_INPUT_DATA_cloud_fraction_crb",
+        "PRODUCT_SUPPORT_DATA_INPUT_DATA_cloud_fraction",
+        "PRODUCT_cloud_fraction_crb",
+        "PRODUCT_cloud_fraction",
+        "cloud_fraction_crb",
+        "cloud_fraction",
+    )
+    group_names = ("cloud_fraction_crb", "cloud_fraction")
+    layouts = (
+        (None, flat_names),
+        ("PRODUCT/SUPPORT_DATA/INPUT_DATA", group_names),
+    )
+
+    errors: list[str] = []
+    for group, names in layouts:
+        try:
+            kwargs = {} if group is None else {"group": group}
+            ds = xr.open_dataset(path, **kwargs)
+        except (OSError, ValueError) as error:
+            label = "root" if group is None else group
+            errors.append(f"{label}: {error}")
+            continue
+
+        try:
+            for name in names:
+                if name in ds:
+                    return ds[name].squeeze().values
+            label = "root" if group is None else group
+            errors.append(f"{label}: missing {' / '.join(names)}")
+        finally:
+            ds.close()
+
+    msg = "; ".join(str(error).splitlines()[0] for error in errors)
+    raise ValueError(f"无法读取 TROPOMI 云量变量: {msg}")

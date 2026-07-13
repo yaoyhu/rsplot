@@ -106,6 +106,13 @@ def raster(
     ),
     title: str | None = typer.Option(None, "--title", help="自定义标题"),
     qa: float | None = typer.Option(0.5, "--qa", help="QA 阈值 (0-1)"),
+    cf: float = typer.Option(
+        0.5,
+        "--cf",
+        min=0.0,
+        max=1.0,
+        help="最大云量比例 (0-1)，保留 CF <= 该值的卫星像元",
+    ),
 ) -> None:
     """绘制卫星遥感栅格图。
 
@@ -134,6 +141,7 @@ def raster(
         smooth=smooth,
         title=title,
         qa=qa,
+        cf=cf,
         console=console,
     )
 
@@ -478,6 +486,13 @@ def overlay(
         None, "--smooth", help="高斯平滑 sigma"
     ),
     qa: float | None = typer.Option(0.5, "--qa", help="QA 阈值 (0-1)"),
+    cf: float = typer.Option(
+        0.5,
+        "--cf",
+        min=0.0,
+        max=1.0,
+        help="最大云量比例 (0-1)，保留 CF <= 该值的卫星像元",
+    ),
     title: str | None = typer.Option(None, "--title", help="自定义标题"),
 ) -> None:
     """叠加绘制卫星栅格+国控站点图。
@@ -510,6 +525,7 @@ def overlay(
         cmap=cmap,
         smooth=smooth,
         qa=qa,
+        cf=cf,
         title=title,
         console=console,
     )
@@ -565,6 +581,13 @@ def recent(
     ),
     res: float | None = typer.Option(None, "--res", help="网格分辨率 (度)"),
     qa: float | None = typer.Option(0.5, "--qa", help="QA 阈值 (0-1)"),
+    cf: float = typer.Option(
+        0.5,
+        "--cf",
+        min=0.0,
+        max=1.0,
+        help="source=raster 时最大云量比例，保留 CF <= 该值的像元",
+    ),
 ) -> None:
     """输出最近 N 天数据 JSON，用于周/月/年变化对比。
 
@@ -586,6 +609,7 @@ def recent(
         output=output,
         res=res,
         qa=qa,
+        cf=cf,
         console=console,
     )
 
@@ -671,6 +695,13 @@ def fnr(
         "--qa",
         help="QA 阈值 (0-1)，同时应用于 NO2 和 HCHO（OFFL L2 swath 推荐 ≥0.5）",
     ),
+    cf: float = typer.Option(
+        0.5,
+        "--cf",
+        min=0.0,
+        max=1.0,
+        help="最大云量比例，同时应用于 NO2 和 HCHO；保留 CF <= 该值的像元",
+    ),
     title: str | None = typer.Option(None, "--title", help="自定义标题"),
 ) -> None:
     """绘制 FNR (HCHO / NO2) 区域控制 regime 图。
@@ -703,6 +734,7 @@ def fnr(
         basemap=basemap,
         smooth=smooth,
         qa=qa,
+        cf=cf,
         title=title,
         console=console,
     )

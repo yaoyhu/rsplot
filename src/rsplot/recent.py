@@ -72,6 +72,7 @@ def summarize_recent_raster(
     dates: list[str],
     res: float,
     qa_threshold: float,
+    cloud_fraction_max: float = 0.5,
     console: Console | None = None,
 ) -> list[RecentDaily]:
     """Read daily raster swaths and summarize each day over the region."""
@@ -79,6 +80,7 @@ def summarize_recent_raster(
         console = Console()
 
     reader = prod_info.reader_cls()
+    reader.cloud_fraction_max = cloud_fraction_max
     read_extent = buffered_extent(region.extent, 1.0)
     out: list[RecentDaily] = []
 
