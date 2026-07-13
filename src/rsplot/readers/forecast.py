@@ -191,17 +191,23 @@ def _resolve_forecast_path(
     if len(datetime_str) == 8:
         relative_pattern = f"{datetime_str}??_forecast{lead_hour}.nc"
         pattern = str(lead_dir / relative_pattern)
-        matches = [
-            path
-            for path in sorted(lead_dir.glob(relative_pattern))
-            if path.stat().st_size > 0
-        ]
-        if not matches:
+        path = next(
+            (
+                candidate
+                for hour in range(23, -1, -1)
+                if (
+                    candidate := lead_dir
+                    / f"{datetime_str}{hour:02d}_forecast{lead_hour}.nc"
+                ).is_file()
+                and candidate.stat().st_size > 0
+            ),
+            None,
+        )
+        if path is None:
             raise FileNotFoundError(
                 f"未找到 {datetime_str} 当天 forecast{lead_hour} 预报文件: "
                 f"{pattern}"
             )
-        path = matches[-1]
         resolved = path.name.split("_", 1)[0]
         return path, resolved
 

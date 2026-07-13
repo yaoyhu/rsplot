@@ -12,6 +12,7 @@ from rsplot.geo.gridding import (
     grid_coverage_in_region,
     grid_data,
     mask_to_region,
+    region_grid_mask,
     smooth_grid,
 )
 
@@ -55,11 +56,16 @@ def prepare_existing_grid(
 ) -> PreparedGrid:
     """Fill, region-mask, optionally smooth, and summarize an existing grid."""
     prepared = (
-        fill_nan_gaps(lon, lat, values)
-        if fill_gaps
-        else np.asarray(values).copy()
+        fill_nan_gaps(lon, lat, values) if fill_gaps else np.asarray(values)
     )
-    prepared = mask_to_region(lon, lat, prepared, geometry)
+    region_mask = region_grid_mask(lon, lat, geometry)
+    prepared = mask_to_region(
+        lon,
+        lat,
+        prepared,
+        geometry,
+        region_mask=region_mask,
+    )
     if smooth_sigma is not None:
         prepared = smooth_grid(
             prepared,
@@ -67,12 +73,14 @@ def prepare_existing_grid(
             lon,
             lat,
             sigma=smooth_sigma,
+            region_mask=region_mask,
         )
     coverage, n_valid, total = grid_coverage_in_region(
         lon,
         lat,
         prepared,
         geometry,
+        region_mask=region_mask,
     )
     return PreparedGrid(
         lon=lon,

@@ -85,9 +85,12 @@ def mask_to_region(
     LAT: np.ndarray,
     grid: np.ndarray,
     geometry: BaseGeometry,
+    *,
+    region_mask: np.ndarray | None = None,
 ) -> np.ndarray:
     """Mask grid to region boundary using grid-center containment."""
-    region_mask = region_grid_mask(LON, LAT, geometry)
+    if region_mask is None:
+        region_mask = region_grid_mask(LON, LAT, geometry)
     return np.where(region_mask, grid, np.nan)
 
 
@@ -107,9 +110,12 @@ def grid_coverage_in_region(
     LAT: np.ndarray,
     grid: np.ndarray,
     geometry: BaseGeometry,
+    *,
+    region_mask: np.ndarray | None = None,
 ) -> tuple[float, int, int]:
     """Return valid-pixel coverage using only region-interior grid centers."""
-    region_mask = region_grid_mask(LON, LAT, geometry)
+    if region_mask is None:
+        region_mask = region_grid_mask(LON, LAT, geometry)
     total = int(region_mask.sum())
     valid = int((region_mask & np.isfinite(grid)).sum())
     pct = round(100 * valid / total, 1) if total else 0.0
@@ -122,6 +128,8 @@ def smooth_grid(
     LON: np.ndarray,
     LAT: np.ndarray,
     sigma: float = 2.0,
+    *,
+    region_mask: np.ndarray | None = None,
 ) -> np.ndarray:
     """NaN-aware Gaussian smoothing using astropy, re-masked to region boundary.
 
@@ -129,7 +137,6 @@ def smooth_grid(
     boundary dilution that scipy.ndimage.gaussian_filter causes.
     """
     from astropy.convolution import Gaussian2DKernel, convolve
-    from shapely import contains_xy
 
     kernel = Gaussian2DKernel(x_stddev=sigma)
     smoothed = convolve(
@@ -137,7 +144,8 @@ def smooth_grid(
     )
 
     # Re-mask to region boundary (smoothing bleeds outside)
-    region_mask = contains_xy(geometry, LON, LAT)
+    if region_mask is None:
+        region_mask = region_grid_mask(LON, LAT, geometry)
     smoothed[~region_mask] = np.nan
 
     return smoothed

@@ -92,7 +92,8 @@ def compute_window_mean(
     if console is None:
         console = Console()
 
-    stack: list[np.ndarray | None] = []
+    sum_grid: np.ndarray | None = None
+    valid_counts: np.ndarray | None = None
     dates_found: list[str] = []
     dates_failed: dict[str, str] = {}
     n_pix_total = 0
@@ -117,16 +118,20 @@ def compute_window_mean(
                 res,
             )
             LON, LAT = day_lon, day_lat
-            stack.append(grid)
+            if sum_grid is None:
+                sum_grid = np.zeros(grid.shape, dtype=float)
+                valid_counts = np.zeros(grid.shape, dtype=np.int32)
+            finite = np.isfinite(grid)
+            np.add(sum_grid, grid, out=sum_grid, where=finite)
+            valid_counts += finite
             dates_found.append(date)
             n_pix_total += int(swath.n_pixels)
             n_files_total += int(swath.n_files)
             n_broken_total += int(swath.n_broken)
         except (FileNotFoundError, ValueError) as e:
             dates_failed[date] = str(e).splitlines()[0]
-            stack.append(None)
 
-    if LON is None or LAT is None:
+    if LON is None or LAT is None or sum_grid is None or valid_counts is None:
         first_errors = "\n  ".join(
             f"{date}: {message}"
             for date, message in list(dates_failed.items())[:5]
@@ -136,18 +141,13 @@ def compute_window_mean(
             f"{first_errors}"
         )
 
-    shape = LON.shape
-    filled = [
-        grid if grid is not None else np.full(shape, np.nan) for grid in stack
-    ]
-    values = np.stack(filled, axis=0)
-    n_valid = np.isfinite(values).sum(axis=0).astype(np.int16)
-    mean = np.full(shape, np.nan, dtype=float)
+    n_valid = valid_counts.astype(np.int16)
+    mean = np.full(LON.shape, np.nan, dtype=float)
     np.divide(
-        np.nansum(values, axis=0),
-        n_valid,
+        sum_grid,
+        valid_counts,
         out=mean,
-        where=n_valid > 0,
+        where=valid_counts > 0,
     )
 
     return WindowResult(

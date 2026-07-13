@@ -33,6 +33,7 @@ from rich.console import Console
 from rsplot.geo.gridding import (
     fill_nan_gaps,
     mask_to_region,
+    region_grid_mask,
     smooth_grid,
 )
 from rsplot.readers import get_product_info
@@ -212,19 +213,53 @@ def compute_fnr(
     # Keep raw mean fields for JSON statistics, and separately prepare
     # small-gap-filled diagnostic fields for users who want a less holey
     # view of the underlying columns. The FNR field itself is never filled.
-    hcho_raw = mask_to_region(LON, LAT, hcho_win.grid, region.geometry)
-    no2_raw = mask_to_region(LON, LAT, no2_win.grid, region.geometry)
+    region_mask = region_grid_mask(LON, LAT, region.geometry)
+    hcho_raw = mask_to_region(
+        LON,
+        LAT,
+        hcho_win.grid,
+        region.geometry,
+        region_mask=region_mask,
+    )
+    no2_raw = mask_to_region(
+        LON,
+        LAT,
+        no2_win.grid,
+        region.geometry,
+        region_mask=region_mask,
+    )
     hcho_filled = fill_nan_gaps(LON, LAT, hcho_win.grid)
     no2_filled = fill_nan_gaps(LON, LAT, no2_win.grid)
 
     # --- Mask to region boundary ---
-    fnr = mask_to_region(LON, LAT, fnr, region.geometry)
-    hcho_filled = mask_to_region(LON, LAT, hcho_filled, region.geometry)
-    no2_filled = mask_to_region(LON, LAT, no2_filled, region.geometry)
+    fnr = mask_to_region(
+        LON, LAT, fnr, region.geometry, region_mask=region_mask
+    )
+    hcho_filled = mask_to_region(
+        LON,
+        LAT,
+        hcho_filled,
+        region.geometry,
+        region_mask=region_mask,
+    )
+    no2_filled = mask_to_region(
+        LON,
+        LAT,
+        no2_filled,
+        region.geometry,
+        region_mask=region_mask,
+    )
 
     if smooth_sigma is not None:
         fnr_valid_mask = np.isfinite(fnr)
-        fnr = smooth_grid(fnr, region.geometry, LON, LAT, sigma=smooth_sigma)
+        fnr = smooth_grid(
+            fnr,
+            region.geometry,
+            LON,
+            LAT,
+            sigma=smooth_sigma,
+            region_mask=region_mask,
+        )
         # smooth_grid interpolates over NaNs before convolution. Restore the
         # scientific validity mask so smoothing cannot create new FNR pixels.
         fnr[~fnr_valid_mask] = np.nan

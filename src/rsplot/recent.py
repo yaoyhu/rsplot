@@ -368,7 +368,7 @@ def _grid_stats(
     grid: np.ndarray,
     geometry: Any,
 ) -> dict[str, Any]:
-    stats = _array_stats(grid[np.isfinite(grid)])
+    stats = _array_stats(grid)
     if stats:
         coverage_pct, n_valid_region, total_region_pixels = (
             grid_coverage_in_region(LON, LAT, grid, geometry)

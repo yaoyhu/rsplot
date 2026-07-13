@@ -62,13 +62,21 @@ def read_stations(
     if len(datetime_str) == 8:
         relative_pattern = f"{datetime_str}??.nc"
         pattern = str(root / relative_pattern)
-        matches = sorted(root.glob(relative_pattern))
-        if not matches:
+        path = next(
+            (
+                candidate
+                for hour in range(23, -1, -1)
+                if (
+                    candidate := root / f"{datetime_str}{hour:02d}.nc"
+                ).exists()
+            ),
+            None,
+        )
+        if path is None:
             raise FileNotFoundError(
                 f"未找到 {datetime_str} 当天的站点数据文件: {pattern}\n"
                 f"请检查日期和 --data-dir 路径。"
             )
-        path = matches[-1]  # latest hour
         datetime_str = path.stem
     else:
         path = root / f"{datetime_str}.nc"

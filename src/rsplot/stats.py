@@ -19,14 +19,18 @@ def basic_stats(values: np.ndarray, ndigits: int = 2) -> dict[str, Any]:
     finite = np.asarray(values)[np.isfinite(values)]
     if len(finite) == 0:
         return {}
+    p10, p25, median, p75, p90 = np.percentile(
+        finite,
+        [10, 25, 50, 75, 90],
+    )
     return {
         "n": len(finite),
         "min": round_finite(np.min(finite), ndigits),
         "max": round_finite(np.max(finite), ndigits),
         "mean": round_finite(np.mean(finite), ndigits),
-        "median": round_finite(np.median(finite), ndigits),
-        "p10": round_finite(np.percentile(finite, 10), ndigits),
-        "p25": round_finite(np.percentile(finite, 25), ndigits),
-        "p75": round_finite(np.percentile(finite, 75), ndigits),
-        "p90": round_finite(np.percentile(finite, 90), ndigits),
+        "median": round_finite(median, ndigits),
+        "p10": round_finite(p10, ndigits),
+        "p25": round_finite(p25, ndigits),
+        "p75": round_finite(p75, ndigits),
+        "p90": round_finite(p90, ndigits),
     }
