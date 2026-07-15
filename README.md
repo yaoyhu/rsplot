@@ -107,10 +107,11 @@ rsplot raster 安徽 20260227 -p o3pr -o o3pr_anhui_20260227.png
 # Plot an explicit TROPOMI date range.
 rsplot raster 长三角 20260101-20260131 -p no2 -o no2_yrd_202601.png
 
-# Plot gridded air-quality forecast initialized at a specific hour.
+# Forecast input is China standard time; rsplot converts it
+# to the matching UTC archive initialization hour before reading.
 rsplot forecast 安徽 2026063000 --lead 24 --var O3 -o forecast_anhui_o3.png
 
-# Date-only forecast input automatically selects the latest initialized hour.
+# Date-only input selects the latest initialization within that China-time day.
 rsplot forecast 合肥 20260630 --lead 72 --var PM2.5 -o forecast_hefei_pm25.png
 
 # Overlay station observations on the forecast valid time.

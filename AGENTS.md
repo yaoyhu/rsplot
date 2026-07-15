@@ -213,12 +213,15 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
   `"image": null` in the payload.
 - Many CLI commands use `/tmp/...` default outputs when `--output` is omitted.
   Prefer explicit `--output` paths in examples, tests, and agent workflows.
-- ERA5 files are indexed in UTC. `meteo --timezone` describes both the input
-  time and station filename convention, and rsplot converts that hour to the
-  matching ERA5 UTC archive time.
+- ERA5 files are indexed in UTC. `meteo` input and station hours are fixed to
+  `Asia/Shanghai`, and rsplot converts that hour to the matching ERA5 UTC
+  archive time.
 - Forecast files are grouped as
-  `forecast{lead}/{YYYYMMDDHH}_forecast{lead}.nc`, where the filename time is
-  treated as initialization time and `valid_datetime = init + lead hours`.
-- Forecast station overlays default the station datetime to
+  `forecast{lead}/{YYYYMMDDHH}_forecast{lead}.nc`, where the filename is the
+  UTC initialization time. Forecast input and station hours are fixed to
+  `Asia/Shanghai`; rsplot converts the input initialization hour to UTC for
+  lookup, adds the lead in UTC, then converts the valid hour back for display
+  and station matching.
+- Forecast station overlays default the station datetime to the converted local
   `forecast.valid_datetime`. Use `--station-datetime` only when intentionally
   comparing against a different observation hour.

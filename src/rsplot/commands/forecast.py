@@ -115,7 +115,7 @@ def run_forecast(
         f"\n[bold]读取预报数据:[/bold] {use_data_dir} "
         f"(变量: {var_info.label}, 时效: {lead}h)"
     )
-    console.print(f"  起报时次: {datetime_str}")
+    console.print(f"  输入起报时次: {datetime_str} (中国时间)")
     try:
         forecast_data, resolved_dt = read_forecast(
             use_data_dir,
@@ -129,11 +129,19 @@ def run_forecast(
         raise typer.Exit(1) from e
 
     if resolved_dt != datetime_str:
-        console.print(f"  → 自动选择最新起报: [cyan]{resolved_dt}[/cyan]")
+        console.print(
+            f"  → 自动选择最新起报: [cyan]{resolved_dt}[/cyan] (中国时间)"
+        )
     console.print(
-        f"  → 预报有效时次: [cyan]{forecast_data.valid_datetime}[/cyan], "
-        f"有效网格: [green]{forecast_data.n_valid}[/green] / "
-        f"{forecast_data.n_cells}"
+        "  → UTC 归档起报: "
+        f"[cyan]{forecast_data.archive_init_datetime}[/cyan], "
+        "UTC 有效时次: "
+        f"[cyan]{forecast_data.archive_valid_datetime}[/cyan]"
+    )
+    console.print(
+        f"  → 预报有效时次: [cyan]{forecast_data.valid_datetime}[/cyan] "
+        "(中国时间), 有效网格: "
+        f"[green]{forecast_data.n_valid}[/green] / {forecast_data.n_cells}"
     )
 
     prepared = prepare_existing_grid(

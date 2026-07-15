@@ -153,7 +153,8 @@ def forecast(
         ..., help="区域名称，如 中国、安徽、合肥、YRD、合肥/蜀山"
     ),
     datetime_str: str = typer.Argument(
-        ..., help="起报时次 YYYYMMDDHH，或 YYYYMMDD 自动取当天最新小时"
+        ...,
+        help=("中国时间起报时次 YYYYMMDDHH，或 YYYYMMDD 自动取当天最新小时"),
     ),
     var: str = typer.Option(
         "o3",
@@ -292,11 +293,6 @@ def meteo(
         "--station-data-dir",
         help="国控站点数据目录 (覆盖配置中的 guokong 路径)",
     ),
-    input_timezone: str = typer.Option(
-        "Asia/Shanghai",
-        "--timezone",
-        help="输入和站点时次的 IANA 时区；程序据此匹配 ERA5 UTC",
-    ),
     output: str | None = typer.Option(
         None,
         "--output",
@@ -348,7 +344,7 @@ def meteo(
 ) -> None:
     """绘制温度、黑色风箭头及可选国控站点图层。
 
-    DATETIME 默认按中国标准时间解释并匹配 ERA5 UTC：
+    DATETIME 按中国标准时间解释并匹配 ERA5 UTC：
 
         rsplot meteo 南京 2026051115 --temp-level 2m
         rsplot meteo 南京 2026051115 --wind-level 850
@@ -366,7 +362,6 @@ def meteo(
         level=level,
         data_dir=data_dir,
         station_data_dir=station_data_dir,
-        input_timezone=input_timezone,
         output=output,
         dpi=dpi,
         basemap=basemap,

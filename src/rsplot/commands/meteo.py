@@ -10,6 +10,7 @@ import typer
 
 from rsplot.commands.common import warn_missing_tianditu_key
 from rsplot.config import AppConfig
+from rsplot.temporal import DEFAULT_INPUT_TIMEZONE
 
 if TYPE_CHECKING:
     from rich.console import Console
@@ -25,7 +26,6 @@ def run_meteo(
     level: str | None,
     data_dir: str | None,
     station_data_dir: str | None,
-    input_timezone: str,
     output: str | None,
     dpi: int | None,
     basemap: str | None,
@@ -144,7 +144,7 @@ def run_meteo(
 
     use_data_dir = data_dir or cfg.get_data_dir("era5")
     console.print(f"\n[bold]读取 ERA5:[/bold] {use_data_dir}")
-    console.print(f"  输入时次: {resolved_datetime} (时区: {input_timezone})")
+    console.print(f"  输入时次: {resolved_datetime} (中国时间)")
     if temp_level is not None:
         console.print(f"  温度图层: {temp_level}")
     if wind_level is not None:
@@ -159,7 +159,6 @@ def run_meteo(
                 resolved_datetime,
                 temp_level,
                 read_extent,
-                input_timezone=input_timezone,
             )
             field = mask_era5_field_to_region(field, info.geometry)
             if field.n_valid == 0:
@@ -170,7 +169,6 @@ def run_meteo(
                 resolved_datetime,
                 wind_level,
                 read_extent,
-                station_timezone=input_timezone,
             )
             wind = mask_wind_to_region(wind, info.geometry)
         if wind is not None and wind.n_valid == 0:
@@ -271,7 +269,7 @@ def run_meteo(
         region=info,
         variable="temperature" if field is not None else "wind",
         input_datetime=datetime_str,
-        input_timezone=input_timezone,
+        input_timezone=DEFAULT_INPUT_TIMEZONE,
         datetime_utc=datetime_utc,
         output=output,
         field=field,

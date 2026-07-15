@@ -13,6 +13,7 @@ from rsplot.result_builders.common import (
 )
 from rsplot.result_builders.station import build_station_result
 from rsplot.stats import basic_stats, round_finite
+from rsplot.temporal import DEFAULT_INPUT_TIMEZONE
 
 if TYPE_CHECKING:
     import geopandas as gpd
@@ -62,8 +63,12 @@ def build_forecast_result(
         "forecast": {
             "source": "forecast",
             "init_datetime": data.init_datetime,
+            "timezone": DEFAULT_INPUT_TIMEZONE,
             "lead_hour": data.lead_hour,
             "valid_datetime": data.valid_datetime,
+            "archive_timezone": data.archive_timezone,
+            "archive_init_datetime": data.archive_init_datetime,
+            "archive_valid_datetime": data.archive_valid_datetime,
             "source_file": data.source_file,
         },
         "vrange": {

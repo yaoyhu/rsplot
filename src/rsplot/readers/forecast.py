@@ -4,20 +4,29 @@ Forecast files are grouped by lead time:
 
 ``forecast{lead}/{YYYYMMDDHH}_forecast{lead}.nc``
 
-The timestamp in the filename is treated as the model initialization time.
-The valid time is computed as initialization time plus the forecast lead.
+The timestamp in the filename is the UTC archive initialization time. CLI
+hours are interpreted as China standard time and converted before path lookup.
+The valid time is computed from the UTC initialization time and converted back
+to China standard time for display and station matching.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 import numpy as np
 import xarray as xr
 
+from rsplot.temporal import (
+    DEFAULT_INPUT_TIMEZONE,
+    adapt_hourly_time,
+    parse_yyyymmdd,
+)
+
 FORECAST_LEADS = (6, 12, 24, 48, 72)
+FORECAST_ARCHIVE_TIMEZONE = "UTC"
 
 
 @dataclass(frozen=True)
@@ -50,6 +59,9 @@ class ForecastData:
     source_file: str
     n_cells: int
     n_valid: int
+    archive_timezone: str = FORECAST_ARCHIVE_TIMEZONE
+    archive_init_datetime: str | None = None
+    archive_valid_datetime: str | None = None
 
 
 FORECAST_VAR_META: dict[str, ForecastVarInfo] = {
@@ -97,23 +109,30 @@ def read_forecast(
 ) -> tuple[ForecastData, str]:
     """Read one gridded forecast field.
 
-    ``datetime_str`` accepts either ``YYYYMMDDHH`` for an exact model
-    initialization hour or ``YYYYMMDD`` to auto-pick the latest file for that
-    date and lead.
+    ``datetime_str`` accepts either ``YYYYMMDDHH`` for an exact China-time
+    initialization hour or ``YYYYMMDD`` to auto-pick the latest China-time
+    hour for that date and lead. Forecast filenames are indexed in UTC.
     """
     lead_hour = _normalize_lead(lead)
     var_name = normalize_forecast_var(variable)
     var_info = FORECAST_VAR_META[var_name]
-    path, resolved_init = _resolve_forecast_path(
-        Path(data_dir), datetime_str, lead_hour
+    path, resolved_init, archive_init = _resolve_forecast_path(
+        Path(data_dir),
+        datetime_str,
+        lead_hour,
     )
 
     if path.stat().st_size == 0:
         raise ValueError(f"预报文件为空: {path}")
 
     LON, LAT, values = _read_forecast_grid(path, var_name, extent)
-    init_dt = datetime.strptime(resolved_init, "%Y%m%d%H")
-    valid_dt = init_dt + timedelta(hours=lead_hour)
+    time_match = adapt_hourly_time(
+        resolved_init,
+        data_timezone=FORECAST_ARCHIVE_TIMEZONE,
+        label="预报起报时次",
+    )
+    archive_valid_dt = time_match.data_time + timedelta(hours=lead_hour)
+    valid_dt = archive_valid_dt.astimezone(time_match.input_time.tzinfo)
     valid = np.isfinite(values)
 
     return (
@@ -130,6 +149,9 @@ def read_forecast(
             source_file=str(path),
             n_cells=int(values.size),
             n_valid=int(valid.sum()),
+            archive_timezone=FORECAST_ARCHIVE_TIMEZONE,
+            archive_init_datetime=archive_init,
+            archive_valid_datetime=archive_valid_dt.strftime("%Y%m%d%H"),
         ),
         resolved_init,
     )
@@ -179,8 +201,10 @@ def _normalize_lead(value: int | str) -> int:
 
 
 def _resolve_forecast_path(
-    root: Path, datetime_str: str, lead_hour: int
-) -> tuple[Path, str]:
+    root: Path,
+    datetime_str: str,
+    lead_hour: int,
+) -> tuple[Path, str, str]:
     if not datetime_str.isdigit() or len(datetime_str) not in (8, 10):
         raise ValueError(
             f"datetime 参数 '{datetime_str}' 格式不正确，"
@@ -189,34 +213,39 @@ def _resolve_forecast_path(
 
     lead_dir = root / f"forecast{lead_hour}"
     if len(datetime_str) == 8:
-        relative_pattern = f"{datetime_str}??_forecast{lead_hour}.nc"
-        pattern = str(lead_dir / relative_pattern)
-        path = next(
-            (
-                candidate
-                for hour in range(23, -1, -1)
-                if (
-                    candidate := lead_dir
-                    / f"{datetime_str}{hour:02d}_forecast{lead_hour}.nc"
-                ).is_file()
-                and candidate.stat().st_size > 0
-            ),
-            None,
-        )
-        if path is None:
-            raise FileNotFoundError(
-                f"未找到 {datetime_str} 当天 forecast{lead_hour} 预报文件: "
-                f"{pattern}"
+        parse_yyyymmdd(datetime_str, "预报起报日期")
+        for hour in range(23, -1, -1):
+            local_init = f"{datetime_str}{hour:02d}"
+            time_match = adapt_hourly_time(
+                local_init,
+                data_timezone=FORECAST_ARCHIVE_TIMEZONE,
+                label="预报起报时次",
             )
-        resolved = path.name.split("_", 1)[0]
-        return path, resolved
+            archive_init = time_match.data_datetime
+            candidate = lead_dir / f"{archive_init}_forecast{lead_hour}.nc"
+            if candidate.is_file() and candidate.stat().st_size > 0:
+                return candidate, local_init, archive_init
+        raise FileNotFoundError(
+            f"未找到 {datetime_str} 当天 ({DEFAULT_INPUT_TIMEZONE}) 的 "
+            f"forecast{lead_hour} 预报文件: {lead_dir}"
+        )
 
-    path = lead_dir / f"{datetime_str}_forecast{lead_hour}.nc"
+    time_match = adapt_hourly_time(
+        datetime_str,
+        data_timezone=FORECAST_ARCHIVE_TIMEZONE,
+        label="预报起报时次",
+    )
+    archive_init = time_match.data_datetime
+    path = lead_dir / f"{archive_init}_forecast{lead_hour}.nc"
     if not path.exists():
         raise FileNotFoundError(
-            f"未找到预报文件: {path}\n请检查 datetime、--lead 和 --data-dir。"
+            f"未找到预报文件: {path}\n"
+            f"输入起报时次 {datetime_str} ({DEFAULT_INPUT_TIMEZONE}) "
+            "对应归档时次 "
+            f"{archive_init} ({FORECAST_ARCHIVE_TIMEZONE})；"
+            "请检查 datetime、--lead 和 --data-dir。"
         )
-    return path, datetime_str
+    return path, datetime_str, archive_init
 
 
 def _read_forecast_grid(
