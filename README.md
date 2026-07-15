@@ -120,11 +120,18 @@ rsplot forecast 合肥 2026041409 --lead 6 --var O3 --station-overlay -o forecas
 rsplot station 合肥 2026041415 --var O3 -o station_hefei_o3.png
 
 # Plot one station's hourly observations over the latest seven days.
-rsplot station-trend 3347A 20260520 --days 7 --var O3 -o station_3347A_o3_7d.png
+rsplot trend 3347A 20260520 --days 7 --var O3 -o trend_3347A_o3_7d.png
 
 # A single day and an explicit date range are also supported.
-rsplot station-trend 3347A 20260520 --days 1 --var O3 -o station_3347A_o3_day.png
-rsplot station-trend 3347A 20260501-20260507 --var PM2.5 -o station_3347A_pm25.png
+rsplot trend 3347A 20260520 --days 1 --var O3 -o trend_3347A_o3_day.png
+rsplot trend 3347A 20260501-20260507 --var PM2.5 -o trend_3347A_pm25.png
+
+# Plot all regional stations as grey lines plus the hourly station mean.
+rsplot trend 重庆 20260520 --days 7 --var O3 --region -o trend_chongqing_o3.png
+
+# Plot only the regional mean and highlight one or more explicit stations.
+rsplot trend 重庆 20260520 --days 7 --var O3 --region --view mean \
+  --focus-station 3347A --threshold 200 -o trend_chongqing_focus.png
 
 # Overlay hourly ERA5 10 m wind vectors on station observations.
 # Station timestamps default to Asia/Shanghai and are matched to ERA5 UTC.

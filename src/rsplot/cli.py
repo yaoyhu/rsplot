@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -366,8 +367,11 @@ def station(
 
 
 @app.command()
-def station_trend(
-    station_id: str = typer.Argument(..., help="国控站点 ID，如 3347A"),
+def trend(
+    target: str = typer.Argument(
+        ...,
+        help="国控站点 ID；配合 --region 时为区域名称",
+    ),
     date_arg: str = typer.Argument(
         ...,
         help="结束日期 YYYYMMDD，或显式范围 YYYYMMDD-YYYYMMDD",
@@ -382,6 +386,35 @@ def station_trend(
         "--var",
         "-v",
         help="变量名: AQI, PM2.5, PM10, NO2, O3, SO2, CO, O3_8h, O3_8h_24h",
+    ),
+    region: bool = typer.Option(
+        False,
+        "--region",
+        help="将 TARGET 作为区域名称，绘制区域站点趋势",
+    ),
+    view: str = typer.Option(
+        "lines",
+        "--view",
+        help="区域视图: lines（灰色站点线+均值）/ mean（仅均值）",
+    ),
+    focus_station: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--focus-station",
+            help="区域图中重点突出站点 ID；可重复指定",
+        ),
+    ] = None,
+    threshold: float | None = typer.Option(
+        None,
+        "--threshold",
+        min=0.0,
+        help="覆盖变量默认超标阈值",
+    ),
+    level: str | None = typer.Option(
+        None,
+        "--level",
+        "-l",
+        help="区域模式强制级别: country / key_region / province / city / county",
     ),
     data_dir: str | None = typer.Option(
         None,
@@ -398,20 +431,25 @@ def station_trend(
     dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
     title: str | None = typer.Option(None, "--title", help="自定义标题"),
 ) -> None:
-    """绘制单个国控站点一日或多日的小时观测折线图。
+    """绘制单站点或区域国控站点小时观测趋势图。
 
     示例:
-        rsplot station-trend 3347A 20260520 --days 1 --var O3
-        rsplot station-trend 3347A 20260520 --days 7 --var PM2.5
-        rsplot station-trend 3347A 20260501-20260507 --var O3
+        rsplot trend 3347A 20260520 --days 7 --var O3
+        rsplot trend 安徽 20260520 --days 7 --var O3 --region
+        rsplot trend 安徽 20260520 --region --view mean --focus-station 3347A
     """
-    from rsplot.commands.station_trend import run_station_trend
+    from rsplot.commands.station_trend import run_trend
 
-    run_station_trend(
-        station_id=station_id,
+    run_trend(
+        target=target,
         date_arg=date_arg,
         days=days,
         var=var,
+        region_mode=region,
+        view=view,
+        focus_station_ids=focus_station,
+        threshold=threshold,
+        level=level,
         data_dir=data_dir,
         output=output,
         dpi=dpi,

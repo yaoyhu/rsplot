@@ -56,6 +56,52 @@ class StationSeries:
         return int(np.isfinite(self.values).sum())
 
 
+@dataclass
+class RegionStationSeries:
+    """Hourly observations for every station inside one region."""
+
+    station_ids: np.ndarray
+    lon: np.ndarray
+    lat: np.ndarray
+    timestamps: list[str]
+    values: np.ndarray  # shape: (n_stations, n_hours)
+    var_name: str
+    source_files: list[str] = field(default_factory=list)
+    missing_files: list[str] = field(default_factory=list)
+    failed_files: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def n_stations(self) -> int:
+        return len(self.station_ids)
+
+    @property
+    def n_hours(self) -> int:
+        return len(self.timestamps)
+
+    @property
+    def n_valid(self) -> int:
+        return int(np.isfinite(self.values).sum())
+
+    @property
+    def hourly_valid_counts(self) -> np.ndarray:
+        return np.isfinite(self.values).sum(axis=0).astype(np.int32)
+
+    @property
+    def hourly_mean(self) -> np.ndarray:
+        counts = self.hourly_valid_counts
+        totals = np.nansum(self.values, axis=0)
+        mean = np.full(self.n_hours, np.nan, dtype=float)
+        np.divide(totals, counts, out=mean, where=counts > 0)
+        return mean
+
+    def station_index(self, station_id: str) -> int | None:
+        """Return a case-insensitive station index when present."""
+        target = station_id.strip().upper()
+        normalized = np.char.upper(self.station_ids.astype(str))
+        matches = np.flatnonzero(normalized == target)
+        return int(matches[0]) if len(matches) else None
+
+
 def read_stations(
     data_dir: str,
     datetime_str: str,
@@ -251,6 +297,122 @@ def read_station_series(
         missing_files=missing_files,
         failed_files=failed_files,
         station_missing_hours=station_missing_hours,
+    )
+
+
+def read_region_station_series(
+    data_dir: str,
+    dates: list[str],
+    var_name: str,
+    geometry: BaseGeometry,
+) -> RegionStationSeries:
+    """Read an aligned station-by-hour matrix inside ``geometry``.
+
+    Each hourly file is opened at most once, regardless of the number of
+    stations in the selected region. Stations appearing or disappearing
+    during the window are aligned by their normalized station ID.
+    """
+    if not dates:
+        raise ValueError("日期窗口不能为空")
+
+    from shapely import contains_xy
+
+    root = Path(data_dir)
+    timestamps = [f"{date}{hour:02d}" for date in dates for hour in range(24)]
+    hourly_values: list[dict[str, float]] = []
+    station_meta: dict[str, tuple[float, float]] = {}
+    source_files: list[str] = []
+    missing_files: list[str] = []
+    failed_files: dict[str, str] = {}
+    existing_files = 0
+    region_geometry = geometry.buffer(1e-9)
+
+    for timestamp in timestamps:
+        path = root / f"{timestamp}.nc"
+        if not path.exists():
+            missing_files.append(timestamp)
+            hourly_values.append({})
+            continue
+
+        existing_files += 1
+        try:
+            with xr.open_dataset(path) as ds:
+                required = ("id", "lon", "lat", var_name)
+                missing_vars = [name for name in required if name not in ds]
+                if missing_vars:
+                    raise KeyError(f"缺少变量: {', '.join(missing_vars)}")
+
+                ids = _normalize_station_ids(ds["id"].values)
+                lon = np.asarray(ds["lon"].values, dtype=float).ravel()
+                lat = np.asarray(ds["lat"].values, dtype=float).ravel()
+                raw = (
+                    np.asarray(ds[var_name].values)
+                    .astype(
+                        float,
+                        copy=True,
+                    )
+                    .ravel()
+                )
+                if not (len(ids) == len(lon) == len(lat) == len(raw)):
+                    raise ValueError("站点 ID、经纬度和变量数组长度不一致")
+
+                raw[raw >= 65534] = np.nan
+                inside = contains_xy(region_geometry, lon, lat)
+                row: dict[str, float] = {}
+                for index in np.flatnonzero(inside):
+                    station_id = str(ids[index])
+                    key = station_id.upper()
+                    if key in row:
+                        continue
+                    row[key] = float(raw[index])
+                    station_meta.setdefault(
+                        key,
+                        (float(lon[index]), float(lat[index])),
+                    )
+                hourly_values.append(row)
+                source_files.append(str(path))
+        except (OSError, KeyError, ValueError, IndexError) as error:
+            failed_files[timestamp] = str(error).splitlines()[0]
+            hourly_values.append({})
+
+    if existing_files == 0:
+        raise FileNotFoundError(
+            f"窗口 {dates[0]}~{dates[-1]} 内未找到可读取的站点文件: "
+            f"{root}/YYYYMMDDHH.nc"
+        )
+    if not source_files:
+        examples = "; ".join(
+            f"{timestamp}: {message}"
+            for timestamp, message in list(failed_files.items())[:3]
+        )
+        raise ValueError(
+            f"窗口 {dates[0]}~{dates[-1]} 内无法读取变量 "
+            f"'{var_name}': {examples}"
+        )
+    if not station_meta:
+        raise ValueError(f"窗口 {dates[0]}~{dates[-1]} 内目标区域没有国控站点")
+
+    station_ids = np.asarray(sorted(station_meta), dtype=str)
+    station_lookup = {
+        station_id: index for index, station_id in enumerate(station_ids)
+    }
+    values = np.full((len(station_ids), len(timestamps)), np.nan, dtype=float)
+    for hour_index, row in enumerate(hourly_values):
+        for station_id, value in row.items():
+            values[station_lookup[station_id], hour_index] = value
+
+    lon = np.asarray([station_meta[key][0] for key in station_ids])
+    lat = np.asarray([station_meta[key][1] for key in station_ids])
+    return RegionStationSeries(
+        station_ids=station_ids,
+        lon=lon,
+        lat=lat,
+        timestamps=timestamps,
+        values=values,
+        var_name=var_name,
+        source_files=source_files,
+        missing_files=missing_files,
+        failed_files=failed_files,
     )
 
 
