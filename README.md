@@ -116,6 +116,28 @@ rsplot forecast 合肥 20260630 --lead 72 --var PM2.5 -o forecast_hefei_pm25.png
 # Overlay station observations on the forecast valid time.
 rsplot forecast 合肥 2026041409 --lead 6 --var O3 --station-overlay -o forecast_station_hefei_o3.png
 
+# Plot ERA5 2 m temperature. Input hours are China standard time; rsplot
+# converts them to the matching UTC archive day and hour automatically.
+rsplot meteo 南京 2026051115 --temp-level 2m -o meteo_nanjing_t2m.png
+
+# Plot black 850 hPa wind arrows; length represents speed and no wind
+# colorbar is drawn. The reference arrow gives the speed scale.
+rsplot meteo 南京 2026051115 --wind-level 850 -o meteo_nanjing_wind850.png
+
+# Overlay black wind arrows on a temperature background. Only the temperature
+# colorbar is drawn.
+rsplot meteo 南京 2026051115 --temp-level 850 \
+  --wind-level 850 -o meteo_nanjing_t850_wind850.png
+
+# Overlay station observations with black wind arrows.
+rsplot meteo 南京 2026051115 --station-var O3 \
+  --wind-level 850 -o meteo_nanjing_o3_wind850.png
+
+# Temperature, stations, and wind can be combined. The two colorbars describe
+# temperature and station concentration; wind magnitude is encoded by length.
+rsplot meteo 南京 2026051115 --temp-level 850 --station-var O3 \
+  --wind-level 850 -o meteo_nanjing_t850_o3_wind850.png
+
 # Plot national monitoring station observations.
 rsplot station 合肥 2026041415 --var O3 -o station_hefei_o3.png
 
@@ -132,13 +154,6 @@ rsplot trend 重庆 20260520 --days 7 --var O3 --region -o trend_chongqing_o3.pn
 # Plot only the regional mean and highlight one or more explicit stations.
 rsplot trend 重庆 20260520 --days 7 --var O3 --region --view mean \
   --focus-station 3347A --threshold 200 -o trend_chongqing_focus.png
-
-# Overlay hourly ERA5 10 m wind vectors on station observations.
-# Station timestamps default to Asia/Shanghai and are matched to ERA5 UTC.
-rsplot station 合肥 2026041415 --var O3 --wind-level 10m -o station_wind_hefei_o3.png
-
-# Pressure-level wind is also supported (1000/925/850/700/500 hPa).
-rsplot station 安徽 2026041415 --var PM2.5 --wind-level 850 -o station_wind_anhui_pm25.png
 
 # Overlay satellite raster data and station observations.
 rsplot overlay 合肥 2026041415 -p no2 --var NO2 -o overlay_hefei_no2.png

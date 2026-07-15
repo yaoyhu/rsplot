@@ -252,6 +252,136 @@ def forecast(
 
 
 @app.command()
+def meteo(
+    region: str = typer.Argument(
+        ..., help="区域名称，如 中国、安徽、南京、YRD、合肥/蜀山"
+    ),
+    datetime_str: str = typer.Argument(
+        ...,
+        help="中国时间 YYYYMMDDHH；使用 --station-var 时也可输入 YYYYMMDD",
+    ),
+    temp_level: str | None = typer.Option(
+        None,
+        "--temp-level",
+        help="温度层次: 2m / 1000 / 925 / 850 / 700 / 500",
+    ),
+    wind_level: str | None = typer.Option(
+        None,
+        "--wind-level",
+        help="风场层次: 10m / 100m / 1000 / 925 / 850 / 700 / 500",
+    ),
+    station_var: str | None = typer.Option(
+        None,
+        "--station-var",
+        help="叠加国控站点变量；必须同时指定 --wind-level",
+    ),
+    level: str | None = typer.Option(
+        None,
+        "--level",
+        "-l",
+        help="强制指定行政区级别: country/key_region/province/city/county",
+    ),
+    data_dir: str | None = typer.Option(
+        None,
+        "--data-dir",
+        "-d",
+        help="ERA5 数据目录 (覆盖配置中的 era5 路径)",
+    ),
+    station_data_dir: str | None = typer.Option(
+        None,
+        "--station-data-dir",
+        help="国控站点数据目录 (覆盖配置中的 guokong 路径)",
+    ),
+    input_timezone: str = typer.Option(
+        "Asia/Shanghai",
+        "--timezone",
+        help="输入和站点时次的 IANA 时区；程序据此匹配 ERA5 UTC",
+    ),
+    output: str | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="输出 PNG 路径；同时写同名 JSON",
+    ),
+    dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
+    basemap: str | None = typer.Option(
+        None,
+        "--basemap",
+        "-b",
+        help="底图控制: satellite / none",
+    ),
+    cmap: str | None = typer.Option(
+        None,
+        "--cmap",
+        help="温度色标；默认 RdYlBu_r",
+    ),
+    vmin: float | None = typer.Option(
+        None,
+        "--vmin",
+        help="温度色标最小值 (°C)，默认区域 2% 分位",
+    ),
+    vmax: float | None = typer.Option(
+        None,
+        "--vmax",
+        help="温度色标最大值 (°C)，默认区域 98% 分位",
+    ),
+    wind_stride: int | None = typer.Option(
+        None,
+        "--wind-stride",
+        help="风矢量抽稀步长；默认根据区域和网格大小自动选择",
+    ),
+    wind_scale: float | None = typer.Option(
+        None,
+        "--wind-scale",
+        help="Matplotlib quiver scale；数值越大箭头越短",
+    ),
+    wind_width: float = typer.Option(
+        0.004,
+        "--wind-width",
+        help="风箭头宽度；默认 0.004",
+    ),
+    title: str | None = typer.Option(
+        None,
+        "--title",
+        help="自定义标题",
+    ),
+) -> None:
+    """绘制温度、黑色风箭头及可选国控站点图层。
+
+    DATETIME 默认按中国标准时间解释并匹配 ERA5 UTC：
+
+        rsplot meteo 南京 2026051115 --temp-level 2m
+        rsplot meteo 南京 2026051115 --wind-level 850
+        rsplot meteo 南京 2026051115 --temp-level 850 --wind-level 850
+        rsplot meteo 南京 2026051115 --station-var O3 --wind-level 850
+    """
+    from rsplot.commands.meteo import run_meteo
+
+    run_meteo(
+        region=region,
+        datetime_str=datetime_str,
+        temp_level=temp_level,
+        wind_level=wind_level,
+        station_var=station_var,
+        level=level,
+        data_dir=data_dir,
+        station_data_dir=station_data_dir,
+        input_timezone=input_timezone,
+        output=output,
+        dpi=dpi,
+        basemap=basemap,
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        wind_stride=wind_stride,
+        wind_scale=wind_scale,
+        wind_width=wind_width,
+        title=title,
+        console=console,
+    )
+
+
+@app.command()
 def station(
     region: str = typer.Argument(
         ..., help="区域名称，如 中国、安徽、合肥、YRD、合肥/蜀山"
@@ -259,7 +389,6 @@ def station(
     datetime_str: str = typer.Argument(
         ..., help="YYYYMMDDHH (精确小时) 或 YYYYMMDD (自动取最新小时)"
     ),
-    # --- optional overrides ---
     var: str = typer.Option(
         "AQI",
         "--var",
@@ -291,55 +420,15 @@ def station(
         "-b",
         help="底图控制: satellite / none",
     ),
-    wind_level: str | None = typer.Option(
-        None,
-        "--wind-level",
-        help="叠加 ERA5 风场层次: 10m / 100m / 1000 / 925 / 850 / 700 / 500",
-    ),
-    wind_data_dir: str | None = typer.Option(
-        None,
-        "--wind-data-dir",
-        help="ERA5 数据目录 (覆盖配置中的 era5 路径)",
-    ),
-    station_timezone: str = typer.Option(
-        "Asia/Shanghai",
-        "--station-timezone",
-        help="国控文件名时次的 IANA 时区，用于匹配 ERA5 UTC",
-    ),
-    wind_stride: int | None = typer.Option(
-        None,
-        "--wind-stride",
-        help="风矢量抽稀步长；默认根据区域和网格大小自动选择",
-    ),
-    wind_scale: float | None = typer.Option(
-        None,
-        "--wind-scale",
-        help="Matplotlib quiver scale；不指定时自动缩放",
-    ),
-    wind_width: float = typer.Option(
-        0.004,
-        "--wind-width",
-        help="风箭头宽度；默认 0.004",
-    ),
-    wind_cmap: str = typer.Option(
-        "viridis", "--wind-cmap", help="风速色标名称"
-    ),
-    wind_vmin: float | None = typer.Option(
-        None, "--wind-vmin", help="风速色标最小值"
-    ),
-    wind_vmax: float | None = typer.Option(
-        None, "--wind-vmax", help="风速色标最大值"
-    ),
     title: str | None = typer.Option(None, "--title", help="自定义标题"),
 ) -> None:
-    """绘制国控站点散点图，可选叠加 ERA5 风场。
+    """绘制国控站点污染物散点图。
 
     示例:
-        rsplot station 安徽 20260414        (自动取当天最新小时)
-        rsplot station 安徽 2026041415      (精确到15时)
+        rsplot station 安徽 20260414
+        rsplot station 安徽 2026041415
         rsplot station 中国 20260414 --var PM2.5_24h
         rsplot station YRD 2026041415 --var NO2 -o logs/yrd_no2.png
-        rsplot station 合肥 2026041415 --var O3 --wind-level 10m
     """
     from rsplot.commands.station import run_station
 
@@ -352,15 +441,6 @@ def station(
         output=output,
         dpi=dpi,
         basemap=basemap,
-        wind_level=wind_level,
-        wind_data_dir=wind_data_dir,
-        station_timezone=station_timezone,
-        wind_stride=wind_stride,
-        wind_scale=wind_scale,
-        wind_width=wind_width,
-        wind_cmap=wind_cmap,
-        wind_vmin=wind_vmin,
-        wind_vmax=wind_vmax,
         title=title,
         console=console,
     )

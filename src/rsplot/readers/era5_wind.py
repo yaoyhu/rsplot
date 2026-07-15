@@ -8,19 +8,21 @@ hour, including the previous-day rollover for early local hours.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import numpy as np
-import xarray as xr
+
+from rsplot.readers.era5 import PRESSURE_LEVELS as ERA5_PRESSURE_LEVELS
+from rsplot.readers.era5 import read_era5_grid
+from rsplot.temporal import DEFAULT_INPUT_TIMEZONE, adapt_hourly_time
 
 if TYPE_CHECKING:
     from shapely.geometry.base import BaseGeometry
 
 
-PRESSURE_LEVELS = {1000, 925, 850, 700, 500}
+PRESSURE_LEVELS = {int(level) for level in ERA5_PRESSURE_LEVELS}
 WIND_LEVELS = ("10m", "100m", "1000", "925", "850", "700", "500")
 
 
@@ -40,6 +42,7 @@ class WindFieldData:
     source_files: tuple[str, str]
     n_cells: int
     n_valid: int
+    input_timezone: str = DEFAULT_INPUT_TIMEZONE
 
 
 def read_era5_wind(
@@ -84,6 +87,7 @@ def read_era5_wind(
         source_files=(str(u_path), str(v_path)),
         n_cells=int(speed.size),
         n_valid=int(valid.sum()),
+        input_timezone=station_timezone,
     )
 
 
@@ -127,19 +131,12 @@ def _normalize_level(level: str) -> str:
 
 
 def _to_utc(station_datetime: str, station_timezone: str) -> datetime:
-    if not station_datetime.isdigit() or len(station_datetime) != 10:
-        raise ValueError(
-            f"风场需要精确小时，收到 '{station_datetime}'，应为 YYYYMMDDHH。"
-        )
-    try:
-        source_tz = ZoneInfo(station_timezone)
-    except ZoneInfoNotFoundError as e:
-        raise ValueError(f"未知时区 '{station_timezone}'。") from e
-    try:
-        local_dt = datetime.strptime(station_datetime, "%Y%m%d%H")
-    except ValueError as e:
-        raise ValueError(f"无效时次 '{station_datetime}'。") from e
-    return local_dt.replace(tzinfo=source_tz).astimezone(timezone.utc)
+    return adapt_hourly_time(
+        station_datetime,
+        input_timezone=station_timezone,
+        data_timezone="UTC",
+        label="风场时次",
+    ).data_time
 
 
 def _component_paths(
@@ -177,56 +174,10 @@ def _read_component(
     dt_utc: datetime,
     extent: tuple[float, float, float, float],
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, str]:
-    if not path.exists():
-        raise FileNotFoundError(f"未找到 ERA5 风场文件: {path}")
-
-    with xr.open_dataset(path) as ds:
-        required = {"time", "latitude", "longitude", variable}
-        missing = sorted(required - set(ds.variables))
-        if missing:
-            raise ValueError(
-                f"ERA5 文件 {path} 缺少变量: {', '.join(missing)}"
-            )
-
-        target = np.datetime64(dt_utc.replace(tzinfo=None), "ns")
-        times = np.asarray(ds["time"].values).astype("datetime64[ns]")
-        time_indices = np.flatnonzero(times == target)
-        if len(time_indices) == 0:
-            target_label = dt_utc.strftime("%Y-%m-%d %H:%M UTC")
-            raise ValueError(f"ERA5 文件 {path} 中没有时次 {target_label}。")
-
-        lon_raw = np.asarray(ds["longitude"].values, dtype=float)
-        lat_raw = np.asarray(ds["latitude"].values, dtype=float)
-        lon_normalized = (lon_raw + 180.0) % 360.0 - 180.0
-        lon_min, lon_max, lat_min, lat_max = extent
-        if lon_min > lon_max:
-            raise ValueError("暂不支持跨日期变更线的风场区域。")
-
-        lon_indices = np.flatnonzero(
-            (lon_normalized >= lon_min) & (lon_normalized <= lon_max)
-        )
-        lat_indices = np.flatnonzero(
-            (lat_raw >= lat_min) & (lat_raw <= lat_max)
-        )
-        if len(lon_indices) == 0 or len(lat_indices) == 0:
-            raise ValueError(f"ERA5 文件 {path} 在目标区域内没有网格点。")
-
-        values = np.asarray(
-            ds[variable]
-            .isel(
-                time=int(time_indices[0]),
-                latitude=lat_indices,
-                longitude=lon_indices,
-            )
-            .values,
-            dtype=float,
-        )
-        unit = str(ds[variable].attrs.get("units", ""))
-
-    lon_values = lon_normalized[lon_indices]
-    lat_values = lat_raw[lat_indices]
-    lon_order = np.argsort(lon_values)
-    lat_order = np.argsort(lat_values)
-    values = values[np.ix_(lat_order, lon_order)]
-    LON, LAT = np.meshgrid(lon_values[lon_order], lat_values[lat_order])
-    return LON, LAT, values, unit
+    return read_era5_grid(
+        path,
+        variable,
+        dt_utc,
+        extent,
+        field_label="ERA5 风场",
+    )

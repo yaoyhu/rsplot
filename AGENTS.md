@@ -15,13 +15,20 @@ The package uses a `src/` layout and exposes the console command:
 rsplot = rsplot.__main__:app
 ```
 
-Primary CLI commands are `raster`, `forecast`, `station`,
+Primary CLI commands are `raster`, `forecast`, `meteo`, `station`,
 `trend`, `overlay`, `recent`, and `fnr`.
 The `forecast` command can optionally overlay station observations with
 `--station-overlay`; its JSON uses `mode` to distinguish pure forecast from
 forecast/station overlay output.
-The `station` command can optionally overlay ERA5 horizontal wind vectors with
-`--wind-level`.
+The `station` command draws national monitoring-station pollutant maps only.
+The `meteo` command is the sole ERA5 wind-map entry point. It draws temperature,
+black wind arrows, station observations plus wind, or all three layers. Wind
+magnitude is encoded by arrow length and a reference arrow; wind has no
+colorbar. Its `DATETIME` is China standard time by default and is converted
+internally to the matching ERA5 UTC archive hour. With `--station-var`, an
+8-digit date first resolves to the latest station hour, which is then used for
+all meteorological layers. `--level` retains the repository-wide
+administrative-level meaning.
 The `trend` command plots hourly lines over a trailing or explicit date
 window. Its default mode targets one station ID; `--region` switches TARGET
 to an administrative region and plots grey station lines plus the hourly
@@ -44,8 +51,10 @@ and a same-basename `.json` sidecar.
 - `src/rsplot/config.py`: safe path defaults, config loading, level defaults,
   key regions, AQ limits, and station variable metadata.
 - `src/rsplot/readers/`: TROPOMI and station data readers.
-- `src/rsplot/readers/era5_wind.py`: paired U/V ERA5 wind reader with station
-  timezone to ERA5 UTC conversion.
+- `src/rsplot/readers/era5.py`: shared ERA5 scalar-grid reader and temperature
+  support with China-time to UTC archive matching.
+- `src/rsplot/readers/era5_wind.py`: paired U/V ERA5 wind reader using the
+  shared temporal and grid-reading helpers.
 - `src/rsplot/plotting/station_trend.py`: station and regional hourly trends.
 - `src/rsplot/readers/forecast.py`: gridded air-quality forecast reader for
   `forecast6/12/24/48/72` NetCDF files.
@@ -204,9 +213,9 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
   `"image": null` in the payload.
 - Many CLI commands use `/tmp/...` default outputs when `--output` is omitted.
   Prefer explicit `--output` paths in examples, tests, and agent workflows.
-- ERA5 files are indexed in UTC, while station filenames default to
-  `Asia/Shanghai` for wind matching. Use `--station-timezone` when a station
-  archive follows a different convention.
+- ERA5 files are indexed in UTC. `meteo --timezone` describes both the input
+  time and station filename convention, and rsplot converts that hour to the
+  matching ERA5 UTC archive time.
 - Forecast files are grouped as
   `forecast{lead}/{YYYYMMDDHH}_forecast{lead}.nc`, where the filename time is
   treated as initialization time and `valid_datetime = init + lead hours`.

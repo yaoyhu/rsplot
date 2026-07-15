@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import numpy as np
 from rich.console import Console
@@ -19,6 +20,65 @@ from rsplot.geo.gridding import grid_data
 
 if TYPE_CHECKING:
     from rsplot.readers.base import BaseReader
+
+
+DEFAULT_INPUT_TIMEZONE = "Asia/Shanghai"
+
+
+@dataclass(frozen=True)
+class HourlyTimeMatch:
+    """One user-facing hour adapted to a data source's timezone."""
+
+    input_datetime: str
+    input_timezone: str
+    data_timezone: str
+    input_time: datetime
+    data_time: datetime
+
+    @property
+    def data_datetime(self) -> str:
+        """Return the data-source hour in compact ``YYYYMMDDHH`` form."""
+        return self.data_time.strftime("%Y%m%d%H")
+
+
+def adapt_hourly_time(
+    value: str,
+    *,
+    input_timezone: str = DEFAULT_INPUT_TIMEZONE,
+    data_timezone: str = "UTC",
+    label: str = "时次",
+) -> HourlyTimeMatch:
+    """Interpret a compact user hour and adapt it to a data timezone.
+
+    CLI callers use China standard time by default. Data readers can choose
+    their archive timezone explicitly, which keeps timezone conversion out of
+    filename/path logic and makes the same adapter reusable by other sources.
+    """
+    if not value.isdigit() or len(value) != 10:
+        raise ValueError(
+            f"{label}需要精确小时，收到 '{value}'，应为 YYYYMMDDHH。"
+        )
+    try:
+        source_tz = ZoneInfo(input_timezone)
+    except ZoneInfoNotFoundError as e:
+        raise ValueError(f"未知输入时区 '{input_timezone}'。") from e
+    try:
+        target_tz = ZoneInfo(data_timezone)
+    except ZoneInfoNotFoundError as e:
+        raise ValueError(f"未知数据时区 '{data_timezone}'。") from e
+    try:
+        naive = datetime.strptime(value, "%Y%m%d%H")
+    except ValueError as e:
+        raise ValueError(f"无效{label} '{value}'。") from e
+
+    input_time = naive.replace(tzinfo=source_tz)
+    return HourlyTimeMatch(
+        input_datetime=value,
+        input_timezone=input_timezone,
+        data_timezone=data_timezone,
+        input_time=input_time,
+        data_time=input_time.astimezone(target_tz),
+    )
 
 
 def parse_yyyymmdd(value: str, label: str = "日期") -> datetime:
