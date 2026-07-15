@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import math
 from typing import TYPE_CHECKING
 
 import numpy as np
 import typer
 
-from rsplot.commands.common import warn_missing_tianditu_key
+from rsplot.commands.common import (
+    load_fallback_city_boundaries,
+    parse_basemap,
+    validate_color_range,
+    validate_positive,
+    warn_missing_tianditu_key,
+)
 from rsplot.config import AppConfig
 from rsplot.temporal import DEFAULT_INPUT_TIMEZONE
 
@@ -44,7 +50,7 @@ def run_meteo(
         STATION_VAR_META,
         get_exceedance_threshold,
     )
-    from rsplot.geo.boundaries import load_city_boundaries, resolve_region
+    from rsplot.geo.boundaries import resolve_region
     from rsplot.geo.processing import buffered_extent
     from rsplot.plotting.meteo import plot_meteo
     from rsplot.plotting.styles import setup_fonts
@@ -99,6 +105,20 @@ def run_meteo(
     info = resolve_region(region, cfg, level_override=level)
     console.print(f"  → [green]{info.name}[/green] (级别: {info.level})")
     read_extent = buffered_extent(info.extent, 0.5)
+    use_dpi = dpi if dpi is not None else cfg.dpi
+    try:
+        use_basemap = parse_basemap(basemap)
+        validate_positive(use_dpi, "--dpi")
+        validate_color_range(vmin, vmax)
+    except ValueError as error:
+        console.print(f"[red]{error}[/red]")
+        raise typer.Exit(1) from error
+    warn_missing_tianditu_key(
+        basemap=use_basemap,
+        default_basemap=info.params.basemap,
+        tianditu_key=cfg.tianditu_key,
+        console=console,
+    )
 
     station = None
     station_threshold = None
@@ -215,17 +235,6 @@ def run_meteo(
             f"抽稀步长: {use_wind_stride}"
         )
 
-    use_dpi = dpi if dpi is not None else cfg.dpi
-    use_basemap = (
-        basemap.lower() == "satellite" if basemap is not None else None
-    )
-    warn_missing_tianditu_key(
-        basemap=use_basemap,
-        default_basemap=info.params.basemap,
-        tianditu_key=cfg.tianditu_key,
-        console=console,
-    )
-
     use_title = title or _default_title(
         region=info.name,
         datetime_str=resolved_datetime,
@@ -243,8 +252,6 @@ def run_meteo(
             f"/tmp/rsplot_meteo_{info.name}_{layer_suffix}_"
             f"{resolved_datetime}.png"
         )
-    Path(output).parent.mkdir(parents=True, exist_ok=True)
-
     console.print("\n[bold]绘图中...[/bold]")
     plot_meteo(
         info,
@@ -268,10 +275,11 @@ def run_meteo(
     result = build_meteo_result(
         region=info,
         variable="temperature" if field is not None else "wind",
-        input_datetime=datetime_str,
+        input_datetime=resolved_datetime,
         input_timezone=DEFAULT_INPUT_TIMEZONE,
         datetime_utc=datetime_utc,
         output=output,
+        requested_datetime=datetime_str,
         field=field,
         field_cmap=use_cmap if field is not None else None,
         field_vmin=use_vmin,
@@ -283,7 +291,10 @@ def run_meteo(
         station_threshold=station_threshold,
         station_unit=station_unit,
         cities_gdf=(
-            load_city_boundaries(cfg.require_geojson_dir())
+            load_fallback_city_boundaries(
+                info,
+                cfg.require_geojson_dir(),
+            )
             if station is not None
             else None
         ),
@@ -318,11 +329,11 @@ def _wind_option_error(
     scale: float | None,
     width: float,
 ) -> str | None:
-    if stride is not None and stride < 1:
+    if stride is not None and (not math.isfinite(stride) or stride < 1):
         return "--wind-stride 必须大于等于 1。"
-    if scale is not None and scale <= 0:
+    if scale is not None and (not math.isfinite(scale) or scale <= 0):
         return "--wind-scale 必须大于 0。"
-    if width <= 0:
+    if not math.isfinite(width) or width <= 0:
         return "--wind-width 必须大于 0。"
     return None
 

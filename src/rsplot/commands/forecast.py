@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -10,6 +9,11 @@ import typer
 
 from rsplot.commands.common import (
     FORECAST_STATION_PAIR,
+    load_fallback_city_boundaries,
+    parse_basemap,
+    validate_color_range,
+    validate_non_negative,
+    validate_positive,
     warn_missing_tianditu_key,
 )
 from rsplot.config import AppConfig
@@ -46,10 +50,7 @@ def run_forecast(
         STATION_VAR_META,
         get_exceedance_threshold,
     )
-    from rsplot.geo.boundaries import (
-        load_city_boundaries,
-        resolve_region,
-    )
+    from rsplot.geo.boundaries import resolve_region
     from rsplot.geo.processing import (
         buffered_extent,
         prepare_existing_grid,
@@ -80,22 +81,21 @@ def run_forecast(
     params = info.params
     use_dpi = dpi if dpi is not None else cfg.dpi
     use_cmap = cmap if cmap is not None else STATION_CONCENTRATION_CMAP
-    use_basemap = (
-        basemap.lower() == "satellite" if basemap is not None else None
-    )
+    try:
+        use_basemap = parse_basemap(basemap)
+        validate_positive(use_dpi, "--dpi")
+        validate_color_range(vmin, vmax)
+        if smooth is not None:
+            validate_non_negative(smooth, "--smooth")
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from e
     warn_missing_tianditu_key(
         basemap=use_basemap,
         default_basemap=params.basemap,
         tianditu_key=cfg.tianditu_key,
         console=console,
     )
-
-    if smooth is not None and smooth < 0:
-        console.print("[red]--smooth 必须大于等于 0。[/red]")
-        raise typer.Exit(1)
-    if vmin is not None and vmax is not None and vmax <= vmin:
-        console.print("[red]--vmax 必须大于 --vmin。[/red]")
-        raise typer.Exit(1)
 
     try:
         var_info = get_forecast_var_info(var)
@@ -173,9 +173,11 @@ def run_forecast(
     auto_min, auto_max = auto_forecast_vrange(prepared.values, var_info)
     use_vmin = vmin if vmin is not None else auto_min
     use_vmax = vmax if vmax is not None else auto_max
-    if use_vmax <= use_vmin:
-        console.print("[red]色标范围无效：vmax 必须大于 vmin。[/red]")
-        raise typer.Exit(1)
+    try:
+        validate_color_range(use_vmin, use_vmax)
+    except ValueError as e:
+        console.print(f"[red]色标范围无效：{e}[/red]")
+        raise typer.Exit(1) from e
     console.print(f"  → 色标范围: {use_vmin:.1f} ~ {use_vmax:.1f}")
 
     station_data = None
@@ -267,8 +269,6 @@ def run_forecast(
             f"{forecast_data.init_datetime}_f{forecast_data.lead_hour}"
             f"{station_suffix}.png"
         )
-    Path(output).parent.mkdir(parents=True, exist_ok=True)
-
     if title is None:
         if station_data is None:
             title = (
@@ -338,7 +338,10 @@ def run_forecast(
         station_threshold=station_threshold,
         station_unit=station_unit,
         cities_gdf=(
-            load_city_boundaries(cfg.require_geojson_dir())
+            load_fallback_city_boundaries(
+                info,
+                cfg.require_geojson_dir(),
+            )
             if station_data is not None
             else None
         ),

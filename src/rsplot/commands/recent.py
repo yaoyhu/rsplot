@@ -6,6 +6,10 @@ from typing import TYPE_CHECKING
 
 import typer
 
+from rsplot.commands.common import (
+    validate_positive,
+    validate_unit_interval,
+)
 from rsplot.config import AppConfig
 
 if TYPE_CHECKING:
@@ -82,6 +86,13 @@ def run_recent(
             else info.params.res
         )
         use_qa = qa if qa is not None else cfg.qa_threshold
+        try:
+            validate_positive(use_res, "--res")
+            validate_unit_interval(use_qa, "--qa")
+            validate_unit_interval(cf, "--cf")
+        except ValueError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(1) from e
         use_data_dir = (
             data_dir if data_dir is not None else cfg.get_data_dir(product)
         )

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import typer
 
+from rsplot.commands.common import validate_positive
 from rsplot.config import AppConfig
 
 if TYPE_CHECKING:
@@ -82,6 +83,11 @@ def run_trend(
         threshold if threshold is not None else get_exceedance_threshold(var)
     )
     use_dpi = dpi if dpi is not None else cfg.dpi
+    try:
+        validate_positive(use_dpi, "--dpi")
+    except ValueError as error:
+        console.print(f"[red]{error}[/red]")
+        raise typer.Exit(1) from error
 
     if region_mode:
         try:

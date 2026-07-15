@@ -65,13 +65,22 @@ def top_hotspots(
     flat = grid.ravel()
     lon_flat = LON.ravel()
     lat_flat = LAT.ravel()
-    order = np.argsort(flat)[::-1]
+    finite_indices = np.flatnonzero(np.isfinite(flat))
+    count = min(max(n, 0), len(finite_indices))
+    if count == 0:
+        return []
+
+    finite_values = flat[finite_indices]
+    if count < len(finite_indices):
+        selected = np.argpartition(finite_values, -count)[-count:]
+    else:
+        selected = np.arange(len(finite_indices))
+    selected = selected[np.argsort(finite_values[selected])[::-1]]
+    order = finite_indices[selected]
 
     hotspots: list[dict[str, Any]] = []
     for index in order:
         value = flat[index]
-        if not np.isfinite(value):
-            continue
         lon = float(lon_flat[index])
         lat = float(lat_flat[index])
         area_name = None

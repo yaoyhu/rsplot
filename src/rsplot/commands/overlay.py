@@ -7,7 +7,15 @@ from typing import TYPE_CHECKING
 import numpy as np
 import typer
 
-from rsplot.commands.common import warn_missing_tianditu_key
+from rsplot.commands.common import (
+    load_fallback_city_boundaries,
+    parse_basemap,
+    validate_color_range,
+    validate_non_negative,
+    validate_positive,
+    validate_unit_interval,
+    warn_missing_tianditu_key,
+)
 from rsplot.config import AppConfig
 
 if TYPE_CHECKING:
@@ -45,10 +53,7 @@ def run_overlay(
 ) -> None:
     """Execute satellite/station overlay orchestration."""
     from rsplot.config import STATION_VAR_META, get_exceedance_threshold
-    from rsplot.geo.boundaries import (
-        load_city_boundaries,
-        resolve_region,
-    )
+    from rsplot.geo.boundaries import resolve_region
     from rsplot.geo.processing import buffered_extent, prepare_swath_grid
     from rsplot.plotting.overlay import plot_overlay
     from rsplot.plotting.styles import setup_fonts
@@ -102,9 +107,20 @@ def run_overlay(
         if product_defaults.smooth_sigma is not None
         else params.smooth_sigma
     )
-    use_basemap = (
-        basemap.lower() == "satellite" if basemap is not None else None
-    )
+    try:
+        use_basemap = parse_basemap(basemap)
+        validate_positive(use_dpi, "--dpi")
+        validate_positive(use_res, "--res")
+        validate_unit_interval(use_qa, "--qa")
+        validate_unit_interval(cf, "--cf")
+        validate_color_range(vmin, vmax)
+        if use_smooth is not None:
+            validate_non_negative(use_smooth, "--smooth")
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from e
+    if use_smooth == 0:
+        use_smooth = None
     warn_missing_tianditu_key(
         basemap=use_basemap,
         default_basemap=params.basemap,
@@ -158,6 +174,11 @@ def run_overlay(
         auto_min, auto_max = auto_vrange(prepared.values, prod_info)
         use_vmin = vmin if vmin is not None else auto_min
         use_vmax = vmax if vmax is not None else auto_max
+    try:
+        validate_color_range(use_vmin, use_vmax)
+    except ValueError as e:
+        console.print(f"[red]色标范围无效：{e}[/red]")
+        raise typer.Exit(1) from e
     console.print(f"  → 色标范围: {use_vmin:.1f} ~ {use_vmax:.1f}")
 
     use_station_dir = (
@@ -237,7 +258,10 @@ def run_overlay(
         datetime_str=resolved_dt,
         threshold=threshold,
         unit=unit,
-        cities_gdf=load_city_boundaries(cfg.require_geojson_dir()),
+        cities_gdf=load_fallback_city_boundaries(
+            info,
+            cfg.require_geojson_dir(),
+        ),
         output=output,
     )
     emit_result(result, output)

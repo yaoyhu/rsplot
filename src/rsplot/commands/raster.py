@@ -8,7 +8,14 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import typer
 
-from rsplot.commands.common import warn_missing_tianditu_key
+from rsplot.commands.common import (
+    parse_basemap,
+    validate_color_range,
+    validate_non_negative,
+    validate_positive,
+    validate_unit_interval,
+    warn_missing_tianditu_key,
+)
 from rsplot.config import AppConfig
 
 if TYPE_CHECKING:
@@ -16,31 +23,41 @@ if TYPE_CHECKING:
 
 
 def default_raster_n_min(product: str, window_n: int) -> int:
-    """Return the existing product-aware valid-day threshold."""
+    """Return a product-aware threshold that fits the requested window."""
+    if window_n < 1:
+        raise ValueError("窗口至少需要 1 天。")
     if product.lower() == "hcho":
-        return max(3, math.ceil(window_n * 0.25))
-    return max(3, window_n // 2)
+        preferred = max(3, math.ceil(window_n * 0.25))
+    else:
+        preferred = max(3, window_n // 2)
+    return min(window_n, preferred)
 
 
 def parse_raster_dates(
     date_arg: str,
     days: int | None,
 ) -> tuple[list[str], bool]:
-    """Return dates and the established single-day/window mode decision."""
-    from rsplot.temporal import parse_date_window
+    """Return validated dates and whether window semantics were requested."""
+    from rsplot.temporal import parse_date_window, parse_yyyymmdd
 
+    if days is not None and days < 1:
+        raise ValueError("--days 必须 >= 1。")
     if "-" in date_arg:
         dates = parse_date_window(date_arg, default_days=0)
+        window_mode = True
     elif days is not None:
         dates = parse_date_window(date_arg, default_days=days)
+        window_mode = True
     else:
         if len(date_arg) != 8 or not date_arg.isdigit():
             raise ValueError(
                 f"日期格式错误: '{date_arg}'，"
                 "应为 YYYYMMDD 或 YYYYMMDD-YYYYMMDD"
             )
+        parse_yyyymmdd(date_arg)
         dates = [date_arg]
-    return dates, len(dates) > 1
+        window_mode = False
+    return dates, window_mode
 
 
 def run_raster(
@@ -86,6 +103,12 @@ def run_raster(
 
     window_n = len(dates)
     use_n_min: int | None = None
+    if n_min is not None and n_min < 1:
+        console.print("[red]--n-min 必须 >= 1。[/red]")
+        raise typer.Exit(1)
+    if not window_mode and n_min is not None:
+        console.print("[red]--n-min 仅用于日期范围或 --days 窗口。[/red]")
+        raise typer.Exit(1)
     if window_mode:
         use_n_min = (
             n_min
@@ -129,9 +152,20 @@ def run_raster(
         if product_defaults.smooth_sigma is not None
         else params.smooth_sigma
     )
-    use_basemap = (
-        basemap.lower() == "satellite" if basemap is not None else None
-    )
+    try:
+        use_basemap = parse_basemap(basemap)
+        validate_positive(use_dpi, "--dpi")
+        validate_positive(use_res, "--res")
+        validate_unit_interval(use_qa, "--qa")
+        validate_unit_interval(cf, "--cf")
+        validate_color_range(vmin, vmax)
+        if use_smooth is not None:
+            validate_non_negative(use_smooth, "--smooth")
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from e
+    if use_smooth == 0:
+        use_smooth = None
     warn_missing_tianditu_key(
         basemap=use_basemap,
         default_basemap=params.basemap,
@@ -147,6 +181,7 @@ def run_raster(
     reader.cloud_fraction_max = cf
     swath_meta: dict[str, Any]
     window_meta: dict[str, Any] | None = None
+    scientific_valid_mask: np.ndarray | None = None
 
     if not window_mode:
         console.print(
@@ -213,8 +248,9 @@ def run_raster(
             window.LAT,
             mean_grid,
             info.geometry,
-            fill_gaps=True,
+            fill_gaps=False,
         )
+        scientific_valid_mask = np.isfinite(prepared.values)
 
         covered = window.n_valid[window.n_valid > 0]
         coverage_days: dict[str, Any] = {
@@ -268,6 +304,19 @@ def run_raster(
             fill_gaps=False,
             smooth_sigma=use_smooth,
         )
+        if scientific_valid_mask is not None:
+            restored = np.where(
+                scientific_valid_mask,
+                prepared.values,
+                np.nan,
+            )
+            prepared = prepare_existing_grid(
+                prepared.lon,
+                prepared.lat,
+                restored,
+                info.geometry,
+                fill_gaps=False,
+            )
     console.print(
         f"  → 网格 {prepared.values.shape}, "
         f"区域内覆盖率 {prepared.coverage_pct:.1f}% "
@@ -283,6 +332,11 @@ def run_raster(
         auto_min, auto_max = auto_vrange(prepared.values, prod_info)
         use_vmin = vmin if vmin is not None else auto_min
         use_vmax = vmax if vmax is not None else auto_max
+    try:
+        validate_color_range(use_vmin, use_vmax)
+    except ValueError as e:
+        console.print(f"[red]色标范围无效：{e}[/red]")
+        raise typer.Exit(1) from e
     console.print(f"  → 色标范围: {use_vmin:.1f} ~ {use_vmax:.1f}")
 
     if output is None:

@@ -265,29 +265,40 @@ def resolve_region(
 ) -> RegionInfo:
     """Resolve a user region through the established matching cascade."""
     geojson_dir = cfg.require_geojson_dir()
-    provinces = load_province_boundaries(geojson_dir)
-    cities = load_city_boundaries(geojson_dir)
-    counties = load_county_boundaries(geojson_dir)
+    provinces = None
+    if level_override in (None, "country", "key_region", "province"):
+        provinces = load_province_boundaries(geojson_dir)
 
-    country = _resolve_country(name, level_override, provinces)
-    if country is not None:
-        return country
+    if provinces is not None:
+        country = _resolve_country(name, level_override, provinces)
+        if country is not None:
+            return country
 
-    qualified_county = _resolve_qualified_county(name, cities, counties)
-    if qualified_county is not None:
-        return qualified_county
+    if "/" in name:
+        cities = load_city_boundaries(geojson_dir)
+        counties = load_county_boundaries(geojson_dir)
+        qualified_county = _resolve_qualified_county(name, cities, counties)
+        if qualified_county is not None:
+            return qualified_county
 
     if level_override is None or level_override == "key_region":
+        assert provinces is not None
+        cities = load_city_boundaries(geojson_dir)
         key_region = _resolve_key_region(name, cfg, provinces, cities)
         if key_region is not None:
             return key_region
 
     if level_override is None or level_override == "province":
+        assert provinces is not None
+        cities = load_city_boundaries(geojson_dir)
+        counties = load_county_boundaries(geojson_dir)
         province = _resolve_province(name, provinces, cities, counties)
         if province is not None:
             return province
 
     if level_override is None or level_override == "city":
+        cities = load_city_boundaries(geojson_dir)
+        counties = load_county_boundaries(geojson_dir)
         city = _resolve_city(name, cities, counties)
         if city is not None:
             return city

@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    import geopandas as gpd
     from rich.console import Console
+
+    from rsplot.geo.boundaries import RegionInfo
 
 
 FORECAST_STATION_PAIR: dict[str, str] = {
@@ -16,6 +20,62 @@ FORECAST_STATION_PAIR: dict[str, str] = {
     "co": "CO",
     "o3": "O3",
 }
+
+
+def parse_basemap(value: str | None) -> bool | None:
+    """Parse the two supported basemap values without silent fallbacks."""
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if normalized == "satellite":
+        return True
+    if normalized == "none":
+        return False
+    raise ValueError("--basemap 仅支持 satellite / none。")
+
+
+def validate_positive(value: float, option: str) -> None:
+    """Require a finite value greater than zero."""
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError(f"{option} 必须是大于 0 的有限数字。")
+
+
+def validate_non_negative(value: float, option: str) -> None:
+    """Require a finite value greater than or equal to zero."""
+    if not math.isfinite(value) or value < 0:
+        raise ValueError(f"{option} 必须是大于等于 0 的有限数字。")
+
+
+def validate_unit_interval(value: float, option: str) -> None:
+    """Require a finite fraction in the closed unit interval."""
+    if not math.isfinite(value) or not 0 <= value <= 1:
+        raise ValueError(f"{option} 必须是 0 到 1 之间的有限数字。")
+
+
+def validate_color_range(
+    vmin: float | None,
+    vmax: float | None,
+) -> None:
+    """Validate optional color limits, including individually supplied ones."""
+    if vmin is not None and not math.isfinite(vmin):
+        raise ValueError("--vmin 必须是有限数字。")
+    if vmax is not None and not math.isfinite(vmax):
+        raise ValueError("--vmax 必须是有限数字。")
+    if vmin is not None and vmax is not None and vmax <= vmin:
+        raise ValueError("--vmax 必须大于 --vmin。")
+
+
+def load_fallback_city_boundaries(
+    region: RegionInfo,
+    geojson_dir: str,
+) -> gpd.GeoDataFrame | None:
+    """Load city boundaries only when a region has no subdivisions."""
+    sub_boundaries = getattr(region, "sub_boundary_gdf", None)
+    if sub_boundaries is not None and len(sub_boundaries) > 0:
+        return None
+    from rsplot.geo.boundaries import load_city_boundaries
+
+    return load_city_boundaries(geojson_dir)
 
 
 def warn_missing_tianditu_key(

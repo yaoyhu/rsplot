@@ -8,7 +8,11 @@ import numpy as np
 import typer
 
 from rsplot.commands.common import (
+    parse_basemap,
     print_failed_dates,
+    validate_non_negative,
+    validate_positive,
+    validate_unit_interval,
     warn_missing_tianditu_key,
 )
 from rsplot.config import AppConfig
@@ -56,6 +60,9 @@ def run_fnr(
     cfg = AppConfig.load()
     setup_fonts(cfg.font_dir)
 
+    if days < 1:
+        console.print("[red]--days 必须 >= 1。[/red]")
+        raise typer.Exit(1)
     try:
         dates = parse_date_window(date_arg, default_days=days)
     except ValueError as e:
@@ -63,7 +70,12 @@ def run_fnr(
         raise typer.Exit(1) from e
 
     window_n = len(dates)
-    use_n_min = n_min if n_min is not None else max(3, window_n // 2)
+    if n_min is not None and n_min < 1:
+        console.print("[red]--n-min 必须 >= 1。[/red]")
+        raise typer.Exit(1)
+    use_n_min = (
+        n_min if n_min is not None else min(window_n, max(3, window_n // 2))
+    )
     if use_n_min > window_n:
         console.print(
             f"[red]--n-min ({use_n_min}) 大于窗口天数 ({window_n})[/red]"
@@ -101,9 +113,20 @@ def run_fnr(
     use_qa = qa if qa is not None else cfg.qa_threshold
     use_smooth = smooth if smooth is not None else params.smooth_sigma
 
-    use_basemap = (
-        basemap.lower() == "satellite" if basemap is not None else None
-    )
+    try:
+        use_basemap = parse_basemap(basemap)
+        validate_positive(use_dpi, "--dpi")
+        validate_positive(use_res, "--res")
+        validate_unit_interval(use_qa, "--qa")
+        validate_unit_interval(cf, "--cf")
+        validate_non_negative(no2_min, "--no2-min")
+        if use_smooth is not None:
+            validate_non_negative(use_smooth, "--smooth")
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from e
+    if use_smooth == 0:
+        use_smooth = None
     warn_missing_tianditu_key(
         basemap=use_basemap,
         default_basemap=params.basemap,

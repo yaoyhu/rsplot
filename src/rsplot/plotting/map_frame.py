@@ -9,6 +9,7 @@ draw order stays explicit.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import cartopy.crs as ccrs
@@ -57,8 +58,11 @@ def create_map_frame(
     tianditu_key: str | None,
 ) -> MapFrame:
     """Create a figure using the region's basemap and projection rules."""
-    use_basemap = basemap if basemap is not None else region.params.basemap
-    if use_basemap and tianditu_key:
+    requested_basemap = (
+        basemap if basemap is not None else region.params.basemap
+    )
+    use_basemap = requested_basemap and bool(tianditu_key)
+    if use_basemap:
         tiles = TianDiTuTiles(tk=tianditu_key, layer="img")
         projection = tiles.crs
     else:
@@ -209,6 +213,7 @@ def finalize_map_figure(
         fig.tight_layout(rect=layout_rect)
 
     if output:
+        Path(output).parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(output, dpi=dpi, bbox_inches="tight")
         plt.close(fig)
     else:

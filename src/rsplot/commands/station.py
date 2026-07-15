@@ -7,7 +7,12 @@ from typing import TYPE_CHECKING
 import numpy as np
 import typer
 
-from rsplot.commands.common import warn_missing_tianditu_key
+from rsplot.commands.common import (
+    load_fallback_city_boundaries,
+    parse_basemap,
+    validate_positive,
+    warn_missing_tianditu_key,
+)
 from rsplot.config import AppConfig
 
 if TYPE_CHECKING:
@@ -33,10 +38,7 @@ def run_station(
         STATION_VAR_META,
         get_exceedance_threshold,
     )
-    from rsplot.geo.boundaries import (
-        load_city_boundaries,
-        resolve_region,
-    )
+    from rsplot.geo.boundaries import resolve_region
     from rsplot.geo.processing import buffered_extent
     from rsplot.plotting.station import plot_station
     from rsplot.plotting.styles import setup_fonts
@@ -54,6 +56,19 @@ def run_station(
     console.print(f"[bold]解析区域:[/bold] {region}")
     info = resolve_region(region, cfg, level_override=level)
     console.print(f"  → [green]{info.name}[/green] (级别: {info.level})")
+    use_dpi = dpi if dpi is not None else cfg.dpi
+    try:
+        use_basemap = parse_basemap(basemap)
+        validate_positive(use_dpi, "--dpi")
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from e
+    warn_missing_tianditu_key(
+        basemap=use_basemap,
+        default_basemap=info.params.basemap,
+        tianditu_key=cfg.tianditu_key,
+        console=console,
+    )
 
     use_data_dir = data_dir or cfg.get_data_dir("guokong")
     console.print(f"\n[bold]读取站点数据:[/bold] {use_data_dir}")
@@ -80,17 +95,6 @@ def run_station(
         console.print(
             f"  → 超标阈值: {threshold}, 超标站点: [red]{n_exceed}[/red]"
         )
-
-    use_dpi = dpi if dpi is not None else cfg.dpi
-    use_basemap = (
-        basemap.lower() == "satellite" if basemap is not None else None
-    )
-    warn_missing_tianditu_key(
-        basemap=use_basemap,
-        default_basemap=info.params.basemap,
-        tianditu_key=cfg.tianditu_key,
-        console=console,
-    )
 
     unit = STATION_VAR_META[var][0]
     display_var = STATION_VAR_LABELS.get(var, var)
@@ -122,7 +126,10 @@ def run_station(
         datetime_str=resolved_dt,
         threshold=threshold,
         unit=unit,
-        cities_gdf=load_city_boundaries(cfg.require_geojson_dir()),
+        cities_gdf=load_fallback_city_boundaries(
+            info,
+            cfg.require_geojson_dir(),
+        ),
         output=output,
     )
     emit_result(result, output)
