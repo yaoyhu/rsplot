@@ -17,6 +17,7 @@ hcho = "/path/to/HCHO"
 guokong = "/path/to/guokong_combine"
 era5 = "/path/to/era5"
 forecast = "/path/to/forecast"
+reconstruct = "/path/to/reconstruct"
 
 # Optional satellite basemap key. Leave commented unless you have a real key.
 # [tianditu]

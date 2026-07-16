@@ -30,6 +30,7 @@ KNOWN_DATA_PRODUCTS = (
     "guokong",
     "era5",
     "forecast",
+    "reconstruct",
 )
 
 DEFAULT_DATA_DIRS: dict[str, str] = {}

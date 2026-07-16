@@ -1,7 +1,7 @@
 # rsplot
 
-`rsplot` is an Agent-oriented command-line tool for plotting remote-sensing and
-air-quality data. It is designed to provide a small, stable CLI surface for
+`rsplot` is an Agent-oriented command-line tool for plotting remote-sensing,
+reconstructed, and air-quality data. It provides a small, stable CLI surface for
 [tianpu-agent](https://git.lug.ustc.edu.cn/yaoyhu/tianpu-agent).
 
 
@@ -55,6 +55,7 @@ hcho = "/path/to/HCHO"
 guokong = "/path/to/guokong_combine"
 era5 = "/path/to/era5"
 forecast = "/path/to/forecast"
+reconstruct = "/path/to/reconstruct"
 
 # Optional satellite basemap key. Leave commented unless you have a real key.
 # [tianditu]
@@ -80,6 +81,7 @@ export RSPLOT_DATA_DIR_HCHO="/path/to/HCHO"
 export RSPLOT_DATA_DIR_GUOKONG="/path/to/guokong_combine"
 export RSPLOT_DATA_DIR_ERA5="/path/to/era5"
 export RSPLOT_DATA_DIR_FORECAST="/path/to/forecast"
+export RSPLOT_DATA_DIR_RECONSTRUCT="/path/to/reconstruct"
 export RSPLOT_HCHO_CMAP_FILE="/path/to/256x3_rgb_table.txt"
 ```
 
@@ -106,6 +108,15 @@ rsplot raster 安徽 20260227 -p o3pr -o o3pr_anhui_20260227.png
 
 # Plot an explicit TROPOMI date range.
 rsplot raster 长三角 20260101-20260131 -p no2 -o no2_yrd_202601.png
+
+# Reconstructed-grid input is China standard time; rsplot converts it to the
+# matching UTC archive filename. This reads 2026051100.nc.
+rsplot reconstruct 安徽 2026051108 --var PM2.5 \
+  -o reconstruct_anhui_pm25.png
+
+# Date-only input selects the latest complete hour in that China-time day.
+rsplot reconstruct 合肥 20260511 --var O3 --res 0.01 \
+  -o reconstruct_hefei_o3.png
 
 # Forecast input is China standard time; rsplot converts it
 # to the matching UTC archive initialization hour before reading.
@@ -170,7 +181,9 @@ rsplot fnr 合肥 20260114 --voc-threshold 0.8 --nox-threshold 1.8 --display-max
 ```
 
 When `-o/--output` is provided, `rsplot` writes the image to that path and also
-writes a JSON sidecar with the same base name.
+writes a JSON sidecar with the same base name. Reconstructed-grid JSON records
+both the China-time input and matched UTC archive hour, source file, native and
+output resolution, regional statistics, administrative summaries, and hotspots.
 
 ## License
 
