@@ -20,6 +20,19 @@ uv add rsplot
 uv run rsplot --help
 ```
 
+### Development releases
+
+Every push to `main` publishes a PEP 440 development release such as
+`0.3.1.dev4`. Stable installs continue to ignore these releases. To follow the
+latest development build, opt in once:
+
+```bash
+uv tool install rsplot --prerelease allow
+uv tool upgrade rsplot
+```
+
+The prerelease setting is retained by later `uv tool upgrade` commands.
+
 For local development:
 
 ```bash
@@ -199,3 +212,39 @@ output resolution, regional statistics, administrative summaries, and hotspots.
 ## License
 
 This project is distributed under the license in `LICENSE`.
+
+## Publishing
+
+The package version is derived from Git by `hatch-vcs`; do not add a static
+`project.version` or make version-bump commits. The latest `vX.Y.Z` tag is the
+stable version. Commits after it build as the next patch development series:
+
+```text
+v0.3.0           -> 0.3.0
+first commit     -> 0.3.1.dev1
+second commit    -> 0.3.1.dev2
+v0.3.1           -> 0.3.1
+```
+
+GitHub Actions publishes every `main` push through the `pypi-dev` environment
+and every `v*` tag through `pypi`. Configure two PyPI Trusted Publishers with
+the same owner, repository, and workflow, differing only by environment:
+
+```text
+Owner: yaoyhu
+Repository: rsplot
+Workflow: publish.yml
+Environment: pypi-dev
+Environment: pypi
+```
+
+Leave `pypi-dev` automatic for continuous development uploads. Protect the
+`pypi` GitHub environment with required reviewers so stable releases need an
+explicit approval.
+
+To make a stable release after the desired commit is on GitHub:
+
+```bash
+git tag -a v0.3.1 -m v0.3.1
+git push github v0.3.1
+```
