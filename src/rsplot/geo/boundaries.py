@@ -15,7 +15,12 @@ import geopandas as gpd
 import pandas as pd
 from shapely.ops import unary_union
 
-from rsplot.config import LEVEL_DEFAULTS, AppConfig, LevelParams
+from rsplot.config import (
+    LEVEL_DEFAULTS,
+    AppConfig,
+    LevelParams,
+    SubdivisionSource,
+)
 
 if TYPE_CHECKING:
     from shapely.geometry.base import BaseGeometry
@@ -23,7 +28,7 @@ if TYPE_CHECKING:
 
 # Suffixes to strip for fuzzy matching
 _SUFFIXES = re.compile(
-    r"(省|市|区|县|自治区|自治州|自治县|地区|盟|林区|特别行政区)$"
+    r"(特别行政区|自治区|自治州|自治县|街道|地区|林区|省|市|区|县|盟|镇|乡)$"
 )
 
 NAME_FIELD = "name"
@@ -51,6 +56,8 @@ class RegionInfo:
         None  # finer sub-divisions (counties in province view)
     )
     sub_name_field: str = NAME_FIELD
+    administrative_level: str | None = None
+    subdivision_level: str | None = None
 
 
 def _strip_suffix(name: str) -> str:
@@ -67,7 +74,7 @@ def _fuzzy_match(
         return exact
 
     # with common suffixes appended
-    for suffix in ["省", "市", "区", "县", "自治区"]:
+    for suffix in ["省", "市", "区", "县", "自治区", "镇", "乡", "街道"]:
         padded = candidates[candidates[NAME_FIELD] == query + suffix]
         if len(padded) > 0:
             return padded
@@ -99,6 +106,55 @@ def _load_county(geojson_dir: str) -> gpd.GeoDataFrame:
     return gpd.read_file(f"{geojson_dir}/中国_县.geojson")
 
 
+@lru_cache(maxsize=16)
+def _load_subdivision_source(
+    path: str,
+    name_field: str,
+    target_crs: str,
+) -> gpd.GeoDataFrame:
+    """Load and normalize a configured city subdivision boundary file."""
+    try:
+        source = gpd.read_file(path)
+    except Exception as exc:
+        raise ValueError(f"无法读取下级行政区边界文件 '{path}': {exc}") from exc
+
+    if name_field not in source.columns:
+        available = ", ".join(str(column) for column in source.columns)
+        raise ValueError(
+            f"下级行政区边界文件 '{path}' 缺少名称字段 "
+            f"'{name_field}'。可用字段: {available}"
+        )
+    if source.crs is None:
+        raise ValueError(f"下级行政区边界文件 '{path}' 缺少坐标系信息。")
+
+    try:
+        source = source.to_crs(target_crs)
+    except Exception as exc:
+        raise ValueError(
+            f"下级行政区边界文件 '{path}' 无法转换到 {target_crs}: {exc}"
+        ) from exc
+
+    normalized = source[[name_field, "geometry"]].rename(
+        columns={name_field: NAME_FIELD}
+    )
+    normalized[NAME_FIELD] = normalized[NAME_FIELD].astype("string").str.strip()
+    normalized = normalized[
+        normalized[NAME_FIELD].notna()
+        & normalized[NAME_FIELD].ne("")
+        & normalized.geometry.notna()
+        & ~normalized.geometry.is_empty
+    ].copy()
+    if len(normalized) == 0:
+        raise ValueError(f"下级行政区边界文件 '{path}' 没有可用要素。")
+    invalid = ~normalized.geometry.is_valid
+    if invalid.any():
+        raise ValueError(
+            f"下级行政区边界文件 '{path}' 包含 "
+            f"{int(invalid.sum())} 个无效几何。"
+        )
+    return normalized
+
+
 def load_province_boundaries(geojson_dir: str) -> gpd.GeoDataFrame:
     """Return the cached province boundary dataset."""
     return _load_province(geojson_dir)
@@ -112,6 +168,49 @@ def load_city_boundaries(geojson_dir: str) -> gpd.GeoDataFrame:
 def load_county_boundaries(geojson_dir: str) -> gpd.GeoDataFrame:
     """Return the cached county boundary dataset."""
     return _load_county(geojson_dir)
+
+
+def _find_subdivision_source(
+    city_name: str,
+    cfg: AppConfig,
+) -> SubdivisionSource | None:
+    """Match a configured override by canonical or suffix-free city name."""
+    if city_name in cfg.subdivision_overrides:
+        return cfg.subdivision_overrides[city_name]
+    stripped = _strip_suffix(city_name)
+    for configured_name, source in cfg.subdivision_overrides.items():
+        if _strip_suffix(configured_name) == stripped:
+            return source
+    return None
+
+
+def _city_subdivisions(
+    city_name: str,
+    city_geometry: BaseGeometry,
+    city_crs: object,
+    cfg: AppConfig,
+) -> tuple[gpd.GeoDataFrame, str] | None:
+    """Return a configured city-specific subdivision layer when present."""
+    source = _find_subdivision_source(city_name, cfg)
+    if source is None:
+        return None
+    if city_crs is None:
+        raise ValueError("城市边界数据缺少坐标系，无法加载下级行政区覆盖。")
+
+    subdivisions = _load_subdivision_source(
+        source.path,
+        source.name_field,
+        str(city_crs),
+    )
+    subdivisions = subdivisions[
+        subdivisions.geometry.intersects(city_geometry.buffer(0.01))
+    ].copy()
+    if len(subdivisions) == 0:
+        raise ValueError(
+            f"为 {city_name} 配置的边界文件与城市边界没有空间交集: "
+            f"{source.path}"
+        )
+    return subdivisions, source.level
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +241,7 @@ def _resolve_country(
 
 def _resolve_qualified_county(
     name: str,
+    cfg: AppConfig,
     cities: gpd.GeoDataFrame,
     counties: gpd.GeoDataFrame,
 ) -> RegionInfo | None:
@@ -151,16 +251,27 @@ def _resolve_qualified_county(
     city_match = _fuzzy_match(city_name, cities)
     if city_match is None:
         raise ValueError(f"无法识别城市 '{city_name}'。")
+    canonical_city_name = city_match.iloc[0][NAME_FIELD]
     city_geometry = unary_union(city_match.geometry)
-    sub_counties = counties[
-        counties.geometry.within(city_geometry.buffer(0.01))
-    ]
+    configured = _city_subdivisions(
+        canonical_city_name,
+        city_geometry,
+        cities.crs,
+        cfg,
+    )
+    if configured is None:
+        sub_counties = counties[
+            counties.geometry.within(city_geometry.buffer(0.01))
+        ]
+        administrative_level = "county"
+    else:
+        sub_counties, administrative_level = configured
     county_match = _fuzzy_match(county_name, sub_counties)
     if county_match is None:
         available = ", ".join(sub_counties[NAME_FIELD].tolist())
         raise ValueError(
-            f"在 {city_match.iloc[0][NAME_FIELD]} 下未找到 '{county_name}'。"
-            f"\n可用县区: {available}"
+            f"在 {canonical_city_name} 下未找到 '{county_name}'。"
+            f"\n可用下级行政区: {available}"
         )
     return _build_info(
         name=county_match.iloc[0][NAME_FIELD],
@@ -168,6 +279,7 @@ def _resolve_qualified_county(
         geometry=unary_union(county_match.geometry),
         main_gdf=county_match,
         sub_gdf=None,
+        administrative_level=administrative_level,
     )
 
 
@@ -241,20 +353,30 @@ def _resolve_province(
 
 def _resolve_city(
     name: str,
+    cfg: AppConfig,
     cities: gpd.GeoDataFrame,
     counties: gpd.GeoDataFrame,
 ) -> RegionInfo | None:
     match = _fuzzy_match(name, cities)
     if match is None:
         return None
+    city_name = match.iloc[0][NAME_FIELD]
     geometry = unary_union(match.geometry)
-    sub_counties = counties[counties.geometry.within(geometry.buffer(0.01))]
+    configured = _city_subdivisions(city_name, geometry, cities.crs, cfg)
+    if configured is None:
+        sub_counties = counties[
+            counties.geometry.within(geometry.buffer(0.01))
+        ]
+        subdivision_level = None
+    else:
+        sub_counties, subdivision_level = configured
     return _build_info(
-        name=match.iloc[0][NAME_FIELD],
+        name=city_name,
         level="city",
         geometry=geometry,
         main_gdf=match,
         sub_gdf=sub_counties,
+        subdivision_level=subdivision_level,
     )
 
 
@@ -277,7 +399,12 @@ def resolve_region(
     if "/" in name:
         cities = load_city_boundaries(geojson_dir)
         counties = load_county_boundaries(geojson_dir)
-        qualified_county = _resolve_qualified_county(name, cities, counties)
+        qualified_county = _resolve_qualified_county(
+            name,
+            cfg,
+            cities,
+            counties,
+        )
         if qualified_county is not None:
             return qualified_county
 
@@ -299,13 +426,14 @@ def resolve_region(
     if level_override is None or level_override == "city":
         cities = load_city_boundaries(geojson_dir)
         counties = load_county_boundaries(geojson_dir)
-        city = _resolve_city(name, cities, counties)
+        city = _resolve_city(name, cfg, cities, counties)
         if city is not None:
             return city
 
     if level_override == "county":
         raise ValueError(
-            "县/区级别需要指定所属城市，格式: 城市/县区，如 合肥/蜀山、成都/高新"
+            "县区/镇街级别需要指定所属城市，格式: 城市/下级行政区，"
+            "如 合肥/蜀山、中山/板芙"
         )
 
     raise ValueError(
@@ -321,6 +449,8 @@ def _build_info(
     main_gdf: gpd.GeoDataFrame | None,
     sub_gdf: gpd.GeoDataFrame | None,
     detail_gdf: gpd.GeoDataFrame | None = None,
+    administrative_level: str | None = None,
+    subdivision_level: str | None = None,
 ) -> RegionInfo:
     bounds = geometry.bounds  # (minx, miny, maxx, maxy)
     params = LEVEL_DEFAULTS[level]
@@ -339,4 +469,6 @@ def _build_info(
         main_boundary_gdf=main_gdf,
         sub_boundary_gdf=sub_gdf,
         detail_boundary_gdf=detail_gdf,
+        administrative_level=administrative_level,
+        subdivision_level=subdivision_level,
     )

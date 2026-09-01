@@ -19,6 +19,14 @@ era5 = "/path/to/era5"
 forecast = "/path/to/forecast"
 reconstruct = "/path/to/reconstruct"
 
+# Optional city-specific lower-level boundaries. This is useful for direct-
+# administered cities whose towns/streets are absent from 中国_县.geojson.
+# Shapefile and GeoJSON sources are both supported and reprojected at load time.
+# [subdivision_overrides."中山市"]
+# path = "/path/to/中山市镇街界线.shp"
+# name_field = "镇街名称"
+# level = "township"
+
 # Optional satellite basemap key. Leave commented unless you have a real key.
 # [tianditu]
 # api_key = "your-real-key"

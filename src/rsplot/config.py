@@ -62,6 +62,15 @@ class LevelParams:
     zoom: int  # TianDiTu tile zoom level
 
 
+@dataclass(frozen=True)
+class SubdivisionSource:
+    """External boundary source replacing a city's county-level layer."""
+
+    path: str
+    name_field: str = "name"
+    level: str = "township"
+
+
 LEVEL_DEFAULTS: dict[str, LevelParams] = {
     "country": LevelParams(
         res=0.1,
@@ -166,6 +175,9 @@ class AppConfig:
     hcho_cmap_file: str | None = DEFAULT_HCHO_CMAP_FILE
     tianditu_key: str | None = DEFAULT_TIANDITU_KEY
     config_files: list[str] = field(default_factory=list)
+    subdivision_overrides: dict[str, SubdivisionSource] = field(
+        default_factory=dict
+    )
 
     # plotting defaults
     dpi: int = 300
@@ -268,6 +280,39 @@ class AppConfig:
         kr = data.get("key_regions", {})
         for name, provinces in kr.items():
             self.key_regions[name] = provinces
+
+        overrides = data.get("subdivision_overrides", {})
+        if not isinstance(overrides, dict):
+            raise ValueError("[subdivision_overrides] 必须是 TOML 表。")
+        for parent, raw_source in overrides.items():
+            if isinstance(raw_source, str):
+                source = SubdivisionSource(path=_normalize_path(raw_source))
+            elif isinstance(raw_source, dict):
+                path = raw_source.get("path")
+                if not path:
+                    raise ValueError(
+                        f"subdivision_overrides.{parent} 缺少 path。"
+                    )
+                name_field = str(raw_source.get("name_field", "name")).strip()
+                level = str(raw_source.get("level", "township")).strip()
+                if not name_field:
+                    raise ValueError(
+                        f"subdivision_overrides.{parent}.name_field 不能为空。"
+                    )
+                if not level:
+                    raise ValueError(
+                        f"subdivision_overrides.{parent}.level 不能为空。"
+                    )
+                source = SubdivisionSource(
+                    path=_normalize_path(path),
+                    name_field=name_field,
+                    level=level,
+                )
+            else:
+                raise ValueError(
+                    f"subdivision_overrides.{parent} 必须是路径或 TOML 表。"
+                )
+            self.subdivision_overrides[str(parent)] = source
 
 
 def _config_paths() -> list[Path]:

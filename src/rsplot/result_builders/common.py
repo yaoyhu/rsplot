@@ -16,11 +16,16 @@ if TYPE_CHECKING:
 
 def serialize_region(region: RegionInfo) -> dict[str, Any]:
     """Serialize a region identically across every result type."""
-    return {
+    result = {
         "name": region.name,
         "level": region.level,
         "extent": [round(value, 3) for value in region.extent],
     }
+    if region.administrative_level not in (None, region.level):
+        result["administrative_level"] = region.administrative_level
+    if region.subdivision_level is not None:
+        result["subdivision_level"] = region.subdivision_level
+    return result
 
 
 def grid_per_admin_stats(

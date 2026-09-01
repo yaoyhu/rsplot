@@ -57,6 +57,12 @@ era5 = "/path/to/era5"
 forecast = "/path/to/forecast"
 reconstruct = "/path/to/reconstruct"
 
+# Optional lower-level boundary override for a direct-administered city.
+# [subdivision_overrides."中山市"]
+# path = "/path/to/中山市镇街界线.shp"
+# name_field = "镇街名称"
+# level = "township"
+
 # Optional satellite basemap key. Leave commented unless you have a real key.
 # [tianditu]
 # api_key = "your-real-key"
@@ -88,6 +94,11 @@ export RSPLOT_HCHO_CMAP_FILE="/path/to/256x3_rgb_table.txt"
 Command-line directory options, such as `--data-dir`, take precedence for the
 command being run. If no TianDiTu API key is configured, use `--basemap none`
 to avoid requesting satellite tiles.
+
+City subdivision overrides replace the county layer only for the configured
+city. Their source CRS is converted to the CRS of the standard city boundary.
+This lets direct-administered towns or streets appear in maps and spatial
+summaries, and makes qualified inputs such as `中山/板芙` resolvable.
 
 ## Usage
 

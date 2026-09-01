@@ -57,6 +57,8 @@ def aqi_distribution(values: np.ndarray) -> dict[str, int]:
 
 
 def station_admin_level(region: RegionInfo) -> str | None:
+    if region.subdivision_level is not None:
+        return region.subdivision_level
     if region.level == "country":
         return "province"
     if region.level == "key_region":
