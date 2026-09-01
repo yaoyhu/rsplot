@@ -1,6 +1,6 @@
 [project]
 name = "rsplot"
-version = "0.2.6"
+version = "0.3.0"
 description = "CLI tool for plotting Remote Sensing data, designed for Agent."
 authors = [
     { name = "Yaoyao Hu", email = "yaoyhu@mail.ustc.edu.cn" },
