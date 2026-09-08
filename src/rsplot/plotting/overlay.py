@@ -30,6 +30,8 @@ from rsplot.plotting.station import (
 )
 
 if TYPE_CHECKING:
+    from shapely.geometry.base import BaseGeometry
+
     from rsplot.geo.boundaries import RegionInfo
     from rsplot.readers.guokong import StationData
 
@@ -56,6 +58,7 @@ def plot_overlay(
     hcho_cmap_file: str | None = None,
     title: str | None = None,
     output: str | None = None,
+    coverage_geometry: BaseGeometry | None = None,
 ) -> None:
     """Draw satellite raster + station scatter on the same axes.
 
@@ -90,7 +93,7 @@ def plot_overlay(
         alpha=raster_alpha,
         zorder=1,
     )
-    clip_raster_to_region(im, ax, region)
+    clip_raster_to_region(im, ax, region, coverage_geometry=coverage_geometry)
 
     # --- Basemap tiles ---
     add_basemap_tiles(frame, region)

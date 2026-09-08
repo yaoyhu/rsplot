@@ -10,6 +10,9 @@ import typer
 from rsplot.commands.common import (
     load_fallback_city_boundaries,
     parse_basemap,
+    resolve_satellite,
+    satellite_errors,
+    satellite_filter_label,
     validate_color_range,
     validate_non_negative,
     validate_positive,
@@ -29,11 +32,14 @@ PRODUCT_STATION_PAIR = {
 }
 
 
+@satellite_errors
 def run_overlay(
     *,
     region: str,
     datetime_str: str,
     product: str,
+    sensor: str = "tropomi",
+    station_datetime: str | None = None,
     var: str | None,
     level: str | None,
     raster_dir: str | None,
@@ -57,15 +63,30 @@ def run_overlay(
     from rsplot.geo.processing import (
         buffered_extent,
         prepare_display_grid,
+        prepare_existing_grid,
         prepare_swath_grid,
     )
     from rsplot.plotting.overlay import plot_overlay
     from rsplot.plotting.styles import setup_fonts
-    from rsplot.readers import auto_vrange, get_product_info
+    from rsplot.readers import auto_vrange
     from rsplot.readers.guokong import mask_stations_to_region, read_stations
     from rsplot.results import build_overlay_result, emit_result
 
     cfg = AppConfig.load()
+    prod_info, use_qa = resolve_satellite(product, sensor, qa, cfg, console)
+    sensor = prod_info.sensor
+    pairing = None
+    station_request = datetime_str
+    if sensor == "gems":
+        from rsplot.readers.gems import match_station_hour
+
+        station_request, pairing = match_station_hour(
+            datetime_str, station_datetime
+        )
+        if product.lower() == "hcho" and var is None:
+            raise ValueError("GEMS HCHO 叠加需通过 --var 显式指定站点变量。")
+    elif station_datetime is not None:
+        raise ValueError("--station-datetime 在此命令中仅用于 GEMS。")
     setup_fonts(cfg.font_dir)
 
     if var is None:
@@ -75,7 +96,9 @@ def run_overlay(
         console.print(f"[red]未知站点变量 '{var}'[/red]。可用: {available}")
         raise typer.Exit(1)
 
-    if not datetime_str.isdigit() or len(datetime_str) not in (8, 10):
+    if sensor != "gems" and (
+        not datetime_str.isdigit() or len(datetime_str) not in (8, 10)
+    ):
         console.print(
             f"[red]datetime 参数 '{datetime_str}' 格式不正确[/red]，"
             "请使用 YYYYMMDD 或 YYYYMMDDHH。"
@@ -93,7 +116,6 @@ def run_overlay(
 
     params = info.params
     use_dpi = dpi if dpi is not None else cfg.dpi
-    prod_info = get_product_info(product)
     product_defaults = prod_info.defaults_for_level(info.level)
     use_res = (
         res
@@ -103,7 +125,6 @@ def run_overlay(
         else params.res
     )
     use_cmap = cmap if cmap is not None else prod_info.cmap
-    use_qa = qa if qa is not None else cfg.qa_threshold
     use_smooth = (
         smooth
         if smooth is not None
@@ -133,44 +154,114 @@ def run_overlay(
     )
 
     use_raster_dir = (
-        raster_dir if raster_dir is not None else cfg.get_data_dir(product)
+        raster_dir
+        if raster_dir is not None
+        else cfg.get_data_dir(prod_info.data_key or product)
     )
     reader = prod_info.reader_cls()
     reader.cloud_fraction_max = cf
+    analysis_res = use_res
+    if sensor == "gems":
+        from rsplot.readers.gems import GEMS_ANALYSIS_RESOLUTION
+
+        analysis_res = GEMS_ANALYSIS_RESOLUTION
+        console.print(
+            f"  → GEMS 分析网格 {analysis_res}°，显示网格 {use_res}°"
+        )
     read_extent = buffered_extent(info.extent, 1.0)
     console.print(
         f"\n[bold]读取卫星数据:[/bold] {use_raster_dir} (产品: {product})"
     )
-    console.print(f"  日期: {date}, QA > {use_qa}, CF <= {cf}")
-    swath = reader.read(
-        use_raster_dir,
-        date,
-        read_extent,
-        qa_threshold=use_qa,
-    )
     console.print(
-        f"  → [green]{swath.n_pixels}[/green] 有效像元 "
-        f"({swath.n_files} 文件, {swath.n_broken} 损坏)"
+        f"  时间: {datetime_str}, {satellite_filter_label(sensor, use_qa, cf)}"
     )
+    statistics_grid = None
+    if sensor == "gems":
+        from rsplot.temporal import read_scan_mean
 
-    console.print(f"\n[bold]网格化:[/bold] {use_res}° 分辨率")
-    prepared = prepare_swath_grid(
-        swath.lon,
-        swath.lat,
-        swath.values,
-        read_extent,
-        use_res,
-        info.geometry,
-        smooth_sigma=use_smooth,
-    )
-    display_source = prepared.unmasked_values
-    display_grid = prepare_display_grid(
-        prepared.lon,
-        prepared.lat,
-        display_source,
-        info.geometry,
-        smooth_sigma=use_smooth,
-    )
+        batch = read_scan_mean(
+            reader=reader,
+            data_dir=use_raster_dir,
+            request=datetime_str,
+            extent=read_extent,
+            res=analysis_res,
+        )
+        prepared = prepare_existing_grid(
+            batch.LON,
+            batch.LAT,
+            batch.grid,
+            info.geometry,
+            fill_gaps=False,
+        )
+        display_source = prepared.unmasked_values
+        statistics_grid = prepared.values.copy()
+        swath_meta = {
+            "n_pixels": batch.n_pixels,
+            "n_files": batch.n_files,
+            "n_broken": batch.n_broken,
+            "resolution_deg": use_res,
+            "cloud_fraction_max": cf,
+            **batch.metadata,
+        }
+    else:
+        swath = reader.read(
+            use_raster_dir,
+            date,
+            read_extent,
+            qa_threshold=use_qa,
+        )
+        console.print(
+            f"  → [green]{swath.n_pixels}[/green] 有效像元 "
+            f"({swath.n_files} 文件, {swath.n_broken} 损坏)"
+        )
+
+        console.print(f"\n[bold]网格化:[/bold] {use_res}° 分辨率")
+        prepared = prepare_swath_grid(
+            swath.lon,
+            swath.lat,
+            swath.values,
+            read_extent,
+            use_res,
+            info.geometry,
+            smooth_sigma=use_smooth,
+        )
+        display_source = prepared.unmasked_values
+        swath_meta = {
+            "n_pixels": int(swath.n_pixels),
+            "n_files": int(swath.n_files),
+            "n_broken": int(swath.n_broken),
+            "qa_threshold": use_qa,
+            "cloud_fraction_max": cf,
+            "resolution_deg": use_res,
+        }
+    display_lon, display_lat = prepared.lon, prepared.lat
+    display_support = None
+    if sensor == "gems":
+        from rsplot.geo.footprints import prepare_footprint_display
+
+        display = prepare_footprint_display(
+            prepared.lon,
+            prepared.lat,
+            display_source,
+            info.geometry,
+            analysis_res=analysis_res,
+            display_res=use_res,
+            smooth_sigma=use_smooth,
+        )
+        display_lon, display_lat = display.lon, display.lat
+        display_grid, display_support = display.values, display.support
+        swath_meta["resolution_deg"] = analysis_res
+        swath_meta["analysis_resolution_deg"] = analysis_res
+        swath_meta["display_resolution_deg"] = use_res
+        swath_meta["display_support"] = "fixed_analysis_valid_cells"
+    else:
+        display_grid = prepare_display_grid(
+            prepared.lon,
+            prepared.lat,
+            display_source,
+            info.geometry,
+            smooth_sigma=use_smooth,
+        )
     if not np.isfinite(display_grid).any():
         console.print("[red]目标区域没有相交的有效卫星网格。[/red]")
         raise typer.Exit(1)
@@ -205,16 +296,16 @@ def run_overlay(
         station_dir if station_dir is not None else cfg.get_data_dir("guokong")
     )
     console.print(f"\n[bold]读取站点数据:[/bold] {use_station_dir}")
-    console.print(f"  时间: {datetime_str}, 变量: {var}")
+    console.print(f"  时间: {station_request}, 变量: {var}")
     station_extent = buffered_extent(info.extent, 0.5)
     data, resolved_dt = read_stations(
         use_station_dir,
-        datetime_str,
+        station_request,
         var,
         extent=station_extent,
     )
     data = mask_stations_to_region(data, info.geometry)
-    if resolved_dt != datetime_str:
+    if resolved_dt != station_request:
         console.print(f"  → 自动选择最新时次: [cyan]{resolved_dt}[/cyan]")
     console.print(
         f"  → [green]{data.n_valid}[/green] 有效站点 (共 {data.n_stations} 站)"
@@ -229,6 +320,17 @@ def run_overlay(
             f"  → 超标阈值: {threshold}, 超标站点: [red]{n_exceed}[/red]"
         )
 
+    if output is None and sensor == "gems":
+        output = (
+            f"/tmp/rsplot_overlay_gems_{info.name}_{product}_"
+            f"{datetime_str}_{resolved_dt}.png"
+        )
+    if title is None and sensor == "gems":
+        period = "daily mean" if len(datetime_str) == 8 else "scan"
+        title = (
+            f"GEMS {product.upper()} {datetime_str} {period} CST + "
+            f"Station {var} {resolved_dt} CST - {info.name}"
+        )
     if output is None:
         output = f"/tmp/rsplot_overlay_{info.name}_{product}_{resolved_dt}.png"
     unit = STATION_VAR_META[var][0]
@@ -236,8 +338,8 @@ def run_overlay(
 
     console.print("\n[bold]绘图中...[/bold]")
     plot_overlay(
-        prepared.lon,
-        prepared.lat,
+        display_lon,
+        display_lat,
         display_grid,
         data,
         info,
@@ -253,6 +355,7 @@ def run_overlay(
         hcho_cmap_file=cfg.hcho_cmap_file,
         title=title,
         output=output,
+        **({"coverage_geometry": display_support} if sensor == "gems" else {}),
     )
     console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
 
@@ -263,16 +366,14 @@ def run_overlay(
         prod_info=prod_info,
         LON=prepared.lon,
         LAT=prepared.lat,
-        grid=prepared.values,
+        grid=statistics_grid
+        if statistics_grid is not None
+        else prepared.values,
+        swath_meta=swath_meta,
+        time_matching=pairing,
         display_grid=display_grid,
-        swath_meta={
-            "n_pixels": int(swath.n_pixels),
-            "n_files": int(swath.n_files),
-            "n_broken": int(swath.n_broken),
-            "qa_threshold": use_qa,
-            "cloud_fraction_max": cf,
-            "resolution_deg": use_res,
-        },
+        display_lon=display_lon,
+        display_lat=display_lat,
         raster_vmin=use_vmin,
         raster_vmax=use_vmax,
         data=data,

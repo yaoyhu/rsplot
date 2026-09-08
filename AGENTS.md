@@ -143,11 +143,15 @@ silently reformat or lint-fix broad application code during unrelated work.
 For focused changes, check the touched files with `--no-fix` and document any
 unrelated existing failures.
 
-`tests/test_boundary_display.py` contains self-contained unittest regressions.
-Run `uv run python -m unittest discover -s tests -p 'test_boundary_display.py' -v`.
+`tests/test_gems.py` contains self-contained unittest regressions. Run:
+
+```bash
+uv run python -m unittest discover -s tests -p 'test_gems.py' -v
+```
+
 Other local tests may be ignored/untracked and require pytest, which is not
-currently a project dependency. Use focused discovery; add pytest deliberately
-if adding pytest-based tests.
+currently a project dependency. Do not assume full test discovery is isolated
+from local files. If adding pytest-based tests, add the dependency deliberately.
 
 Package build command when needed:
 
@@ -227,6 +231,42 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
   `forecast.valid_datetime`. Use `--station-datetime` only when intentionally
   comparing against a different observation hour.
 
+## GEMS Integration
+
+- `raster`, `recent --source raster`, and `overlay` accept `--sensor gems`;
+  the default remains TROPOMI. `recent --source` retains raster/station semantics.
+  GEMS FNR and satellite trend analysis are outside the current scope.
+- Product lookup is `get_product_info(product, sensor="gems")`. Preserve
+  `PRODUCT_REGISTRY` and the default lookup for existing TROPOMI callers.
+- `readers/gems.py` reads NO2/HCHO from `Data Fields` / `Geolocation Fields`
+  and O3P from `product` / `geolocation` / `support_data`. `o3` and `o3pr`
+  read total and tropospheric columns from the same O3P archive root.
+- Configure `gems_no2`, `gems_hcho`, and `gems_o3`; matching env vars are
+  `RSPLOT_DATA_DIR_GEMS_NO2`, `RSPLOT_DATA_DIR_GEMS_HCHO`, and
+  `RSPLOT_DATA_DIR_GEMS_O3`. Do not hard-code site paths.
+- Archive layout is `YYYYMM/DD/GK2_GEMS_L2_YYYYMMDD_HHMM_*.nc` in UTC.
+  GEMS input uses Asia/Shanghai: 12 digits selects an exact nominal scan,
+  8 digits requests a daily mean. Daily selection may span UTC month boundaries.
+  Missing scans list available times; duplicate nominal times are errors.
+- `BaseReader.iter_scans` defaults to one daily batch. GEMS yields each scan
+  plus metadata; unreadable files yield empty diagnostic batches. Its `read`
+  concatenates raw samples for compatibility, **not** equal-scan daily means.
+  Use `temporal.read_scan_mean` for GEMS scientific aggregation, then
+  `compute_window_mean` for equal-day means. `--n-min` still counts days.
+- Default GEMS filtering uses final flag 0, SZA/VZA < 70°, and product-specific
+  cloud measure <= `--cf` (0.5). NO2 flags are bit-encoded in the checked v4
+  archive; HCHO/O3P differ. Never synthesize TROPOMI QA scores. Explicit
+  `--qa` is rejected for GEMS. Preserve valid negative retrievals.
+- GEMS statistics use unfilled/unsmoothed region-masked grids. Display
+  smoothing must restore the original valid mask. Preserve source versions,
+  variables, cloud definitions, scan counts, failed files, and time provenance
+  in sidecars, including daily diagnostics in window and recent outputs.
+- GEMS overlay accepts a 12-digit scan and pairs the nearest station hour
+  (ties forward, <=30 minutes), with `--station-datetime` as an explicit
+  local-hour override. An 8-digit daily mean requires `--station-datetime`;
+  label the daily/hourly comparison and set its time difference to null. HCHO requires `--var`. Keep column and surface units
+  separate. Existing TROPOMI JSON fields and behavior remain compatible.
+
 ## Raster Boundary Display
 
 - `PreparedGrid.values` retains the center-masked statistical grid;
@@ -239,10 +279,30 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
   projection so holes and islands remain correct.
 - Statistics use strictly interior grid centers and equal cell weights;
   boundary centers are excluded. Coverage counts centers, not polygon area.
-  Preserve existing product-specific statistical preprocessing. Never pass
-  a display grid as statistics.
+  Preserve existing product-specific statistical preprocessing, including
+  unfilled/unsmoothed GEMS statistics. Never pass a display grid as statistics.
 - `raster`, `overlay`, `forecast`, and `reconstruct` sidecars add
   `boundary_policy` (under `raster` for `overlay`). Keep statistics valid when
   only exterior-center cells overlap: zero selected cells, null summaries.
 - Run `uv run python -m unittest discover -s tests -p
   'test_boundary_display.py' -v` for boundary and projection regressions.
+
+## GEMS Footprint Remapping
+
+- GEMS `SwathData` includes `(n_pixels, 4)` corner arrays. Prefer the file's
+  shared corner grids; otherwise estimate corners from the original 2-D
+  geolocation before QA filtering. Preserve missing geolocation. Record
+  `footprint_source`; never present estimated corners as official footprints.
+- `geo/footprints.py` remaps valid native polygons using overlap areas in
+  EPSG:6933. Empty/boundary-touch-only targets stay NaN. Average scans and
+  then days with the existing equal-time weighting rules.
+- GEMS commands and recent statistics use the globally aligned 0.05° analysis
+  spacing, independent of administrative level and `--res`. It is numerical
+  spacing, not a claimed native resolution. GEMS `--res` controls display
+  only; recent ignores it and records the actual analysis spacing.
+- Resample display values separately, then clip to the fixed analysis valid
+  cell union AND the administrative geometry. Preserve coverage holes during
+  display smoothing and resampling. Statistics always use the unfilled,
+  unsmoothed center-selected analysis grid. Subcell gaps are unresolved.
+- Preserve separate analysis/display coordinates in result builders and
+  record the remapping, resolution, and footprint provenance in JSON.

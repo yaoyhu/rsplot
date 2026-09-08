@@ -10,6 +10,9 @@ import typer
 
 from rsplot.commands.common import (
     parse_basemap,
+    resolve_satellite,
+    satellite_errors,
+    satellite_filter_label,
     validate_color_range,
     validate_non_negative,
     validate_positive,
@@ -60,11 +63,13 @@ def parse_raster_dates(
     return dates, window_mode
 
 
+@satellite_errors
 def run_raster(
     *,
     region: str,
     date_arg: str,
     product: str,
+    sensor: str = "tropomi",
     days: int | None,
     n_min: int | None,
     level: str | None,
@@ -92,12 +97,24 @@ def run_raster(
     )
     from rsplot.plotting.raster import plot_raster
     from rsplot.plotting.styles import setup_fonts
-    from rsplot.readers import auto_vrange, get_product_info
+    from rsplot.readers import auto_vrange
     from rsplot.results import build_raster_result, emit_result
-    from rsplot.temporal import compute_window_mean
+    from rsplot.temporal import compute_window_mean, read_scan_mean
 
+    cfg = AppConfig.load()
+    prod_info, use_qa = resolve_satellite(product, sensor, qa, cfg, console)
+    sensor = prod_info.sensor
+    scan_mode = sensor == "gems" and len(date_arg) == 12
+    if scan_mode:
+        from rsplot.readers.gems import parse_gems_time
+
+        parse_gems_time(date_arg)
+        if days is not None or n_min is not None:
+            raise ValueError("GEMS 单次扫描不能同时使用 --days 或 --n-min。")
     try:
-        dates, window_mode = parse_raster_dates(date_arg, days)
+        dates, window_mode = parse_raster_dates(
+            date_arg[:8] if scan_mode else date_arg, days
+        )
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1) from e
@@ -122,7 +139,6 @@ def run_raster(
             )
             raise typer.Exit(1)
 
-    cfg = AppConfig.load()
     setup_fonts(cfg.font_dir)
 
     console.print(f"[bold]解析区域:[/bold] {region}")
@@ -135,7 +151,6 @@ def run_raster(
 
     params = info.params
     use_dpi = dpi if dpi is not None else cfg.dpi
-    prod_info = get_product_info(product)
     product_defaults = prod_info.defaults_for_level(info.level)
     use_res = (
         res
@@ -145,7 +160,6 @@ def run_raster(
         else params.res
     )
     use_cmap = cmap if cmap is not None else prod_info.cmap
-    use_qa = qa if qa is not None else cfg.qa_threshold
     use_smooth = (
         smooth
         if smooth is not None
@@ -176,10 +190,20 @@ def run_raster(
 
     read_extent = buffered_extent(info.extent, 1.0)
     use_data_dir = (
-        data_dir if data_dir is not None else cfg.get_data_dir(product)
+        data_dir
+        if data_dir is not None
+        else cfg.get_data_dir(prod_info.data_key or product)
     )
     reader = prod_info.reader_cls()
     reader.cloud_fraction_max = cf
+    analysis_res = use_res
+    if sensor == "gems":
+        from rsplot.readers.gems import GEMS_ANALYSIS_RESOLUTION
+
+        analysis_res = GEMS_ANALYSIS_RESOLUTION
+        console.print(
+            f"  → GEMS 分析网格 {analysis_res}°，显示网格 {use_res}°"
+        )
     swath_meta: dict[str, Any]
     window_meta: dict[str, Any] | None = None
     scientific_valid_mask: np.ndarray | None = None
@@ -188,34 +212,61 @@ def run_raster(
         console.print(
             f"\n[bold]读取数据:[/bold] {use_data_dir} (产品: {product})"
         )
-        console.print(f"  日期: {dates[0]}, QA > {use_qa}, CF <= {cf}")
-        swath = reader.read(
-            use_data_dir,
-            dates[0],
-            read_extent,
-            qa_threshold=use_qa,
-        )
         console.print(
-            f"  → [green]{swath.n_pixels}[/green] 有效像元 "
-            f"({swath.n_files} 文件, {swath.n_broken} 损坏)"
+            f"  时间: {date_arg}, {satellite_filter_label(sensor, use_qa, cf)}"
         )
-        console.print(f"\n[bold]网格化:[/bold] {use_res}° 分辨率")
-        prepared = prepare_swath_grid(
-            swath.lon,
-            swath.lat,
-            swath.values,
-            read_extent,
-            use_res,
-            info.geometry,
-        )
-        swath_meta = {
-            "n_pixels": int(swath.n_pixels),
-            "n_files": int(swath.n_files),
-            "n_broken": int(swath.n_broken),
-            "qa_threshold": use_qa,
-            "cloud_fraction_max": cf,
-            "resolution_deg": use_res,
-        }
+        if sensor == "gems":
+            batch = read_scan_mean(
+                reader=reader,
+                data_dir=use_data_dir,
+                request=date_arg,
+                extent=read_extent,
+                res=analysis_res,
+            )
+            prepared = prepare_existing_grid(
+                batch.LON,
+                batch.LAT,
+                batch.grid,
+                info.geometry,
+                fill_gaps=False,
+            )
+            swath_meta = {
+                "n_pixels": batch.n_pixels,
+                "n_files": batch.n_files,
+                "n_broken": batch.n_broken,
+                "resolution_deg": use_res,
+                "cloud_fraction_max": cf,
+                **batch.metadata,
+            }
+            scientific_valid_mask = np.isfinite(prepared.values)
+        else:
+            swath = reader.read(
+                use_data_dir,
+                dates[0],
+                read_extent,
+                qa_threshold=use_qa,
+            )
+            console.print(
+                f"  → [green]{swath.n_pixels}[/green] 有效像元 "
+                f"({swath.n_files} 文件, {swath.n_broken} 损坏)"
+            )
+            console.print(f"\n[bold]网格化:[/bold] {use_res}° 分辨率")
+            prepared = prepare_swath_grid(
+                swath.lon,
+                swath.lat,
+                swath.values,
+                read_extent,
+                use_res,
+                info.geometry,
+            )
+            swath_meta = {
+                "n_pixels": int(swath.n_pixels),
+                "n_files": int(swath.n_files),
+                "n_broken": int(swath.n_broken),
+                "qa_threshold": use_qa,
+                "cloud_fraction_max": cf,
+                "resolution_deg": use_res,
+            }
     else:
         assert use_n_min is not None
         console.print(
@@ -225,13 +276,13 @@ def run_raster(
         console.print(
             f"\n[bold]读取数据:[/bold] {use_data_dir} (产品: {product})"
         )
-        console.print(f"  QA > {use_qa}, CF <= {cf}")
+        console.print(f"  {satellite_filter_label(sensor, use_qa, cf)}")
         window = compute_window_mean(
             reader=reader,
             data_dir=use_data_dir,
             dates=dates,
             extent=read_extent,
-            res=use_res,
+            res=analysis_res,
             qa_threshold=use_qa,
             label=product.upper(),
             console=console,
@@ -288,14 +339,41 @@ def run_raster(
             "coverage_days": coverage_days,
         }
 
+        if sensor == "gems":
+            swath_meta.pop("qa_threshold", None)
+            window_meta["aggregation"] = "equal_day_mean_of_equal_scan_means"
+            window_meta["daily"] = window.daily_metadata
+
     display_source = prepared.unmasked_values
-    display_grid = prepare_display_grid(
-        prepared.lon,
-        prepared.lat,
-        display_source,
-        info.geometry,
-        smooth_sigma=use_smooth,
-    )
+    statistics_grid = prepared.values.copy() if sensor == "gems" else None
+    display_lon, display_lat = prepared.lon, prepared.lat
+    display_support = None
+    if sensor == "gems":
+        from rsplot.geo.footprints import prepare_footprint_display
+
+        display = prepare_footprint_display(
+            prepared.lon,
+            prepared.lat,
+            display_source,
+            info.geometry,
+            analysis_res=analysis_res,
+            display_res=use_res,
+            smooth_sigma=use_smooth,
+        )
+        display_lon, display_lat = display.lon, display.lat
+        display_grid, display_support = display.values, display.support
+        swath_meta["resolution_deg"] = analysis_res
+        swath_meta["analysis_resolution_deg"] = analysis_res
+        swath_meta["display_resolution_deg"] = use_res
+        swath_meta["display_support"] = "fixed_analysis_valid_cells"
+    else:
+        display_grid = prepare_display_grid(
+            prepared.lon,
+            prepared.lat,
+            display_source,
+            info.geometry,
+            smooth_sigma=use_smooth,
+        )
 
     if not np.isfinite(display_grid).any():
         console.print(
@@ -304,7 +382,11 @@ def run_raster(
         )
         raise typer.Exit(1)
 
-    if use_smooth is not None and np.isfinite(prepared.values).any():
+    if (
+        sensor != "gems"
+        and use_smooth is not None
+        and np.isfinite(prepared.values).any()
+    ):
         console.print(f"  → 高斯平滑 sigma={use_smooth}")
         prepared = prepare_existing_grid(
             prepared.lon,
@@ -354,11 +436,25 @@ def run_raster(
         raise typer.Exit(1) from e
     console.print(f"  → 色标范围: {use_vmin:.1f} ~ {use_vmax:.1f}")
 
+    if output is None and sensor == "gems":
+        suffix = f"{dates[0]}_{dates[-1]}" if window_mode else date_arg
+        output = f"/tmp/rsplot_gems_{product}_{info.name}_{suffix}.png"
     if output is None:
         if window_mode:
             output = f"/tmp/rsplot_{info.name}_{dates[0]}_{dates[-1]}.png"
         else:
             output = f"/tmp/rsplot_{info.name}_{dates[0]}.png"
+    if title is None and sensor == "gems":
+        period = (
+            f"{dates[0]}~{dates[-1]} mean"
+            if window_mode
+            else (
+                f"{date_arg} CST scan"
+                if scan_mode
+                else f"{date_arg} daily mean (CST)"
+            )
+        )
+        title = f"GEMS {product.upper()} - {info.name} ({period})"
     if title is None and window_mode:
         title = (
             f"TROPOMI {product.upper()} - {info.name} "
@@ -367,8 +463,8 @@ def run_raster(
 
     console.print("\n[bold]绘图中...[/bold]")
     plot_raster(
-        prepared.lon,
-        prepared.lat,
+        display_lon,
+        display_lat,
         display_grid,
         info,
         dpi=use_dpi,
@@ -380,6 +476,7 @@ def run_raster(
         hcho_cmap_file=cfg.hcho_cmap_file,
         title=title,
         output=output,
+        **({"coverage_geometry": display_support} if sensor == "gems" else {}),
         colorbar_label=prod_info.colorbar_label,
     )
     console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
@@ -391,12 +488,16 @@ def run_raster(
         prod_info=prod_info,
         LON=prepared.lon,
         LAT=prepared.lat,
-        grid=prepared.values,
-        display_grid=display_grid,
+        grid=statistics_grid
+        if statistics_grid is not None
+        else prepared.values,
         swath_meta=swath_meta,
         vmin=use_vmin,
         vmax=use_vmax,
         output=output,
         window=window_meta,
+        display_grid=display_grid,
+        display_lon=display_lon,
+        display_lat=display_lat,
     )
     emit_result(result, output)

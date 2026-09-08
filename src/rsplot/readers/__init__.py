@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
@@ -39,6 +39,10 @@ class ProductInfo:
     level_defaults: dict[str, ProductPlotDefaults] = field(
         default_factory=dict
     )
+
+    sensor: str = "tropomi"
+    data_key: str | None = None
+    quantity: str | None = None
 
     def defaults_for_level(self, level: str) -> ProductPlotDefaults:
         """Return product-specific defaults for an administrative level."""
@@ -91,15 +95,45 @@ PRODUCT_REGISTRY: dict[str, ProductInfo] = {
 }
 
 
-def get_product_info(product: str) -> ProductInfo:
-    """Return ProductInfo for a product name."""
+def get_product_info(product: str, *, sensor: str = "tropomi") -> ProductInfo:
+    """Resolve a product within a sensor, preserving legacy registry keys."""
     key = product.lower()
+    sensor = sensor.lower()
+    if sensor not in ("tropomi", "gems"):
+        raise ValueError(f"未知卫星来源 '{sensor}'，可用: tropomi / gems")
     if key not in PRODUCT_REGISTRY:
         available = ", ".join(PRODUCT_REGISTRY)
         raise ValueError(
             f"Unsupported product '{product}'. Available: {available}"
         )
-    return PRODUCT_REGISTRY[key]
+    if sensor == "tropomi":
+        return PRODUCT_REGISTRY[key]
+    from rsplot.readers.gems import (
+        GemsHCHOReader,
+        GemsNO2Reader,
+        GemsO3PRReader,
+        GemsO3Reader,
+    )
+
+    readers = {
+        "no2": GemsNO2Reader,
+        "hcho": GemsHCHOReader,
+        "o3": GemsO3Reader,
+        "o3pr": GemsO3PRReader,
+    }
+    quantities = {
+        "no2": "tropospheric_no2_column",
+        "hcho": "hcho_column",
+        "o3": "total_ozone_column",
+        "o3pr": "tropospheric_ozone_column",
+    }
+    return replace(
+        PRODUCT_REGISTRY[key],
+        reader_cls=readers[key],
+        sensor="gems",
+        data_key="gems_o3" if key == "o3pr" else f"gems_{key}",
+        quantity=quantities[key],
+    )
 
 
 def auto_vrange(

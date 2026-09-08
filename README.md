@@ -223,7 +223,7 @@ output resolution, regional statistics, administrative summaries, and hotspots.
   equal weight. Coverage is the valid selected-cell count divided by the
   total selected-cell count, not the percentage of colored land area.
   Existing product-specific gap-filling and statistical smoothing behavior
-  remains unchanged.
+  remains unchanged; GEMS statistics remain unfilled and unsmoothed.
 
 The PNG sidecar adds `boundary_policy` with the selection and weighting
 rules, the displayed intersecting-cell count, and the count whose centers
@@ -238,6 +238,132 @@ and both PlateCarree and Mercator projections):
 
 ```bash
 uv run python -m unittest discover -s tests -p 'test_boundary_display.py' -v
+```
+
+## GEMS satellite products
+
+Use `--sensor gems` with `raster`, `recent`, and `overlay`. Omitting
+`--sensor` retains TROPOMI behavior. GEMS FNR and satellite trend curves are
+not included in this release.
+
+Configure the three archive roots in `[paths.data_dirs]`:
+
+```toml
+gems_no2 = "/path/to/GEMS/NO2"
+gems_hcho = "/path/to/GEMS/HCHO"
+gems_o3 = "/path/to/GEMS/O3"
+```
+
+Alternatively set `RSPLOT_DATA_DIR_GEMS_NO2`, `RSPLOT_DATA_DIR_GEMS_HCHO`,
+and `RSPLOT_DATA_DIR_GEMS_O3`. Each root contains `YYYYMM/DD/*.nc`.
+`--data-dir` (`--raster-dir` for overlay) overrides the configured root.
+
+| Product | GEMS variable | Display unit |
+| --- | --- | --- |
+| `no2` | `Data Fields/ColumnAmountNO2Trop` | 10¹⁵ molecules/cm² |
+| `hcho` | `Data Fields/ColumnAmount` | 10¹⁵ molecules/cm² |
+| `o3` | `product/total_ozone_column` | DU |
+| `o3pr` | `product/troposphere_ozone_column` | DU |
+
+Both ozone quantities use the O3P files in `gems_o3`; `o3pr` reads the
+provided tropospheric column without reintegrating the profile. Neither
+quantity represents surface ozone concentration.
+
+GEMS dates and scan requests use **Asia/Shanghai**. `YYYYMMDDHHMM` selects
+an exact nominal scan; `YYYYMMDD` computes the day's valid-scan mean.
+For example, `202609010845` selects the `20260901_0045` UTC archive scan.
+The filename is the nominal scan time, not a simultaneous observation time
+for every pixel: GEMS scans begin at :45 UTC and take about 30 minutes
+([NESC operation schedule](https://nesc.nier.go.kr/en/html/satellite/operation.do)).
+Missing scan requests report available local times instead of selecting a
+replacement. Duplicate files for one nominal scan are rejected; use a root
+containing one archive version.
+
+```bash
+# Exact scan, daily mean, and multi-day mean.
+rsplot raster 安徽 202609011145 --sensor gems -p no2 \
+  --basemap none --output /tmp/gems_no2_scan.png
+rsplot raster 安徽 20260901 --sensor gems -p hcho \
+  --basemap none --output /tmp/gems_hcho_daily.png
+rsplot raster 安徽 20260901-20260902 --sensor gems -p o3pr \
+  --basemap none --output /tmp/gems_o3pr_window.png
+
+# Recent daily regional statistics (JSON only).
+rsplot recent 安徽 20260902 --days 2 --source raster --sensor gems -p no2 \
+  --output /tmp/gems_no2_recent.json
+
+# 11:45 China-time scan with observations at the nearest hour, 12:00.
+rsplot overlay 安徽 202609011145 --sensor gems -p no2 \
+  --basemap none --output /tmp/gems_no2_overlay.png
+# Use --station-datetime YYYYMMDDHH for an intentional time override.
+```
+
+Each scan is first remapped by pixel/target overlap area in the equal-area
+EPSG:6933 projection, onto a **globally aligned 0.05° analysis grid**. This is
+a numerical analysis spacing, not native satellite resolution. Daily means
+weight valid scans equally at each grid cell; multi-day means then weight
+valid days equally. A daily cell needs at least one valid scan. Window `--n-min`
+continues to count **days**, using the existing product defaults, and is not
+available for a single scan. These are means of available daytime scans,
+not full 24-hour means. Empty scans and failed files do not contribute zeros.
+
+For GEMS `raster` and `overlay`, **`--res` controls only the display grid**.
+Display cells receive area-weighted analysis values and are clipped to the
+fixed analysis grid's valid-cell union and the administrative boundary.
+Changing `--res` can change displayed averages, but cannot move the valid
+support or change the scientific statistics. `--smooth` is applied on the
+fixed analysis grid for display only, preserving its valid mask. GEMS
+`recent` uses the same 0.05° analysis spacing and ignores `--res`.
+TROPOMI keeps its existing resolution behavior.
+
+When available, GEMS pixel boundaries use file `CornerLongitude` and
+`CornerLatitude` arrays. The checked O3P and NO2 files have centers only;
+their quadrilateral boundaries are **estimates from adjacent unfiltered
+native centers**, with linear extrapolation at the outer scan edge. Missing
+geolocation is not interpolated, and rejected retrievals do not contribute
+values. This is not a recovery of official footprints or extra observations.
+Analysis cells need positive-area overlap with valid footprints; their
+coverage percentage counts valid analysis centers, not precisely observed
+land area. Subcell gaps remain below the 0.05° analysis spacing.
+
+Sidecars record `footprint_source` per scan, `spatial_aggregation`,
+`area_crs`, `analysis_resolution_deg`, `display_resolution_deg`, and
+`display_support`. The compatibility `swath.resolution_deg` describes the
+analysis grid. Statistics differ from the previous center-point-binning
+implementation, but remain identical across display resolutions.
+
+The initial GEMS filter retains final quality flag **0**, finite coordinates
+and columns, SZA/VZA below 70°, and a nonnegative cloud measure no greater
+than `--cf` (default 0.5). The cloud measures differ: NO2 uses `CloudFraction`,
+HCHO uses `CloudRadianceFraction`, and O3P uses `effective_cloud_fraction`.
+`--qa` applies only to TROPOMI and is rejected for GEMS. Quality-filtered
+negative columns are retained; HCHO gap-filled flag classes are excluded.
+This explicit filter is recorded with each file's version and variable in
+JSON; quality flag meanings must not be transferred between products.
+
+GEMS JSON statistics, spatial summaries, and hotspots use the **unfilled,
+unsmoothed** regional grid. Smoothing affects the map only and cannot create
+new valid cells. Sidecars include `sensor`, `quantity`, the requested local
+time, nominal UTC/local scan times, actual observation time ranges, filter
+settings, file failures, and scan-count summaries. Window metadata retains
+per-day diagnostics. Existing TROPOMI fields remain compatible; the boundary
+policy block described above is additive.
+
+GEMS `overlay` accepts an exact scan or a daily mean. A daily mean requires
+an explicit `--station-datetime YYYYMMDDHH`; its title and JSON distinguish
+the daily satellite mean from the hourly station observation, without a
+fictitious scan-time offset. Exact scans match the nearest station hour
+(at most 30 minutes, ties forward). A missing station hour is an error.
+`--station-datetime` records a manual override and its time difference.
+NO2 pairs with NO2; O3/O3PR pair with O3; HCHO requires an explicit `--var`.
+Satellite columns and station concentrations retain independent colorbars
+and units; the map shows spatial juxtaposition, not a column-to-surface
+conversion.
+
+Run the self-contained GEMS regressions without adding pytest:
+
+```bash
+uv run python -m unittest discover -s tests -p 'test_gems.py' -v
 ```
 
 ## License

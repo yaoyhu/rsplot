@@ -7,9 +7,9 @@ remain available for compatibility.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import numpy as np
@@ -135,6 +135,7 @@ class WindowResult:
     n_pixels_total: int
     n_files_total: int
     n_broken_total: int
+    daily_metadata: dict[str, Any] = field(default_factory=dict)
 
 
 def compute_window_mean(
@@ -156,6 +157,7 @@ def compute_window_mean(
     valid_counts: np.ndarray | None = None
     dates_found: list[str] = []
     dates_failed: dict[str, str] = {}
+    daily_metadata: dict[str, Any] = {}
     n_pix_total = 0
     n_files_total = 0
     n_broken_total = 0
@@ -164,19 +166,22 @@ def compute_window_mean(
 
     for date in track(dates, description=f"[cyan]读取 {label} 窗口..."):
         try:
-            swath = reader.read(
-                data_dir,
-                date,
-                extent,
+            batch = read_scan_mean(
+                reader=reader,
+                data_dir=data_dir,
+                request=date,
+                extent=extent,
+                res=res,
                 qa_threshold=qa_threshold,
             )
-            day_lon, day_lat, grid = grid_data(
-                swath.lon,
-                swath.lat,
-                swath.values,
-                extent,
-                res,
-            )
+            if batch.metadata:
+                daily_metadata[date] = batch.metadata
+            n_pix_total += batch.n_pixels
+            n_files_total += batch.n_files
+            n_broken_total += batch.n_broken
+            day_lon, day_lat, grid = batch.LON, batch.LAT, batch.grid
+            if not np.isfinite(grid).any():
+                raise ValueError(batch.failure_message())
             LON, LAT = day_lon, day_lat
             if sum_grid is None:
                 sum_grid = np.zeros(grid.shape, dtype=float)
@@ -185,9 +190,6 @@ def compute_window_mean(
             np.add(sum_grid, grid, out=sum_grid, where=finite)
             valid_counts += finite
             dates_found.append(date)
-            n_pix_total += int(swath.n_pixels)
-            n_files_total += int(swath.n_files)
-            n_broken_total += int(swath.n_broken)
         except (FileNotFoundError, ValueError) as e:
             dates_failed[date] = str(e).splitlines()[0]
 
@@ -221,4 +223,125 @@ def compute_window_mean(
         n_pixels_total=n_pix_total,
         n_files_total=n_files_total,
         n_broken_total=n_broken_total,
+        daily_metadata=daily_metadata,
+    )
+
+
+@dataclass
+class ScanMean:
+    """An unfilled grid mean with per-cell temporal sample counts."""
+
+    LON: np.ndarray
+    LAT: np.ndarray
+    grid: np.ndarray
+    n_valid: np.ndarray
+    n_pixels: int
+    n_files: int
+    n_broken: int
+    metadata: dict[str, Any]
+
+    def failure_message(self) -> str:
+        """Keep CLI errors compact; full per-file diagnostics stay in JSON."""
+        message = (
+            f"{self.metadata.get('request', '')} 区域内无有效扫描 "
+            f"({self.n_files} 文件, {self.n_broken} 损坏)。"
+        )
+        examples = list(self.metadata.get("failed_files", {}).items())[:3]
+        if examples:
+            from pathlib import Path
+
+            message += " " + "; ".join(
+                f"{Path(path).name}: {error}" for path, error in examples
+            )
+        return message
+
+
+def read_scan_mean(
+    *,
+    reader: BaseReader,
+    data_dir: str,
+    request: str,
+    extent: tuple[float, float, float, float],
+    res: float,
+    qa_threshold: float = 0.5,
+) -> ScanMean:
+    """Grid each scan independently, then average valid scans equally."""
+    # A NaN sentinel establishes the grid even if every scan is invalid.
+    lon, lat, template = grid_data(
+        np.array([extent[0]]),
+        np.array([extent[2]]),
+        np.array([np.nan]),
+        extent,
+        res,
+    )
+    footprints = getattr(reader, "uses_footprints", False)
+    if footprints:
+        from rsplot.geo.footprints import overlap_mean, regular_grid
+
+        lon, lat = regular_grid(extent, res)
+        template = np.full(lon.shape, np.nan)
+    total = np.zeros(template.shape, dtype=float)
+    counts = np.zeros(template.shape, dtype=np.int32)
+    n_pixels = n_files = n_broken = 0
+    scans = []
+    iterator = getattr(reader, "iter_scans", None)
+    scans_iter = (
+        iterator(data_dir, request, extent, qa_threshold)
+        if iterator is not None
+        else (reader.read(data_dir, request, extent, qa_threshold),)
+    )
+    for scan in scans_iter:
+        n_pixels += scan.n_pixels
+        n_files += scan.n_files
+        n_broken += scan.n_broken
+        if scan.metadata:
+            scans.append(scan.metadata)
+        if not scan.n_pixels:
+            continue
+        if footprints:
+            if scan.corner_lon is None or scan.corner_lat is None:
+                raise ValueError("GEMS 扫描缺少像元边界，不能退回中心点分箱。")
+            grid = overlap_mean(
+                scan.corner_lon, scan.corner_lat, scan.values, lon, lat, res
+            )
+        else:
+            _, _, grid = grid_data(
+                scan.lon, scan.lat, scan.values, extent, res
+            )
+        valid = np.isfinite(grid)
+        np.add(total, grid, out=total, where=valid)
+        counts += valid
+    mean = np.full(template.shape, np.nan)
+    np.divide(total, counts, out=mean, where=counts > 0)
+    covered = counts[counts > 0]
+    metadata = {
+        "request": request,
+        "input_timezone": "Asia/Shanghai",
+        "aggregation": "scan" if len(request) == 12 else "equal_scan_mean",
+        "scans": scans,
+        "n_scans_found": len(scans),
+        "n_scans_valid": sum(s.get("n_pixels", 0) > 0 for s in scans),
+        "failed_files": {s["file"]: s["error"] for s in scans if "error" in s},
+        "coverage_scope": "read_extent",
+        "read_extent": list(extent),
+        "coverage_scans": {
+            "min": int(covered.min()) if covered.size else 0,
+            "max": int(covered.max()) if covered.size else 0,
+            "mean": float(covered.mean()) if covered.size else 0.0,
+        },
+    }
+    if footprints:
+        metadata["spatial_aggregation"] = "footprint_overlap_area_mean"
+        metadata["area_crs"] = "EPSG:6933"
+        metadata["analysis_resolution_deg"] = res
+        metadata["grid_alignment"] = "global_multiples_of_resolution"
+    return ScanMean(
+        lon,
+        lat,
+        mean,
+        counts,
+        n_pixels,
+        n_files,
+        n_broken,
+        metadata if scans else {},
     )

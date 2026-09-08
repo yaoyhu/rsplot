@@ -7,6 +7,9 @@ from typing import TYPE_CHECKING
 import typer
 
 from rsplot.commands.common import (
+    resolve_satellite,
+    satellite_errors,
+    satellite_filter_label,
     validate_positive,
     validate_unit_interval,
 )
@@ -16,6 +19,7 @@ if TYPE_CHECKING:
     from rich.console import Console
 
 
+@satellite_errors
 def run_recent(
     *,
     region: str,
@@ -23,6 +27,7 @@ def run_recent(
     days: int,
     source: str,
     product: str,
+    sensor: str = "tropomi",
     var: str,
     level: str | None,
     data_dir: str | None,
@@ -35,7 +40,6 @@ def run_recent(
     """Execute recent-day summaries without owning the Typer signature."""
     from rsplot.config import STATION_VAR_META
     from rsplot.geo.boundaries import resolve_region
-    from rsplot.readers import get_product_info
     from rsplot.recent import (
         build_recent_result,
         parse_recent_dates,
@@ -56,6 +60,13 @@ def run_recent(
         raise typer.Exit(1) from e
 
     cfg = AppConfig.load()
+    if use_source == "raster":
+        prod_info, use_qa = resolve_satellite(
+            product, sensor, qa, cfg, console
+        )
+        sensor = prod_info.sensor
+    elif sensor.lower() != "tropomi":
+        raise ValueError("--sensor gems 仅用于 --source raster。")
     console.print(f"[bold]解析区域:[/bold] {region}")
     info = resolve_region(region, cfg, level_override=level)
     console.print(f"  → [green]{info.name}[/green] (级别: {info.level})")
@@ -66,7 +77,8 @@ def run_recent(
     if output is None:
         if use_source == "raster":
             output = (
-                f"/tmp/rsplot_recent_{info.name}_{product}_"
+                f"/tmp/rsplot_recent_{'gems_' if sensor == 'gems' else ''}"
+                f"{info.name}_{product}_"
                 f"{dates[0]}_{dates[-1]}.json"
             )
         else:
@@ -76,7 +88,6 @@ def run_recent(
             )
 
     if use_source == "raster":
-        prod_info = get_product_info(product)
         product_defaults = prod_info.defaults_for_level(info.level)
         use_res = (
             res
@@ -85,7 +96,6 @@ def run_recent(
             if product_defaults.res is not None
             else info.params.res
         )
-        use_qa = qa if qa is not None else cfg.qa_threshold
         try:
             validate_positive(use_res, "--res")
             validate_unit_interval(use_qa, "--qa")
@@ -93,13 +103,19 @@ def run_recent(
         except ValueError as e:
             console.print(f"[red]{e}[/red]")
             raise typer.Exit(1) from e
+        if sensor == "gems":
+            from rsplot.readers.gems import GEMS_ANALYSIS_RESOLUTION
+
+            use_res = GEMS_ANALYSIS_RESOLUTION
         use_data_dir = (
-            data_dir if data_dir is not None else cfg.get_data_dir(product)
+            data_dir
+            if data_dir is not None
+            else cfg.get_data_dir(prod_info.data_key or product)
         )
         console.print(
             f"\n[bold]统计栅格:[/bold] {use_data_dir} "
-            f"(产品: {product}, QA > {use_qa}, "
-            f"CF <= {cf}, res={use_res})"
+            f"(产品: {product}, {satellite_filter_label(sensor, use_qa, cf)}, "
+            f"res={use_res})"
         )
         daily = summarize_recent_raster(
             region=info,
@@ -124,6 +140,8 @@ def run_recent(
                 "resolution_deg": use_res,
             },
             product=product,
+            sensor=sensor,
+            quantity=prod_info.quantity,
             unit=prod_info.colorbar_label,
             output=output,
         )
@@ -132,6 +150,10 @@ def run_recent(
             available = ", ".join(STATION_VAR_META)
             console.print(f"[red]未知变量 '{var}'[/red]。可用: {available}")
             raise typer.Exit(1)
+        if sensor == "gems":
+            from rsplot.readers.gems import GEMS_ANALYSIS_RESOLUTION
+
+            use_res = GEMS_ANALYSIS_RESOLUTION
         use_data_dir = (
             data_dir if data_dir is not None else cfg.get_data_dir("guokong")
         )

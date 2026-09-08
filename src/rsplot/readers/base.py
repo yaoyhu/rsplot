@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from collections.abc import Iterator
+from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 import xarray as xr
@@ -19,10 +21,23 @@ class SwathData:
     n_pixels: int
     n_files: int
     n_broken: int
+    metadata: dict[str, Any] = field(default_factory=dict)
+    corner_lon: np.ndarray | None = None  # (n_pixels, 4)
+    corner_lat: np.ndarray | None = None  # (n_pixels, 4)
 
 
 class BaseReader(ABC):
     """Interface for reading a single-day satellite product."""
+
+    def iter_scans(
+        self,
+        data_dir: str,
+        date: str,
+        extent: tuple[float, float, float, float],
+        qa_threshold: float = 0.5,
+    ) -> Iterator[SwathData]:
+        """Yield temporal batches; legacy readers supply one daily batch."""
+        yield self.read(data_dir, date, extent, qa_threshold)
 
     @abstractmethod
     def read(

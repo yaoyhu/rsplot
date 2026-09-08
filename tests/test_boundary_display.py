@@ -27,6 +27,7 @@ from rsplot.readers import get_product_info
 from rsplot.readers.base import SwathData
 from rsplot.result_builders.common import grid_boundary_policy
 from rsplot.results import build_raster_result
+from rsplot.temporal import ScanMean
 
 
 class BoundaryGridTests(unittest.TestCase):
@@ -61,7 +62,7 @@ class BoundaryGridTests(unittest.TestCase):
             region=self.region,
             product="o3pr",
             date="20260907",
-            prod_info=get_product_info("o3pr"),
+            prod_info=get_product_info("o3pr", sensor="gems"),
             LON=self.lon,
             LAT=self.lat,
             grid=prepared.values,
@@ -175,6 +176,71 @@ class ClipRenderingTests(unittest.TestCase):
 
 
 class BoundaryCommandTests(unittest.TestCase):
+    def test_gems_edge_only_region_renders_with_zero_statistical_cells(self):
+        lon, lat = np.meshgrid([0.5, 1.5, 2.5], [0.5, 1.5, 2.5])
+        raw = np.full(lon.shape, np.nan)
+        raw[0, 0] = 40
+        region = RegionInfo(
+            "tiny",
+            "city",
+            box(0.7, 0.7, 0.9, 0.9),
+            (0.7, 0.9, 0.7, 0.9),
+            LEVEL_DEFAULTS["city"],
+        )
+        batch = ScanMean(
+            lon,
+            lat,
+            raw,
+            np.isfinite(raw).astype(int),
+            1,
+            1,
+            0,
+            {"request": "20260907"},
+        )
+        cfg = AppConfig(data_dirs={"gems_o3": "unused"})
+        with (
+            tempfile.TemporaryDirectory() as folder,
+            patch("rsplot.config.AppConfig.load", return_value=cfg),
+            patch("rsplot.geo.boundaries.resolve_region", return_value=region),
+            patch("rsplot.plotting.styles.setup_fonts"),
+            patch("rsplot.temporal.read_scan_mean", return_value=batch),
+            patch("rsplot.readers.gems.GEMS_ANALYSIS_RESOLUTION", 1.0),
+            patch("rsplot.plotting.raster.plot_raster") as render,
+        ):
+            out = Path(folder) / "edge.png"
+            result = CliRunner().invoke(
+                app,
+                [
+                    "raster",
+                    "tiny",
+                    "20260907",
+                    "--sensor",
+                    "gems",
+                    "-p",
+                    "o3pr",
+                    "--basemap",
+                    "none",
+                    "--res",
+                    "1",
+                    "--smooth",
+                    "0",
+                    "--output",
+                    str(out),
+                ],
+            )
+            self.assertEqual(
+                result.exit_code, 0, result.output + str(result.exception)
+            )
+            self.assertEqual(render.call_args.args[2][0, 0], 40)
+            data = json.loads(out.with_suffix(".json").read_text())
+            self.assertEqual(data["stats"]["valid_region_pixels"], 0)
+            self.assertEqual(
+                data["boundary_policy"]["display"][
+                    "n_valid_intersecting_cells"
+                ],
+                1,
+            )
+
     def test_tropomi_display_extension_preserves_legacy_statistics(self):
         from rsplot.geo.processing import prepare_swath_grid
 

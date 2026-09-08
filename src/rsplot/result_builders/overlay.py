@@ -37,6 +37,9 @@ def build_overlay_result(
     cities_gdf: gpd.GeoDataFrame | None,
     output: str,
     display_grid: np.ndarray | None = None,
+    display_lon: np.ndarray | None = None,
+    display_lat: np.ndarray | None = None,
+    time_matching: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Combine raster and station result blocks without shared duplication."""
     raster_block = build_raster_result(
@@ -47,8 +50,10 @@ def build_overlay_result(
         LON=LON,
         LAT=LAT,
         grid=grid,
-        display_grid=display_grid,
         swath_meta=swath_meta,
+        display_grid=display_grid,
+        display_lon=display_lon,
+        display_lat=display_lat,
         vmin=raster_vmin,
         vmax=raster_vmax,
         output=output,
@@ -66,7 +71,7 @@ def build_overlay_result(
         raster_block.pop(key, None)
         station_block.pop(key, None)
 
-    return {
+    result = {
         "command": "overlay",
         "image": output,
         "region": serialize_region(region),
@@ -75,3 +80,8 @@ def build_overlay_result(
         "raster": raster_block,
         "station": station_block,
     }
+    if prod_info.sensor == "gems":
+        result["sensor"] = "gems"
+    if time_matching is not None:
+        result["time_matching"] = time_matching
+    return result

@@ -23,6 +23,9 @@ else:
 # Safe built-in path defaults
 # ---------------------------------------------------------------------------
 KNOWN_DATA_PRODUCTS = (
+    "gems_no2",
+    "gems_hcho",
+    "gems_o3",
     "no2",
     "o3",
     "o3pr",

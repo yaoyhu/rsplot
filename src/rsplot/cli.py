@@ -45,14 +45,18 @@ def _callback(
 @app.command()
 def raster(
     region: str = typer.Argument(
-        ..., help="区域名称，如 中国、安徽、合肥、YRD、合肥/蜀山"
+        ...,
+        help="区域名称，如 中国、安徽、合肥、YRD、合肥/蜀山",
     ),
     date_arg: str = typer.Argument(
         ...,
-        help="单日 YYYYMMDD 走单日路径；带 --days 或写成 YYYYMMDD-YYYYMMDD "
+        help="GEMS: 北京时间 YYYYMMDDHHMM 精确扫描，YYYYMMDD 日均；单日 YYYYMMDD 走单日路径；带 --days 或写成 YYYYMMDD-YYYYMMDD "
         "时切换为窗口均值（HCHO 单日覆盖率低，月均更可读）",
     ),
     # --- optional overrides ---
+    sensor: str = typer.Option(
+        "tropomi", "--sensor", help="卫星来源: tropomi / gems"
+    ),
     product: str = typer.Option(
         "o3",
         "--product",
@@ -92,7 +96,11 @@ def raster(
         help="输出文件路径，不指定则弹窗显示。",
     ),
     dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
-    res: float | None = typer.Option(None, "--res", help="网格分辨率 (度)"),
+    res: float | None = typer.Option(
+        None,
+        "--res",
+        help="网格分辨率 (度)；GEMS 绘图仅控制显示，分析网格固定 0.05°",
+    ),
     basemap: str | None = typer.Option(
         None,
         "--basemap",
@@ -106,7 +114,9 @@ def raster(
         None, "--smooth", help="高斯平滑 sigma"
     ),
     title: str | None = typer.Option(None, "--title", help="自定义标题"),
-    qa: float | None = typer.Option(0.5, "--qa", help="QA 阈值 (0-1)"),
+    qa: float | None = typer.Option(
+        None, "--qa", help="TROPOMI QA 阈值 (0-1)，默认取配置；GEMS 不适用"
+    ),
     cf: float = typer.Option(
         0.5,
         "--cf",
@@ -128,6 +138,7 @@ def raster(
         region=region,
         date_arg=date_arg,
         product=product,
+        sensor=sensor,
         days=days,
         n_min=n_min,
         level=level,
@@ -620,19 +631,28 @@ def trend(
 @app.command()
 def overlay(
     region: str = typer.Argument(
-        ..., help="区域名称，如 中国、安徽、合肥、YRD、合肥/蜀山"
+        ...,
+        help="区域名称，如 中国、安徽、合肥、YRD、合肥/蜀山",
     ),
     datetime_str: str = typer.Argument(
         ...,
-        help="YYYYMMDDHH (精确小时) 或 YYYYMMDD (自动取最新小时)；"
+        help="GEMS: 北京时间 YYYYMMDD 日均（需 --station-datetime），或 YYYYMMDDHHMM 精确扫描（自动匹配最近站点整点）；TROPOMI: YYYYMMDDHH (精确小时) 或 YYYYMMDD (自动取最新小时)；"
         "日期部分用于卫星，小时部分用于站点",
     ),
     # --- satellite product ---
+    sensor: str = typer.Option(
+        "tropomi", "--sensor", help="卫星来源: tropomi / gems"
+    ),
     product: str = typer.Option(
         "o3",
         "--product",
         "-p",
         help="卫星产品类型: no2 / o3 / o3pr / hcho",
+    ),
+    station_datetime: str | None = typer.Option(
+        None,
+        "--station-datetime",
+        help="GEMS 叠加站点时间，北京时间 YYYYMMDDHH",
     ),
     # --- station variable ---
     var: str | None = typer.Option(
@@ -665,7 +685,11 @@ def overlay(
         help="输出文件路径，不指定则弹窗显示。",
     ),
     dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
-    res: float | None = typer.Option(None, "--res", help="网格分辨率 (度)"),
+    res: float | None = typer.Option(
+        None,
+        "--res",
+        help="网格分辨率 (度)；GEMS 绘图仅控制显示，分析网格固定 0.05°",
+    ),
     basemap: str | None = typer.Option(
         None,
         "--basemap",
@@ -682,7 +706,9 @@ def overlay(
     smooth: float | None = typer.Option(
         None, "--smooth", help="高斯平滑 sigma"
     ),
-    qa: float | None = typer.Option(0.5, "--qa", help="QA 阈值 (0-1)"),
+    qa: float | None = typer.Option(
+        None, "--qa", help="TROPOMI QA 阈值 (0-1)，默认取配置；GEMS 不适用"
+    ),
     cf: float = typer.Option(
         0.5,
         "--cf",
@@ -708,7 +734,9 @@ def overlay(
     run_overlay(
         region=region,
         datetime_str=datetime_str,
+        station_datetime=station_datetime,
         product=product,
+        sensor=sensor,
         var=var,
         level=level,
         raster_dir=raster_dir,
@@ -746,6 +774,9 @@ def recent(
         "--source",
         help="数据源: raster / station",
     ),
+    sensor: str = typer.Option(
+        "tropomi", "--sensor", help="卫星来源: tropomi / gems"
+    ),
     product: str = typer.Option(
         "o3",
         "--product",
@@ -776,8 +807,14 @@ def recent(
         "-o",
         help="输出 JSON 路径",
     ),
-    res: float | None = typer.Option(None, "--res", help="网格分辨率 (度)"),
-    qa: float | None = typer.Option(0.5, "--qa", help="QA 阈值 (0-1)"),
+    res: float | None = typer.Option(
+        None,
+        "--res",
+        help="TROPOMI 网格分辨率 (度)；GEMS 统计固定使用 0.05°，忽略此选项",
+    ),
+    qa: float | None = typer.Option(
+        None, "--qa", help="TROPOMI QA 阈值 (0-1)，默认取配置；GEMS 不适用"
+    ),
     cf: float = typer.Option(
         0.5,
         "--cf",
@@ -800,6 +837,7 @@ def recent(
         days=days,
         source=source,
         product=product,
+        sensor=sensor,
         var=var,
         level=level,
         data_dir=data_dir,

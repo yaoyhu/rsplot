@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, ParamSpec, TypeVar
+
+import typer
 
 if TYPE_CHECKING:
     import geopandas as gpd
     from rich.console import Console
 
+    from rsplot.config import AppConfig
     from rsplot.geo.boundaries import RegionInfo
+    from rsplot.readers import ProductInfo
 
 
 FORECAST_STATION_PAIR: dict[str, str] = {
@@ -110,3 +115,61 @@ def print_failed_dates(
         console.print(f"    - {date}: {message}")
     if len(items) > max_items:
         console.print(f"    ... 另有 {len(items) - max_items} 天")
+
+
+def resolve_satellite(
+    product: str,
+    sensor: str,
+    qa: float | None,
+    cfg: AppConfig,
+    console: Console,
+) -> tuple[ProductInfo, float]:
+    """Resolve source and QA policy before opening regional/data files."""
+    from rsplot.readers import get_product_info
+
+    try:
+        info = get_product_info(product, sensor=sensor)
+        if info.sensor == "gems" and qa is not None:
+            raise ValueError(
+                "--qa 仅用于 TROPOMI；GEMS 使用最终质量标记 = 0 "
+                "及 SZA/VZA < 70°，云量可通过 --cf 设置。"
+            )
+        threshold = (
+            0.5
+            if info.sensor == "gems"
+            else qa
+            if qa is not None
+            else cfg.qa_threshold
+        )
+        validate_unit_interval(threshold, "--qa")
+    except ValueError as error:
+        console.print(f"[red]{error}[/red]")
+        raise typer.Exit(1) from error
+    return info, threshold
+
+
+def satellite_filter_label(sensor: str, qa: float, cf: float) -> str:
+    """Describe the actual filter rather than a synthetic GEMS QA value."""
+    quality = (
+        "最终质量标记 = 0, SZA/VZA < 70°" if sensor == "gems" else f"QA > {qa}"
+    )
+    return f"{quality}, 云量 <= {cf}"
+
+
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
+
+
+def satellite_errors(function: Callable[_P, _R]) -> Callable[_P, _R]:
+    """Render expected satellite input/data errors in the CLI's style."""
+    from functools import wraps
+
+    @wraps(function)
+    def wrapped(*args: _P.args, **kwargs: _P.kwargs) -> _R:
+        try:
+            return function(*args, **kwargs)
+        except (ValueError, FileNotFoundError, OSError) as error:
+            kwargs["console"].print(f"[red]{error}[/red]")
+            raise typer.Exit(1) from error
+
+    return wrapped

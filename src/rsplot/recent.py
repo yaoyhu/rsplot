@@ -20,7 +20,11 @@ from rich.progress import track
 
 from rsplot.config import get_exceedance_threshold
 from rsplot.geo.gridding import grid_coverage_in_region
-from rsplot.geo.processing import buffered_extent, prepare_swath_grid
+from rsplot.geo.processing import (
+    buffered_extent,
+    prepare_existing_grid,
+    prepare_swath_grid,
+)
 from rsplot.readers import ProductInfo
 from rsplot.readers.guokong import (
     mask_stations_to_region,
@@ -87,16 +91,47 @@ def summarize_recent_raster(
     for d in track(
         dates, description=f"[cyan]统计 {product.upper()} 最近数据..."
     ):
+        meta: dict[str, Any] = {}
         try:
-            swath = reader.read(data_dir, d, read_extent, qa_threshold)
-            prepared = prepare_swath_grid(
-                swath.lon,
-                swath.lat,
-                swath.values,
-                read_extent,
-                res,
-                region.geometry,
-            )
+            if prod_info.sensor == "gems":
+                from rsplot.readers.gems import GEMS_ANALYSIS_RESOLUTION
+                from rsplot.temporal import read_scan_mean
+
+                batch = read_scan_mean(
+                    reader=reader,
+                    data_dir=data_dir,
+                    request=d,
+                    extent=read_extent,
+                    res=GEMS_ANALYSIS_RESOLUTION,
+                )
+                prepared = prepare_existing_grid(
+                    batch.LON,
+                    batch.LAT,
+                    batch.grid,
+                    region.geometry,
+                    fill_gaps=False,
+                )
+                meta = {
+                    "n_pixels": batch.n_pixels,
+                    "n_files": batch.n_files,
+                    "n_broken": batch.n_broken,
+                    **batch.metadata,
+                }
+            else:
+                swath = reader.read(data_dir, d, read_extent, qa_threshold)
+                prepared = prepare_swath_grid(
+                    swath.lon,
+                    swath.lat,
+                    swath.values,
+                    read_extent,
+                    res,
+                    region.geometry,
+                )
+                meta = {
+                    "n_pixels": int(swath.n_pixels),
+                    "n_files": int(swath.n_files),
+                    "n_broken": int(swath.n_broken),
+                }
             stats = _grid_stats(
                 prepared.lon,
                 prepared.lat,
@@ -111,11 +146,7 @@ def summarize_recent_raster(
                     ok=True,
                     value=stats.get("mean"),
                     stats=stats,
-                    meta={
-                        "n_pixels": int(swath.n_pixels),
-                        "n_files": int(swath.n_files),
-                        "n_broken": int(swath.n_broken),
-                    },
+                    meta=meta,
                 )
             )
         except (FileNotFoundError, ValueError) as e:
@@ -125,7 +156,7 @@ def summarize_recent_raster(
                     ok=False,
                     value=None,
                     stats={},
-                    meta={},
+                    meta=meta,
                     error=str(e).splitlines()[0],
                 )
             )
@@ -207,6 +238,8 @@ def build_recent_result(
     product: str | None = None,
     variable: str | None = None,
     unit: str | None = None,
+    sensor: str | None = None,
+    quantity: str | None = None,
 ) -> dict[str, Any]:
     """Build the JSON payload for a recent run."""
     daily_rows = [_daily_to_json(row) for row in daily]
@@ -240,6 +273,16 @@ def build_recent_result(
         "trend": _trend_summary(daily),
         "warnings": _warnings(daily),
     }
+    if source == "raster" and sensor == "gems":
+        result["sensor"] = sensor
+        result["quantity"] = quantity
+        result["statistics_basis"] = "unfilled_unsmoothed_grid"
+        result["input_timezone"] = "Asia/Shanghai"
+        result["params"] = {
+            key: value
+            for key, value in params.items()
+            if key != "qa_threshold"
+        }
     if product is not None:
         result["product"] = product
     if variable is not None:

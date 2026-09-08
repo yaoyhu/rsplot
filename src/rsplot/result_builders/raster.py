@@ -34,6 +34,8 @@ def build_raster_result(
     vmax: float,
     output: str,
     display_grid: np.ndarray | None = None,
+    display_lon: np.ndarray | None = None,
+    display_lat: np.ndarray | None = None,
     window: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the stable JSON sidecar payload for a raster run."""
@@ -58,12 +60,31 @@ def build_raster_result(
             total_key="total_region_pixels",
         ),
     }
+    if prod_info.sensor == "gems":
+        result["sensor"] = "gems"
+        result["quantity"] = prod_info.quantity
+        result["statistics_basis"] = "unfilled_unsmoothed_grid"
+        result["input_timezone"] = "Asia/Shanghai"
     if window is not None:
         result["window"] = window
 
     if display_grid is not None:
         result["boundary_policy"] = grid_boundary_policy(
-            LON, LAT, display_grid, region
+            LON if display_lon is None else display_lon,
+            LAT if display_lat is None else display_lat,
+            display_grid,
+            region,
+        )
+
+    if (
+        display_grid is not None
+        and swath_meta.get("display_support") == "fixed_analysis_valid_cells"
+    ):
+        result["boundary_policy"]["display"]["clip"] = (
+            "administrative_geometry_and_fixed_analysis_valid_cells"
+        )
+        result["boundary_policy"]["display"]["grid_shape"] = list(
+            display_grid.shape
         )
 
     sub_gdf = region.sub_boundary_gdf

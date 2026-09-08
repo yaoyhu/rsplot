@@ -25,6 +25,8 @@ from rsplot.plotting.map_frame import (
 )
 
 if TYPE_CHECKING:
+    from shapely.geometry.base import BaseGeometry
+
     from rsplot.geo.boundaries import RegionInfo
 
 
@@ -44,6 +46,7 @@ def plot_raster(
     hcho_cmap_file: str | None = None,
     title: str | None = None,
     output: str | None = None,
+    coverage_geometry: BaseGeometry | None = None,
     colorbar_label: str = "NO2 VCD (x10^15 molec/cm2)",
 ) -> None:
     """Draw a raster map for the given region.
@@ -80,7 +83,7 @@ def plot_raster(
         shading="auto",
         alpha=alpha,
     )
-    clip_raster_to_region(im, ax, region)
+    clip_raster_to_region(im, ax, region, coverage_geometry=coverage_geometry)
 
     # --- Basemap tiles (beneath boundaries, above raster) ---
     add_basemap_tiles(frame, region)

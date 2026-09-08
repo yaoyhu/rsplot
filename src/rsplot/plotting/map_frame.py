@@ -223,7 +223,11 @@ def finalize_map_figure(
 
 
 def clip_raster_to_region(
-    artist: Artist, ax: GeoAxes, region: RegionInfo
+    artist: Artist,
+    ax: GeoAxes,
+    region: RegionInfo,
+    *,
+    coverage_geometry: BaseGeometry | None = None,
 ) -> None:
     """Clip only the data layer, preserving holes and disconnected islands."""
     import numpy as np
@@ -246,8 +250,11 @@ def clip_raster_to_region(
 
     # Project the geometry into the axes coordinates before building a clip
     # path, so both PlateCarree and satellite-basemap Mercator axes work.
+    clip_geometry = region.geometry
+    if coverage_geometry is not None:
+        clip_geometry = clip_geometry.intersection(coverage_geometry)
     geometry = ax.projection.project_geometry(
-        orient_geometry(region.geometry), ccrs.PlateCarree()
+        orient_geometry(clip_geometry), ccrs.PlateCarree()
     )
     paths = []
 
