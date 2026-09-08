@@ -25,6 +25,58 @@ def serialize_region(region: RegionInfo) -> dict[str, Any]:
         result["administrative_level"] = region.administrative_level
     if region.subdivision_level is not None:
         result["subdivision_level"] = region.subdivision_level
+    if region.members:
+        result["members"] = [
+            serialize_member(member) for member in region.members
+        ]
+    return result
+
+
+def serialize_member(member: RegionInfo) -> dict[str, Any]:
+    """Identify a selected member with its canonical, qualified name."""
+    result = serialize_region(member)
+    result["name"] = member.qualified_name or member.name
+    result.setdefault(
+        "administrative_level", member.administrative_level or member.level
+    )
+    return result
+
+
+def member_basic_stats(values: np.ndarray) -> dict[str, Any]:
+    """Explicit null summaries retain members with no valid observations."""
+    result = basic_stats(values)
+    if result:
+        return result
+    return {
+        "n": 0,
+        **dict.fromkeys(
+            ("min", "max", "mean", "median", "p10", "p25", "p75", "p90")
+        ),
+    }
+
+
+def grid_member_stats(
+    lon: np.ndarray,
+    lat: np.ndarray,
+    grid: np.ndarray,
+    region: RegionInfo,
+) -> list[dict[str, Any]]:
+    """Select each member on the same statistical grid, never sum overlaps."""
+    from rsplot.geo.gridding import mask_to_region
+
+    result = []
+    for member in region.members:
+        selected = mask_to_region(lon, lat, grid, member.geometry)
+        stats = grid_stats(
+            lon,
+            lat,
+            selected,
+            member,
+            valid_key="valid_region_pixels",
+            total_key="total_region_pixels",
+        )
+        stats.update(member_basic_stats(selected))
+        result.append({"region": serialize_member(member), "stats": stats})
     return result
 
 

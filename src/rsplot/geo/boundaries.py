@@ -58,6 +58,8 @@ class RegionInfo:
     sub_name_field: str = NAME_FIELD
     administrative_level: str | None = None
     subdivision_level: str | None = None
+    qualified_name: str | None = None
+    members: tuple[RegionInfo, ...] = ()
 
 
 def _strip_suffix(name: str) -> str:
@@ -116,7 +118,9 @@ def _load_subdivision_source(
     try:
         source = gpd.read_file(path)
     except Exception as exc:
-        raise ValueError(f"无法读取下级行政区边界文件 '{path}': {exc}") from exc
+        raise ValueError(
+            f"无法读取下级行政区边界文件 '{path}': {exc}"
+        ) from exc
 
     if name_field not in source.columns:
         available = ", ".join(str(column) for column in source.columns)
@@ -137,7 +141,9 @@ def _load_subdivision_source(
     normalized = source[[name_field, "geometry"]].rename(
         columns={name_field: NAME_FIELD}
     )
-    normalized[NAME_FIELD] = normalized[NAME_FIELD].astype("string").str.strip()
+    normalized[NAME_FIELD] = (
+        normalized[NAME_FIELD].astype("string").str.strip()
+    )
     normalized = normalized[
         normalized[NAME_FIELD].notna()
         & normalized[NAME_FIELD].ne("")
@@ -280,6 +286,7 @@ def _resolve_qualified_county(
         main_gdf=county_match,
         sub_gdf=None,
         administrative_level=administrative_level,
+        qualified_name=f"{canonical_city_name}/{county_match.iloc[0][NAME_FIELD]}",
     )
 
 
@@ -451,6 +458,7 @@ def _build_info(
     detail_gdf: gpd.GeoDataFrame | None = None,
     administrative_level: str | None = None,
     subdivision_level: str | None = None,
+    qualified_name: str | None = None,
 ) -> RegionInfo:
     bounds = geometry.bounds  # (minx, miny, maxx, maxy)
     params = LEVEL_DEFAULTS[level]
@@ -471,4 +479,99 @@ def _build_info(
         detail_boundary_gdf=detail_gdf,
         administrative_level=administrative_level,
         subdivision_level=subdivision_level,
+        qualified_name=qualified_name,
     )
+
+
+def resolve_regions(
+    expression: str,
+    cfg: AppConfig,
+    level_override: str | None = None,
+) -> RegionInfo:
+    """Resolve a comma-separated selection without changing single-region APIs."""
+    if "," not in expression and "，" not in expression:
+        return resolve_region(expression, cfg, level_override)
+    names = [
+        part.replace("\r", "").replace("\n", "").strip()
+        for part in re.split("[,，]", expression)
+    ]
+    if any(not name for name in names):
+        raise ValueError("多区域列表包含空项，请检查连续逗号或首尾逗号。")
+    members = []
+    seen = set()
+    for index, name in enumerate(names, 1):
+        try:
+            member = resolve_region(name, cfg, level_override)
+        except ValueError as error:
+            raise ValueError(
+                f"第 {index} 个区域 '{name}' 无法解析：{error}"
+            ) from error
+        key = (member.level, member.qualified_name or member.name)
+        if key not in seen:
+            members.append(member)
+            seen.add(key)
+
+    levels = ("country", "key_region", "province", "city", "county")
+    level = min((member.level for member in members), key=levels.index)
+    geometry = unary_union([member.geometry for member in members])
+    crs = next(
+        (
+            m.main_boundary_gdf.crs
+            for m in members
+            if m.main_boundary_gdf is not None
+            and m.main_boundary_gdf.crs is not None
+        ),
+        "EPSG:4326",
+    )
+    main = gpd.GeoDataFrame(
+        {NAME_FIELD: [m.qualified_name or m.name for m in members]},
+        geometry=[m.geometry for m in members],
+        crs=crs,
+    )
+    sub = _merge_member_layers(members, "sub_boundary_gdf", crs)
+    detail = _merge_member_layers(members, "detail_boundary_gdf", crs)
+    if detail is not None and sub is not None:
+        sub_keys = {g.normalize().wkb for g in sub.geometry}
+        detail = detail[
+            ~detail.geometry.map(lambda g: g.normalize().wkb in sub_keys)
+        ].copy()
+    info = _build_info(
+        name=f"联合区域（{len(members)}个）",
+        level=level,
+        geometry=geometry,
+        main_gdf=main,
+        sub_gdf=sub,
+        detail_gdf=detail,
+    )
+    info.members = tuple(members)
+    return info
+
+
+def _merge_member_layers(
+    members: list[RegionInfo],
+    attribute: str,
+    crs: object,
+) -> gpd.GeoDataFrame | None:
+    """Keep only each member's own subdivisions and deduplicate shared features."""
+    rows = []
+    seen = set()
+    for member in members:
+        frame = getattr(member, attribute)
+        if frame is None or len(frame) == 0:
+            continue
+        if frame.crs is not None and frame.crs != crs:
+            frame = frame.to_crs(crs)
+        for _, row in frame.iterrows():
+            geometry = row.geometry.intersection(member.geometry)
+            if geometry.is_empty or geometry.area == 0:
+                continue
+            key = geometry.normalize().wkb
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(
+                {NAME_FIELD: row[member.sub_name_field], "geometry": geometry}
+            )
+    if not rows:
+        return None
+    return gpd.GeoDataFrame(rows, geometry="geometry", crs=crs)

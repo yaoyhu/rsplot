@@ -306,3 +306,20 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
   unsmoothed center-selected analysis grid. Subcell gaps are unresolved.
 - Preserve separate analysis/display coordinates in result builders and
   record the remapping, resolution, and footprint provenance in JSON.
+
+## Comma-Selected Regions
+
+- Only `raster` and `overlay` call `resolve_regions`; other commands retain
+  `resolve_region`. Single inputs delegate unchanged. Lists accept ASCII or
+  Chinese commas, strip surrounding whitespace and line breaks, reject empty
+  or invalid items, and deduplicate canonical names in first-occurrence order.
+- `RegionInfo.members` stores each selected region. `qualified_name` retains
+  the canonical city prefix for county/township selections without changing
+  the single-region JSON name. Mixed levels use the coarsest member defaults.
+- Read/process the combined extent once; clip to the geometric union, keeping
+  member boundaries and labels. Multi-region axes use automatic tick counts.
+- Combined JSON adds `region.members` and `member_stats`; overlay keeps member
+  statistics under each layer. Compute members from the shared statistical
+  grid/data, never sum overlapping members for the union total. Empty members
+  retain zero counts and null summaries. Keep `spatial_summary` separate.
+- Run `uv run python -m unittest discover -s tests -p 'test_multi_regions.py' -v`.

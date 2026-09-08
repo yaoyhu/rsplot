@@ -8,6 +8,7 @@ import numpy as np
 
 from rsplot.result_builders.common import (
     grid_boundary_policy,
+    grid_member_stats,
     grid_per_admin_stats,
     grid_stats,
     serialize_region,
@@ -86,6 +87,9 @@ def build_raster_result(
         result["boundary_policy"]["display"]["grid_shape"] = list(
             display_grid.shape
         )
+
+    if region.members:
+        result["member_stats"] = grid_member_stats(LON, LAT, grid, region)
 
     sub_gdf = region.sub_boundary_gdf
     if sub_gdf is not None and len(sub_gdf) > 0:

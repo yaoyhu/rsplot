@@ -6,7 +6,11 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from rsplot.result_builders.common import serialize_region
+from rsplot.result_builders.common import (
+    member_basic_stats,
+    serialize_member,
+    serialize_region,
+)
 from rsplot.result_builders.raster import build_raster_result
 from rsplot.result_builders.station import build_station_result
 
@@ -67,6 +71,20 @@ def build_overlay_result(
         cities_gdf=cities_gdf,
         output=output,
     )
+    if region.members:
+        from rsplot.readers.guokong import mask_stations_to_region
+
+        station_block["member_stats"] = []
+        for member in region.members:
+            selected = mask_stations_to_region(data, member.geometry)
+            station_block["member_stats"].append(
+                {
+                    "region": serialize_member(member),
+                    "n_stations": int(selected.n_stations),
+                    "n_valid": int(selected.n_valid),
+                    "stats": member_basic_stats(selected.values),
+                }
+            )
     for key in ("command", "image", "region"):
         raster_block.pop(key, None)
         station_block.pop(key, None)

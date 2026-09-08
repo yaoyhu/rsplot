@@ -92,13 +92,27 @@ def add_basemap_tiles(frame: MapFrame, region: RegionInfo) -> None:
 
 def add_region_boundaries(ax: GeoAxes, region: RegionInfo) -> None:
     """Draw detail, subdivision, and main boundaries in established order."""
+    selected = {
+        member.geometry.normalize().wkb
+        for member in getattr(region, "members", ())
+    }
+
+    def visible_geometries(frame):
+        if not selected:
+            return frame.geometry
+        return [
+            geometry
+            for geometry in frame.geometry
+            if geometry.normalize().wkb not in selected
+        ]
+
     if (
         region.detail_boundary_gdf is not None
         and len(region.detail_boundary_gdf) > 0
     ):
         ax.add_feature(
             ShapelyFeature(
-                region.detail_boundary_gdf.geometry,
+                visible_geometries(region.detail_boundary_gdf),
                 ccrs.PlateCarree(),
                 edgecolor="#aaa",
                 facecolor="none",
@@ -114,7 +128,7 @@ def add_region_boundaries(ax: GeoAxes, region: RegionInfo) -> None:
         is_county_sub = region.level == "city"
         ax.add_feature(
             ShapelyFeature(
-                region.sub_boundary_gdf.geometry,
+                visible_geometries(region.sub_boundary_gdf),
                 ccrs.PlateCarree(),
                 edgecolor="#888" if not is_county_sub else "#666",
                 facecolor="none",
@@ -135,6 +149,9 @@ def add_region_boundaries(ax: GeoAxes, region: RegionInfo) -> None:
             )
         )
 
+    if getattr(region, "members", ()):
+        add_member_labels(ax, region)
+
 
 def add_subdivision_labels(ax: GeoAxes, region: RegionInfo) -> None:
     """Add name labels for a region's subdivision features."""
@@ -145,7 +162,15 @@ def add_subdivision_labels(ax: GeoAxes, region: RegionInfo) -> None:
     name_field = region.sub_name_field
     fontsize = region.params.label_fontsize
 
+    selected_geometry = {
+        m.geometry.normalize().wkb for m in getattr(region, "members", ())
+    }
+    seen_labels = set()
     for _, row in gdf.iterrows():
+        key = row.geometry.normalize().wkb
+        if key in selected_geometry or (row[name_field], key) in seen_labels:
+            continue
+        seen_labels.add((row[name_field], key))
         point = row.geometry.representative_point()
         if region.level in (
             "key_region",
@@ -163,6 +188,31 @@ def add_subdivision_labels(ax: GeoAxes, region: RegionInfo) -> None:
             label,
             transform=ccrs.PlateCarree(),
             fontsize=fontsize,
+            ha="center",
+            va="center",
+            color="#222",
+            path_effects=[pe.withStroke(linewidth=2, foreground="white")],
+        )
+
+
+def add_member_labels(ax: GeoAxes, region: RegionInfo) -> None:
+    """Label selections separately from subdivisions; qualify duplicate names."""
+    from collections import Counter
+
+    names = Counter(member.name for member in region.members)
+    for member in region.members:
+        point = member.geometry.representative_point()
+        label = (
+            (member.qualified_name or member.name)
+            if names[member.name] > 1
+            else member.name
+        )
+        ax.text(
+            point.x,
+            point.y,
+            label,
+            transform=ccrs.PlateCarree(),
+            fontsize=region.params.label_fontsize,
             ha="center",
             va="center",
             color="#222",
@@ -197,8 +247,12 @@ def configure_map_axes(
     gridlines.top_labels = gridlines.right_labels = False
     gridlines.xformatter = LONGITUDE_FORMATTER
     gridlines.yformatter = LATITUDE_FORMATTER
-    gridlines.xlocator = mticker.MultipleLocator(region.params.grid_step)
-    gridlines.ylocator = mticker.MultipleLocator(region.params.grid_step)
+    if getattr(region, "members", ()):
+        gridlines.xlocator = mticker.MaxNLocator(nbins=5)
+        gridlines.ylocator = mticker.MaxNLocator(nbins=5)
+    else:
+        gridlines.xlocator = mticker.MultipleLocator(region.params.grid_step)
+        gridlines.ylocator = mticker.MultipleLocator(region.params.grid_step)
 
 
 def finalize_map_figure(

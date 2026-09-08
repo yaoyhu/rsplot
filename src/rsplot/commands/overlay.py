@@ -59,7 +59,7 @@ def run_overlay(
 ) -> None:
     """Execute satellite/station overlay orchestration."""
     from rsplot.config import STATION_VAR_META, get_exceedance_threshold
-    from rsplot.geo.boundaries import resolve_region
+    from rsplot.geo.boundaries import resolve_regions
     from rsplot.geo.processing import (
         buffered_extent,
         prepare_display_grid,
@@ -107,8 +107,15 @@ def run_overlay(
     date = datetime_str[:8]
 
     console.print(f"[bold]解析区域:[/bold] {region}")
-    info = resolve_region(region, cfg, level_override=level)
+    info = resolve_regions(region, cfg, level_override=level)
     console.print(f"  → [green]{info.name}[/green] (级别: {info.level})")
+    if info.members:
+        console.print(
+            "  → 成员: "
+            + "、".join(
+                member.qualified_name or member.name for member in info.members
+            )
+        )
     console.print(
         f"  → 范围: {info.extent[0]:.2f}°~{info.extent[1]:.2f}°E, "
         f"{info.extent[2]:.2f}°~{info.extent[3]:.2f}°N"

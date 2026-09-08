@@ -209,6 +209,62 @@ writes a JSON sidecar with the same base name. Reconstructed-grid JSON records
 both the China-time input and matched UTC archive hour, source file, native and
 output resolution, regional statistics, administrative summaries, and hotspots.
 
+## Select multiple regions without configuration
+
+`raster` and `overlay` accept a quoted, comma-separated region argument.
+Use English or Chinese commas; surrounding whitespace and embedded line
+breaks are ignored in a list. Province, city, and qualified county/township
+names can be mixed. County and township names still require their city,
+e.g. `中山市/东区街道`. Other commands retain their single-region input.
+
+```bash
+# One map covering three selected townships.
+uv run rsplot raster \
+  "中山市/东区街道,中山市/南区街道,中山市/石岐街道" 20260907 \
+  --sensor gems -p o3pr --cf 1 --res 0.075 --smooth 0 \
+  --basemap none -o ./logs/zhongshan/three_streets_raster.png
+
+# The same daily satellite field with observations at 19:00 China time.
+uv run rsplot overlay \
+  "中山市/东区街道,中山市/南区街道,中山市/石岐街道" 20260907 \
+  --sensor gems -p o3pr --station-datetime 2026090719 \
+  --cf 1 --res 0.075 --smooth 0 --basemap none \
+  -o ./logs/zhongshan/three_streets_overlay.png
+```
+
+These examples use your existing product/station data paths. Optional
+`--data-dir` for raster or `--raster-dir` for overlay overrides the satellite
+root; no named region group needs to be added to configuration.
+
+Every member is resolved before reading data. Repeated aliases are removed
+in first-occurrence order; empty items and unknown names fail with an explicit
+error instead of silently omitting regions. The map reads and processes the
+combined extent once, but colors only the union of the selected geometries,
+preserving holes and gaps between disconnected regions. Each member retains
+its boundary and label. Defaults use the coarsest selected level; combined
+maps use automatic geographic ticks. Explicit plot options still take
+precedence. Far-apart selections share one map with intervening whitespace.
+
+Combined maps use `联合区域（N个）` as their default name. The JSON adds
+`region.members` with canonical qualified names, administrative levels and
+extents. Existing overall statistics operate on the geometric union, without
+double-counting parent/child overlaps. `member_stats` summarizes each selected
+member using that same statistical grid; for overlay these lists are under
+`raster.member_stats` and `station.member_stats`. A member with no valid data
+remains in the list with zero valid counts and null numeric summaries.
+Members may overlap, so their counts must not be added to recover the union
+count. Grid centers exactly on a member boundary are excluded from that
+member's statistics, even if they lie inside the combined region. Station
+selection retains the existing boundary-tolerance rule. `spatial_summary`
+continues to describe subdivisions, independently of selected-member stats.
+Single-region inputs retain their existing output contract.
+
+Run the isolated multi-region regressions:
+
+```bash
+uv run python -m unittest discover -s tests -p 'test_multi_regions.py' -v
+```
+
 ## Raster boundaries and regional statistics
 
 `raster`, `overlay`, `forecast` (including station overlays), and

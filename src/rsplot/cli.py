@@ -46,7 +46,7 @@ def _callback(
 def raster(
     region: str = typer.Argument(
         ...,
-        help="区域名称，如 中国、安徽、合肥、YRD、合肥/蜀山",
+        help="区域名称；支持逗号分隔多个省市县街道，如 '中山市/东区街道,中山市/南区街道'，无需配置",
     ),
     date_arg: str = typer.Argument(
         ...,
@@ -632,7 +632,7 @@ def trend(
 def overlay(
     region: str = typer.Argument(
         ...,
-        help="区域名称，如 中国、安徽、合肥、YRD、合肥/蜀山",
+        help="区域名称；支持逗号分隔多个省市县街道，如 '中山市/东区街道,中山市/南区街道'，无需配置",
     ),
     datetime_str: str = typer.Argument(
         ...,
