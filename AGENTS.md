@@ -143,10 +143,11 @@ silently reformat or lint-fix broad application code during unrelated work.
 For focused changes, check the touched files with `--no-fix` and document any
 unrelated existing failures.
 
-There is no committed `tests/` directory, and `pytest` is not currently a
-project dependency. `uv run python -m pytest` currently fails with
-`No module named pytest`. If adding tests, add the test dependency deliberately
-and then run pytest against `tests/`.
+`tests/test_boundary_display.py` contains self-contained unittest regressions.
+Run `uv run python -m unittest discover -s tests -p 'test_boundary_display.py' -v`.
+Other local tests may be ignored/untracked and require pytest, which is not
+currently a project dependency. Use focused discovery; add pytest deliberately
+if adding pytest-based tests.
 
 Package build command when needed:
 
@@ -225,3 +226,23 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
 - Forecast station overlays default the station datetime to the converted local
   `forecast.valid_datetime`. Use `--station-datetime` only when intentionally
   comparing against a different observation hour.
+
+## Raster Boundary Display
+
+- `PreparedGrid.values` retains the center-masked statistical grid;
+  `unmasked_values` retains the prepared grid before administrative masking.
+  Build display arrays with `prepare_display_grid` from the latter, before
+  any subsequent statistics preparation replaces the `PreparedGrid`.
+- Display selects valid intersecting grid cells and preserves its input valid
+  mask during smoothing. `clip_raster_to_region` clips only the colored layer
+  to the administrative polygon, with ring orientation normalized before
+  projection so holes and islands remain correct.
+- Statistics use strictly interior grid centers and equal cell weights;
+  boundary centers are excluded. Coverage counts centers, not polygon area.
+  Preserve existing product-specific statistical preprocessing. Never pass
+  a display grid as statistics.
+- `raster`, `overlay`, `forecast`, and `reconstruct` sidecars add
+  `boundary_policy` (under `raster` for `overlay`). Keep statistics valid when
+  only exterior-center cells overlap: zero selected cells, null summaries.
+- Run `uv run python -m unittest discover -s tests -p
+  'test_boundary_display.py' -v` for boundary and projection regressions.

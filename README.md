@@ -209,6 +209,37 @@ writes a JSON sidecar with the same base name. Reconstructed-grid JSON records
 both the China-time input and matched UTC archive hour, source file, native and
 output resolution, regional statistics, administrative summaries, and hotspots.
 
+## Raster boundaries and regional statistics
+
+`raster`, `overlay`, `forecast` (including station overlays), and
+`reconstruct` prepare separate display and statistics grids:
+
+- **Display:** retain valid grid cells that intersect the administrative
+  geometry, even when their centers are outside. Clip the colored layer to
+  the actual boundary, including holes and disconnected islands. Display
+  smoothing uses surrounding values but preserves the input valid-cell mask.
+- **Statistics:** select grid centers **strictly inside** the geometry;
+  centers exactly on the boundary are excluded. Each valid selected cell has
+  equal weight. Coverage is the valid selected-cell count divided by the
+  total selected-cell count, not the percentage of colored land area.
+  Existing product-specific gap-filling and statistical smoothing behavior
+  remains unchanged.
+
+The PNG sidecar adds `boundary_policy` with the selection and weighting
+rules, the displayed intersecting-cell count, and the count whose centers
+are outside. For `overlay`, this block is nested under `raster`.
+A small region can display overlapping cells while having no interior grid
+centers: its statistics then report zero valid cells and null summaries.
+This change does not increase the satellite's native resolution or fill
+missing observations.
+
+Run boundary-selection and actual rendering regressions (including holes
+and both PlateCarree and Mercator projections):
+
+```bash
+uv run python -m unittest discover -s tests -p 'test_boundary_display.py' -v
+```
+
 ## License
 
 This project is distributed under the license in `LICENSE`.

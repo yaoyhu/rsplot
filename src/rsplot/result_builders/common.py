@@ -136,3 +136,32 @@ def grid_stats(
         total_key: total,
         **basic_stats(grid),
     }
+
+
+def grid_boundary_policy(
+    lon: np.ndarray,
+    lat: np.ndarray,
+    display_grid: np.ndarray,
+    region: RegionInfo,
+) -> dict[str, Any]:
+    """Describe distinct display and statistics spatial selection rules."""
+    from rsplot.geo.gridding import region_grid_mask
+    from rsplot.geo.processing import region_cell_mask
+
+    visible = np.isfinite(display_grid) & region_cell_mask(
+        lon, lat, region.geometry
+    )
+    inside = region_grid_mask(lon, lat, region.geometry)
+    return {
+        "statistics": {
+            "selection": "grid_center_strictly_inside",
+            "weighting": "equal_cells",
+            "coverage": "valid_center_count / total_center_count",
+        },
+        "display": {
+            "selection": "valid_cells_intersecting_region",
+            "clip": "administrative_geometry",
+            "n_valid_intersecting_cells": int(visible.sum()),
+            "n_cells_with_centers_outside": int((visible & ~inside).sum()),
+        },
+    }

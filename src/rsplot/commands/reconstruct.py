@@ -54,7 +54,11 @@ def run_reconstruct(
 ) -> None:
     """Execute reconstructed-grid orchestration."""
     from rsplot.geo.boundaries import resolve_region
-    from rsplot.geo.processing import buffered_extent, prepare_existing_grid
+    from rsplot.geo.processing import (
+        buffered_extent,
+        prepare_display_grid,
+        prepare_existing_grid,
+    )
     from rsplot.plotting.colormaps import STATION_CONCENTRATION_CMAP
     from rsplot.plotting.raster import plot_raster
     from rsplot.plotting.styles import setup_fonts
@@ -148,10 +152,22 @@ def run_reconstruct(
         info.geometry,
         fill_gaps=False,
     )
-    if not np.isfinite(prepared.values).any():
+    display_source = prepared.unmasked_values
+    display_grid = prepare_display_grid(
+        prepared.lon,
+        prepared.lat,
+        display_source,
+        info.geometry,
+        smooth_sigma=smooth,
+    )
+    if not np.isfinite(display_grid).any():
         console.print("[red]目标区域内没有有效重构网格。[/red]")
         raise typer.Exit(1)
-    if smooth is not None and smooth > 0:
+    if (
+        smooth is not None
+        and smooth > 0
+        and np.isfinite(prepared.values).any()
+    ):
         console.print(f"  → 高斯平滑 sigma={smooth}")
         prepared = prepare_existing_grid(
             prepared.lon,
@@ -167,7 +183,12 @@ def run_reconstruct(
         f"({prepared.n_valid_region}/{prepared.total_region_pixels})"
     )
 
-    auto_min, auto_max = auto_forecast_vrange(prepared.values, var_info)
+    auto_min, auto_max = auto_forecast_vrange(
+        prepared.values
+        if np.isfinite(prepared.values).any()
+        else display_grid,
+        var_info,
+    )
     use_vmin = vmin if vmin is not None else auto_min
     use_vmax = vmax if vmax is not None else auto_max
     try:
@@ -192,7 +213,7 @@ def run_reconstruct(
     plot_raster(
         prepared.lon,
         prepared.lat,
-        prepared.values,
+        display_grid,
         info,
         dpi=use_dpi,
         cmap=use_cmap,
@@ -213,6 +234,7 @@ def run_reconstruct(
         LON=prepared.lon,
         LAT=prepared.lat,
         grid=prepared.values,
+        display_grid=display_grid,
         vmin=use_vmin,
         vmax=use_vmax,
         output=output,

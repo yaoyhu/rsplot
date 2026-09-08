@@ -17,6 +17,7 @@ from rsplot.plotting.map_frame import (
     add_basemap_tiles,
     add_region_boundaries,
     add_subdivision_labels,
+    clip_raster_to_region,
     configure_map_axes,
     create_map_frame,
     figure_size_for_level,
@@ -79,6 +80,7 @@ def plot_raster(
         shading="auto",
         alpha=alpha,
     )
+    clip_raster_to_region(im, ax, region)
 
     # --- Basemap tiles (beneath boundaries, above raster) ---
     add_basemap_tiles(frame, region)

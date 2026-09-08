@@ -86,6 +86,7 @@ def run_raster(
     from rsplot.geo.boundaries import resolve_region
     from rsplot.geo.processing import (
         buffered_extent,
+        prepare_display_grid,
         prepare_existing_grid,
         prepare_swath_grid,
     )
@@ -287,14 +288,23 @@ def run_raster(
             "coverage_days": coverage_days,
         }
 
-    if not np.isfinite(prepared.values).any():
+    display_source = prepared.unmasked_values
+    display_grid = prepare_display_grid(
+        prepared.lon,
+        prepared.lat,
+        display_source,
+        info.geometry,
+        smooth_sigma=use_smooth,
+    )
+
+    if not np.isfinite(display_grid).any():
         console.print(
             "[red]窗口均值全区无有效像元，可能原因：窗口内覆盖不足，"
             "或 --n-min 太严。可放宽 --n-min / 扩大窗口。[/red]"
         )
         raise typer.Exit(1)
 
-    if use_smooth is not None:
+    if use_smooth is not None and np.isfinite(prepared.values).any():
         console.print(f"  → 高斯平滑 sigma={use_smooth}")
         prepared = prepare_existing_grid(
             prepared.lon,
@@ -329,7 +339,12 @@ def run_raster(
         use_vmin = vmin if vmin is not None else prod_info.vmin
         use_vmax = vmax if vmax is not None else prod_info.vmax
     else:
-        auto_min, auto_max = auto_vrange(prepared.values, prod_info)
+        auto_min, auto_max = auto_vrange(
+            prepared.values
+            if np.isfinite(prepared.values).any()
+            else display_grid,
+            prod_info,
+        )
         use_vmin = vmin if vmin is not None else auto_min
         use_vmax = vmax if vmax is not None else auto_max
     try:
@@ -354,7 +369,7 @@ def run_raster(
     plot_raster(
         prepared.lon,
         prepared.lat,
-        prepared.values,
+        display_grid,
         info,
         dpi=use_dpi,
         cmap=use_cmap,
@@ -377,6 +392,7 @@ def run_raster(
         LON=prepared.lon,
         LAT=prepared.lat,
         grid=prepared.values,
+        display_grid=display_grid,
         swath_meta=swath_meta,
         vmin=use_vmin,
         vmax=use_vmax,

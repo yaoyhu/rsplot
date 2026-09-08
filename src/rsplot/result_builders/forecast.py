@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from rsplot.result_builders.common import (
+    grid_boundary_policy,
     grid_per_admin_stats,
     serialize_region,
     top_hotspots,
@@ -33,6 +34,7 @@ def build_forecast_result(
     vmin: float,
     vmax: float,
     output: str,
+    display_grid: np.ndarray | None = None,
     station_data: StationData | None = None,
     station_datetime: str | None = None,
     station_threshold: float | None = None,
@@ -99,6 +101,11 @@ def build_forecast_result(
         for key in ("command", "image", "region"):
             station_block.pop(key, None)
         result["station"] = station_block
+
+    if display_grid is not None:
+        result["boundary_policy"] = grid_boundary_policy(
+            LON, LAT, display_grid, region
+        )
 
     sub_gdf = region.sub_boundary_gdf
     if sub_gdf is not None and len(sub_gdf) > 0:

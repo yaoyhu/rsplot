@@ -54,7 +54,11 @@ def run_overlay(
     """Execute satellite/station overlay orchestration."""
     from rsplot.config import STATION_VAR_META, get_exceedance_threshold
     from rsplot.geo.boundaries import resolve_region
-    from rsplot.geo.processing import buffered_extent, prepare_swath_grid
+    from rsplot.geo.processing import (
+        buffered_extent,
+        prepare_display_grid,
+        prepare_swath_grid,
+    )
     from rsplot.plotting.overlay import plot_overlay
     from rsplot.plotting.styles import setup_fonts
     from rsplot.readers import auto_vrange, get_product_info
@@ -159,6 +163,17 @@ def run_overlay(
         info.geometry,
         smooth_sigma=use_smooth,
     )
+    display_source = prepared.unmasked_values
+    display_grid = prepare_display_grid(
+        prepared.lon,
+        prepared.lat,
+        display_source,
+        info.geometry,
+        smooth_sigma=use_smooth,
+    )
+    if not np.isfinite(display_grid).any():
+        console.print("[red]目标区域没有相交的有效卫星网格。[/red]")
+        raise typer.Exit(1)
     console.print(
         f"  → 网格 {prepared.values.shape}, "
         f"区域内覆盖率 {prepared.coverage_pct:.1f}% "
@@ -171,7 +186,12 @@ def run_overlay(
         use_vmin = vmin if vmin is not None else prod_info.vmin
         use_vmax = vmax if vmax is not None else prod_info.vmax
     else:
-        auto_min, auto_max = auto_vrange(prepared.values, prod_info)
+        auto_min, auto_max = auto_vrange(
+            prepared.values
+            if np.isfinite(prepared.values).any()
+            else display_grid,
+            prod_info,
+        )
         use_vmin = vmin if vmin is not None else auto_min
         use_vmax = vmax if vmax is not None else auto_max
     try:
@@ -218,7 +238,7 @@ def run_overlay(
     plot_overlay(
         prepared.lon,
         prepared.lat,
-        prepared.values,
+        display_grid,
         data,
         info,
         raster_cmap=use_cmap,
@@ -244,6 +264,7 @@ def run_overlay(
         LON=prepared.lon,
         LAT=prepared.lat,
         grid=prepared.values,
+        display_grid=display_grid,
         swath_meta={
             "n_pixels": int(swath.n_pixels),
             "n_files": int(swath.n_files),

@@ -36,6 +36,7 @@ def build_overlay_result(
     unit: str,
     cities_gdf: gpd.GeoDataFrame | None,
     output: str,
+    display_grid: np.ndarray | None = None,
 ) -> dict[str, Any]:
     """Combine raster and station result blocks without shared duplication."""
     raster_block = build_raster_result(
@@ -46,6 +47,7 @@ def build_overlay_result(
         LON=LON,
         LAT=LAT,
         grid=grid,
+        display_grid=display_grid,
         swath_meta=swath_meta,
         vmin=raster_vmin,
         vmax=raster_vmax,

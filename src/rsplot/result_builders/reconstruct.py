@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from rsplot.result_builders.common import (
+    grid_boundary_policy,
     grid_per_admin_stats,
     grid_stats,
     serialize_region,
@@ -29,6 +30,7 @@ def build_reconstruct_result(
     vmin: float,
     vmax: float,
     output: str,
+    display_grid: np.ndarray | None = None,
 ) -> dict[str, Any]:
     """Build the stable JSON sidecar payload for a reconstructed grid."""
     stats = grid_stats(
@@ -71,6 +73,11 @@ def build_reconstruct_result(
         },
         "stats": stats,
     }
+
+    if display_grid is not None:
+        result["boundary_policy"] = grid_boundary_policy(
+            LON, LAT, display_grid, region
+        )
 
     sub_gdf = region.sub_boundary_gdf
     if sub_gdf is not None and len(sub_gdf) > 0:

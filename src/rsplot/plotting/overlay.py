@@ -19,6 +19,7 @@ from rsplot.plotting.colormaps import (
 from rsplot.plotting.map_frame import (
     add_basemap_tiles,
     add_region_boundaries,
+    clip_raster_to_region,
     configure_map_axes,
     create_map_frame,
     finalize_map_figure,
@@ -89,6 +90,7 @@ def plot_overlay(
         alpha=raster_alpha,
         zorder=1,
     )
+    clip_raster_to_region(im, ax, region)
 
     # --- Basemap tiles ---
     add_basemap_tiles(frame, region)

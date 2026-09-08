@@ -24,7 +24,9 @@ from rsplot.tiles.tianditu import TianDiTuTiles
 
 if TYPE_CHECKING:
     from cartopy.mpl.geoaxes import GeoAxes
+    from matplotlib.artist import Artist
     from matplotlib.figure import Figure
+    from shapely.geometry.base import BaseGeometry
 
     from rsplot.geo.boundaries import RegionInfo
 
@@ -218,3 +220,56 @@ def finalize_map_figure(
         plt.close(fig)
     else:
         plt.show()
+
+
+def clip_raster_to_region(
+    artist: Artist, ax: GeoAxes, region: RegionInfo
+) -> None:
+    """Clip only the data layer, preserving holes and disconnected islands."""
+    import numpy as np
+    from matplotlib.path import Path as MplPath
+    from shapely.geometry import GeometryCollection, MultiPolygon
+    from shapely.geometry.polygon import orient
+
+    def orient_geometry(geometry: BaseGeometry) -> BaseGeometry:
+        if geometry.geom_type == "Polygon":
+            return orient(geometry, sign=1.0)
+        if geometry.geom_type == "MultiPolygon":
+            return MultiPolygon(
+                [orient(part, sign=1.0) for part in geometry.geoms]
+            )
+        if geometry.geom_type == "GeometryCollection":
+            return GeometryCollection(
+                [orient_geometry(part) for part in geometry.geoms]
+            )
+        return geometry
+
+    # Project the geometry into the axes coordinates before building a clip
+    # path, so both PlateCarree and satellite-basemap Mercator axes work.
+    geometry = ax.projection.project_geometry(
+        orient_geometry(region.geometry), ccrs.PlateCarree()
+    )
+    paths = []
+
+    def append_polygons(geometry: BaseGeometry) -> None:
+        if geometry.is_empty:
+            return
+        if geometry.geom_type == "Polygon":
+            polygon = orient(geometry, sign=1.0)
+            for ring in (polygon.exterior, *polygon.interiors):
+                vertices = np.asarray(ring.coords)[:, :2]
+                codes = np.full(len(vertices), MplPath.LINETO, dtype=np.uint8)
+                codes[0], codes[-1] = MplPath.MOVETO, MplPath.CLOSEPOLY
+                paths.append(MplPath(vertices, codes))
+        elif hasattr(geometry, "geoms"):
+            for part in geometry.geoms:
+                append_polygons(part)
+
+    append_polygons(geometry)
+    if not paths:
+        raise ValueError("行政区边界没有可用于裁剪的多边形。")
+    artist.set_clip_path(MplPath.make_compound_path(*paths), ax.transData)
+    # Cartopy can create an auxiliary collection for wrapped mesh cells.
+    wrapped = getattr(artist, "_wrapped_collection_fix", None)
+    if wrapped is not None:
+        wrapped.set_clip_path(MplPath.make_compound_path(*paths), ax.transData)
