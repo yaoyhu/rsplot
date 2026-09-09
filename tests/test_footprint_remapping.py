@@ -65,7 +65,7 @@ class FootprintRemappingTests(unittest.TestCase):
                 display_res=res,
                 smooth_sigma=1,
             )
-            for res in [0.1, 0.075, 0.025]
+            for res in [0.1, 0.075, 0.05, 0.025]
         ]
         for result in results:
             self.assertTrue(result.support.equals(results[0].support))

@@ -355,22 +355,33 @@ rsplot overlay 安徽 202609011145 --sensor gems -p no2 \
 ```
 
 Each scan is first remapped by pixel/target overlap area in the equal-area
-EPSG:6933 projection, onto a **globally aligned 0.05° analysis grid**. This is
-a numerical analysis spacing, not native satellite resolution. Daily means
+EPSG:6933 projection, directly onto a **globally aligned target grid selected
+by `--res`**. GEMS defaults to 0.05° at every administrative level. This is
+numerical grid spacing, not native satellite resolution; finer grids cannot
+recover variation within a native pixel. Daily means
 weight valid scans equally at each grid cell; multi-day means then weight
 valid days equally. A daily cell needs at least one valid scan. Window `--n-min`
 continues to count **days**, using the existing product defaults, and is not
 available for a single scan. These are means of available daytime scans,
 not full 24-hour means. Empty scans and failed files do not contribute zeros.
 
-For GEMS `raster` and `overlay`, **`--res` controls only the display grid**.
-Display cells receive area-weighted analysis values and are clipped to the
-fixed analysis grid's valid-cell union and the administrative boundary.
-Changing `--res` can change displayed averages, but cannot move the valid
-support or change the scientific statistics. `--smooth` is applied on the
-fixed analysis grid for display only, preserving its valid mask. GEMS
-`recent` uses the same 0.05° analysis spacing and ignores `--res`.
+For GEMS `raster`, `overlay`, and `recent`, **`--res` controls the actual
+analysis grid**. No fixed 0.05° intermediate grid is used. Raster and overlay
+draw that grid directly, clipped to its valid-cell union and the administrative
+boundary. Changing `--res` may change grid-center selection, coverage, and
+regional statistics; use the same spacing for comparisons. `--smooth` affects
+display only and preserves the target grid's valid mask; statistics remain
+unfilled and unsmoothed. DPI and map graticules are independent of grid spacing.
 TROPOMI keeps its existing resolution behavior.
+
+For example, compare Zhongshan O3PR at two target spacings without smoothing:
+
+```bash
+rsplot raster 中山市 20260907 --sensor gems -p o3pr --cf 1 \
+  --res 0.05 --smooth 0 --basemap none --output /tmp/gems_o3pr_res005.png
+rsplot raster 中山市 20260907 --sensor gems -p o3pr --cf 1 \
+  --res 0.01 --smooth 0 --basemap none --output /tmp/gems_o3pr_res001.png
+```
 
 When available, GEMS pixel boundaries use file `CornerLongitude` and
 `CornerLatitude` arrays. The checked O3P and NO2 files have centers only;
@@ -380,13 +391,14 @@ geolocation is not interpolated, and rejected retrievals do not contribute
 values. This is not a recovery of official footprints or extra observations.
 Analysis cells need positive-area overlap with valid footprints; their
 coverage percentage counts valid analysis centers, not precisely observed
-land area. Subcell gaps remain below the 0.05° analysis spacing.
+land area. Gaps smaller than the selected target cells remain unresolved.
 
 Sidecars record `footprint_source` per scan, `spatial_aggregation`,
 `area_crs`, `analysis_resolution_deg`, `display_resolution_deg`, and
 `display_support`. The compatibility `swath.resolution_deg` describes the
-analysis grid. Statistics differ from the previous center-point-binning
-implementation, but remain identical across display resolutions.
+analysis grid; `analysis_resolution_deg` and `display_resolution_deg` both
+record the selected target spacing. `display_support` is `analysis_valid_cells`.
+Statistics may change with `--res`, but remain unchanged by smoothing or DPI.
 
 The initial GEMS filter retains final quality flag **0**, finite coordinates
 and columns, SZA/VZA below 70°, and a nonnegative cloud measure no greater

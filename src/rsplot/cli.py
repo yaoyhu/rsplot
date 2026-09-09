@@ -99,7 +99,7 @@ def raster(
     res: float | None = typer.Option(
         None,
         "--res",
-        help="网格分辨率 (度)；GEMS 绘图仅控制显示，分析网格固定 0.05°",
+        help="目标网格间距 (度)；GEMS 默认 0.05°，直接重映射原始像元",
     ),
     basemap: str | None = typer.Option(
         None,
@@ -688,7 +688,7 @@ def overlay(
     res: float | None = typer.Option(
         None,
         "--res",
-        help="网格分辨率 (度)；GEMS 绘图仅控制显示，分析网格固定 0.05°",
+        help="目标网格间距 (度)；GEMS 默认 0.05°，直接重映射原始像元",
     ),
     basemap: str | None = typer.Option(
         None,
@@ -810,7 +810,7 @@ def recent(
     res: float | None = typer.Option(
         None,
         "--res",
-        help="TROPOMI 网格分辨率 (度)；GEMS 统计固定使用 0.05°，忽略此选项",
+        help="目标网格间距 (度)；GEMS 默认 0.05°，直接重映射原始像元",
     ),
     qa: float | None = typer.Option(
         None, "--qa", help="TROPOMI QA 阈值 (0-1)，默认取配置；GEMS 不适用"

@@ -454,24 +454,26 @@ class CommandTests(RegionFixture):
         self.assertEqual(overlay["station"]["n_stations"], 3)
         self.assertEqual(self.overlay.call_args.args[3].n_stations, 3)
 
-    def test_gems_daily_overlay_and_resolution_invariance(self):
+    def test_gems_daily_overlay_uses_selected_resolution(self):
         from rsplot.geo.footprints import regular_grid
         from rsplot.temporal import ScanMean
 
-        lon, lat = regular_grid((0, 4, 0, 2), 0.05)
-        raw = np.full(lon.shape, 40.0)
-        batch = ScanMean(
-            lon,
-            lat,
-            raw,
-            np.ones(lon.shape, dtype=int),
-            30,
-            8,
-            0,
-            {"request": "20260907", "analysis_resolution_deg": 0.05},
-        )
+        def scan_mean(**kwargs):
+            res = kwargs["res"]
+            lon, lat = regular_grid((0, 4, 0, 2), res)
+            return ScanMean(
+                lon,
+                lat,
+                np.full(lon.shape, 40.0),
+                np.ones(lon.shape, dtype=int),
+                30,
+                8,
+                0,
+                {"request": "20260907", "analysis_resolution_deg": res},
+            )
+
         with patch(
-            "rsplot.temporal.read_scan_mean", return_value=batch
+            "rsplot.temporal.read_scan_mean", side_effect=scan_mean
         ) as scan:
             results = [
                 self.invoke(
@@ -480,9 +482,13 @@ class CommandTests(RegionFixture):
                 for res in [".1", ".075"]
             ]
             self.assertEqual(scan.call_count, 2)
-            self.assertEqual(results[0]["stats"], results[1]["stats"])
             self.assertEqual(
-                results[0]["member_stats"], results[1]["member_stats"]
+                [call.kwargs["res"] for call in scan.call_args_list],
+                [0.1, 0.075],
+            )
+            self.assertNotEqual(
+                results[0]["stats"]["total_region_pixels"],
+                results[1]["stats"]["total_region_pixels"],
             )
             scan.reset_mock()
             overlay = self.invoke(
@@ -499,7 +505,7 @@ class CommandTests(RegionFixture):
             scan.assert_called_once()
             self.assertEqual(self.stations.call_args.args[1], "2026090719")
             self.assertEqual(
-                overlay["raster"]["member_stats"], results[0]["member_stats"]
+                overlay["raster"]["member_stats"], results[1]["member_stats"]
             )
             self.assertEqual(
                 overlay["time_matching"]["satellite_aggregation"], "daily_mean"

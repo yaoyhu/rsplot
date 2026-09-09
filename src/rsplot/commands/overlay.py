@@ -167,14 +167,8 @@ def run_overlay(
     )
     reader = prod_info.reader_cls()
     reader.cloud_fraction_max = cf
-    analysis_res = use_res
     if sensor == "gems":
-        from rsplot.readers.gems import GEMS_ANALYSIS_RESOLUTION
-
-        analysis_res = GEMS_ANALYSIS_RESOLUTION
-        console.print(
-            f"  → GEMS 分析网格 {analysis_res}°，显示网格 {use_res}°"
-        )
+        console.print(f"  → GEMS 目标网格 {use_res}°（分析与显示）")
     read_extent = buffered_extent(info.extent, 1.0)
     console.print(
         f"\n[bold]读取卫星数据:[/bold] {use_raster_dir} (产品: {product})"
@@ -191,7 +185,7 @@ def run_overlay(
             data_dir=use_raster_dir,
             request=datetime_str,
             extent=read_extent,
-            res=analysis_res,
+            res=use_res,
         )
         prepared = prepare_existing_grid(
             batch.LON,
@@ -251,16 +245,16 @@ def run_overlay(
             prepared.lat,
             display_source,
             info.geometry,
-            analysis_res=analysis_res,
+            analysis_res=use_res,
             display_res=use_res,
             smooth_sigma=use_smooth,
         )
         display_lon, display_lat = display.lon, display.lat
         display_grid, display_support = display.values, display.support
-        swath_meta["resolution_deg"] = analysis_res
-        swath_meta["analysis_resolution_deg"] = analysis_res
+        swath_meta["resolution_deg"] = use_res
+        swath_meta["analysis_resolution_deg"] = use_res
         swath_meta["display_resolution_deg"] = use_res
-        swath_meta["display_support"] = "fixed_analysis_valid_cells"
+        swath_meta["display_support"] = "analysis_valid_cells"
     else:
         display_grid = prepare_display_grid(
             prepared.lon,

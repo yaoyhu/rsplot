@@ -19,8 +19,10 @@ from netCDF4 import Dataset
 
 from rsplot.readers.base import BaseReader, SwathData
 
-# Numerical analysis spacing, not native satellite resolution.
-GEMS_ANALYSIS_RESOLUTION = 0.05
+# Default target-grid spacing, overridable with --res; not native resolution.
+GEMS_DEFAULT_RESOLUTION = 0.05
+# Compatibility alias for existing imports; no longer a forced spacing.
+GEMS_ANALYSIS_RESOLUTION = GEMS_DEFAULT_RESOLUTION
 
 CHINA_TIME = ZoneInfo("Asia/Shanghai")
 EPOCH = datetime(2000, 1, 1, 12, tzinfo=timezone.utc)

@@ -94,7 +94,6 @@ def summarize_recent_raster(
         meta: dict[str, Any] = {}
         try:
             if prod_info.sensor == "gems":
-                from rsplot.readers.gems import GEMS_ANALYSIS_RESOLUTION
                 from rsplot.temporal import read_scan_mean
 
                 batch = read_scan_mean(
@@ -102,7 +101,7 @@ def summarize_recent_raster(
                     data_dir=data_dir,
                     request=d,
                     extent=read_extent,
-                    res=GEMS_ANALYSIS_RESOLUTION,
+                    res=res,
                 )
                 prepared = prepare_existing_grid(
                     batch.LON,

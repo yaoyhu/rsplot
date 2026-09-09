@@ -108,7 +108,9 @@ def get_product_info(product: str, *, sensor: str = "tropomi") -> ProductInfo:
         )
     if sensor == "tropomi":
         return PRODUCT_REGISTRY[key]
+    from rsplot.config import LEVEL_DEFAULTS
     from rsplot.readers.gems import (
+        GEMS_DEFAULT_RESOLUTION,
         GemsHCHOReader,
         GemsNO2Reader,
         GemsO3PRReader,
@@ -131,6 +133,13 @@ def get_product_info(product: str, *, sensor: str = "tropomi") -> ProductInfo:
         PRODUCT_REGISTRY[key],
         reader_cls=readers[key],
         sensor="gems",
+        level_defaults={
+            level: replace(
+                PRODUCT_REGISTRY[key].defaults_for_level(level),
+                res=GEMS_DEFAULT_RESOLUTION,
+            )
+            for level in LEVEL_DEFAULTS
+        },
         data_key="gems_o3" if key == "o3pr" else f"gems_{key}",
         quantity=quantities[key],
     )

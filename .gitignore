@@ -281,3 +281,5 @@ logs/
 .vscode/
 .claude
 tests/
+docs/
+skills/

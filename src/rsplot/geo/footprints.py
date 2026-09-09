@@ -181,6 +181,9 @@ def prepare_footprint_display(
     prepared = prepare_display_grid(
         lon, lat, values, geometry, smooth_sigma=smooth_sigma
     )
+    if display_res == analysis_res:
+        # Use the already remapped target grid directly: no second remapping.
+        return FootprintDisplay(lon, lat, prepared, support)
     x = grid_edges(lon[0], analysis_res)
     y = grid_edges(lat[:, 0], analysis_res)
     display_lon, display_lat = regular_grid(

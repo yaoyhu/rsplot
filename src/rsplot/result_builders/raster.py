@@ -77,12 +77,12 @@ def build_raster_result(
             region,
         )
 
-    if (
-        display_grid is not None
-        and swath_meta.get("display_support") == "fixed_analysis_valid_cells"
+    if display_grid is not None and swath_meta.get("display_support") in (
+        "analysis_valid_cells",
+        "fixed_analysis_valid_cells",
     ):
         result["boundary_policy"]["display"]["clip"] = (
-            "administrative_geometry_and_fixed_analysis_valid_cells"
+            f"administrative_geometry_and_{swath_meta['display_support']}"
         )
         result["boundary_policy"]["display"]["grid_shape"] = list(
             display_grid.shape

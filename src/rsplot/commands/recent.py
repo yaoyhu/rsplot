@@ -103,10 +103,6 @@ def run_recent(
         except ValueError as e:
             console.print(f"[red]{e}[/red]")
             raise typer.Exit(1) from e
-        if sensor == "gems":
-            from rsplot.readers.gems import GEMS_ANALYSIS_RESOLUTION
-
-            use_res = GEMS_ANALYSIS_RESOLUTION
         use_data_dir = (
             data_dir
             if data_dir is not None
@@ -150,10 +146,6 @@ def run_recent(
             available = ", ".join(STATION_VAR_META)
             console.print(f"[red]未知变量 '{var}'[/red]。可用: {available}")
             raise typer.Exit(1)
-        if sensor == "gems":
-            from rsplot.readers.gems import GEMS_ANALYSIS_RESOLUTION
-
-            use_res = GEMS_ANALYSIS_RESOLUTION
         use_data_dir = (
             data_dir if data_dir is not None else cfg.get_data_dir("guokong")
         )

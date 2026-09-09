@@ -371,7 +371,7 @@ class GemsCommandTests(unittest.TestCase):
             }
         ).to_netcdf(self.root / "2026090109.nc")
 
-    def invoke(self, command, date, *options):
+    def invoke(self, command, date, *options, resolution="1"):
         output = self.root / (
             command + ".png" if command != "recent" else "recent.json"
         )
@@ -383,11 +383,11 @@ class GemsCommandTests(unittest.TestCase):
             "gems",
             "-p",
             "no2",
-            "--res",
-            "1",
             "--output",
             str(output),
         ]
+        if resolution is not None:
+            args += ["--res", resolution]
         if command != "recent":
             args += ["--basemap", "none"]
         result = self.runner.invoke(app, args + list(options))
@@ -477,63 +477,135 @@ class GemsCommandTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn("2026090119", result.output)
 
-    def test_display_resolution_preserves_raster_overlay_recent_statistics(
+    def test_resolution_remaps_native_values_in_all_gems_commands(self):
+        # Six distinct native pixels fit in one 0.05-degree cell. At 0.01
+        # each value must survive, rather than duplicating the coarse mean.
+        path = make_scan(self.root, values=[1, 2, 3, 4, 5, 6])
+        with Dataset(path, "a") as ds:
+            lon, lat = np.meshgrid(
+                [115.205, 115.215, 115.225], [30.205, 30.215]
+            )
+            ds["Geolocation Fields/Longitude"][:] = lon
+            ds["Geolocation Fields/Latitude"][:] = lat
+        self.region.geometry = box(115.19, 30.19, 115.26, 30.26)
+        self.region.extent = (115.19, 115.26, 30.19, 30.26)
+        results = []
+        for res in ["0.05", "0.01"]:
+            with self.subTest(res=res):
+                result, out = self.invoke(
+                    "raster", "20260901", "--res", res, "--smooth", "0"
+                )
+                self.assertEqual(result.exit_code, 0, result.output)
+                raster = json.loads(out.read_text())
+                results.append(raster)
+                x, y, grid = self.plot.call_args.args[:3]
+                np.testing.assert_allclose(np.diff(x[0]), float(res))
+                np.testing.assert_allclose(np.diff(y[:, 0]), float(res))
+                expected = [3.5] if res == "0.05" else [1, 2, 3, 4, 5, 6]
+                # Equal angular cells have slightly different ground areas.
+                np.testing.assert_allclose(
+                    np.sort(grid[np.isfinite(grid)]),
+                    expected,
+                    atol=1e-4 if res == "0.05" else 1e-8,
+                )
+                for key in [
+                    "resolution_deg",
+                    "analysis_resolution_deg",
+                    "display_resolution_deg",
+                ]:
+                    self.assertEqual(raster["swath"][key], float(res))
+                self.assertEqual(
+                    raster["swath"]["display_support"], "analysis_valid_cells"
+                )
+                for command, date, args in [
+                    (
+                        "overlay",
+                        "20260901",
+                        ["--station-datetime", "2026090109", "--smooth", "0"],
+                    ),
+                    (
+                        "raster",
+                        "20260901-20260901",
+                        ["--n-min", "1", "--smooth", "0"],
+                    ),
+                    ("recent", "20260901", ["--days", "1"]),
+                ]:
+                    result, out = self.invoke(
+                        command, date, "--res", res, *args
+                    )
+                    self.assertEqual(result.exit_code, 0, result.output)
+                    data = json.loads(out.read_text())
+                    if command == "overlay":
+                        data = data["raster"]
+                    if command == "recent":
+                        self.assertEqual(
+                            data["params"]["resolution_deg"], float(res)
+                        )
+                        data = data["daily"][0]
+                        self.assertEqual(
+                            data["meta"]["analysis_resolution_deg"], float(res)
+                        )
+                        self.assertEqual(
+                            data["stats"]["mean"], raster["stats"]["mean"]
+                        )
+                        self.assertEqual(
+                            data["stats"]["n"], raster["stats"]["n"]
+                        )
+                    else:
+                        self.assertEqual(data["stats"], raster["stats"])
+        self.assertEqual(results[0]["stats"]["valid_region_pixels"], 1)
+        self.assertEqual(results[1]["stats"]["valid_region_pixels"], 6)
+
+    def test_default_resolution_is_shared_by_products_levels_and_commands(
         self,
     ):
-        results = []
-        supports = []
-        for res in ["0.1", "0.075"]:
-            result, out = self.invoke(
-                "raster", "20260901", "--res", res, "--smooth", "0"
-            )
-            self.assertEqual(result.exit_code, 0, result.output)
-            results.append(json.loads(out.read_text()))
-            supports.append(self.plot.call_args.kwargs["coverage_geometry"])
-        self.assertEqual(results[0]["stats"], results[1]["stats"])
-        self.assertTrue(supports[0].equals(supports[1]))
-        self.assertEqual(results[0]["swath"]["analysis_resolution_deg"], 0.05)
-        self.assertNotEqual(
-            results[0]["swath"]["display_resolution_deg"],
-            results[1]["swath"]["display_resolution_deg"],
-        )
-        for res in ["0.1", "0.075"]:
-            result, out = self.invoke(
-                "overlay",
-                "20260901",
-                "--station-datetime",
-                "2026090109",
-                "--res",
-                res,
-                "--smooth",
-                "0",
-            )
-            self.assertEqual(result.exit_code, 0, result.output)
-            self.assertEqual(
-                json.loads(out.read_text())["raster"]["stats"],
-                results[0]["stats"],
-            )
-            result, out = self.invoke(
-                "raster",
-                "20260901-20260901",
-                "--n-min",
-                "1",
-                "--res",
-                res,
-                "--smooth",
-                "0",
-            )
-            self.assertEqual(result.exit_code, 0, result.output)
-            self.assertEqual(
-                json.loads(out.read_text())["stats"], results[0]["stats"]
-            )
-            result, out = self.invoke(
-                "recent", "20260901", "--days", "1", "--res", res
-            )
-            self.assertEqual(result.exit_code, 0, result.output)
-            self.assertEqual(
-                json.loads(out.read_text())["daily"][0]["stats"]["mean"],
-                results[0]["stats"]["mean"],
-            )
+        for product in PRODUCT_REGISTRY:
+            info = get_product_info(product, sensor="gems")
+            for level in LEVEL_DEFAULTS:
+                self.assertEqual(info.defaults_for_level(level).res, 0.05)
+        for command, args in [
+            ("raster", []),
+            ("overlay", ["--station-datetime", "2026090109"]),
+            ("recent", ["--days", "1"]),
+        ]:
+            with self.subTest(command=command):
+                result, out = self.invoke(
+                    command, "20260901", *args, resolution=None
+                )
+                self.assertEqual(result.exit_code, 0, result.output)
+                data = json.loads(out.read_text())
+                if command == "overlay":
+                    data = data["raster"]
+                meta = data["params"] if command == "recent" else data["swath"]
+                self.assertEqual(meta["resolution_deg"], 0.05)
+
+    def test_smoothing_and_dpi_preserve_statistics_and_coverage(self):
+        for command, args in [
+            ("raster", []),
+            ("overlay", ["--station-datetime", "2026090109"]),
+        ]:
+            results, supports = [], []
+            for smooth, dpi in [("0", "100"), ("2", "300")]:
+                result, out = self.invoke(
+                    command,
+                    "20260901",
+                    *args,
+                    "--res",
+                    "0.05",
+                    "--smooth",
+                    smooth,
+                    "--dpi",
+                    dpi,
+                )
+                self.assertEqual(result.exit_code, 0, result.output)
+                data = json.loads(out.read_text())
+                results.append(
+                    data["raster"] if command == "overlay" else data
+                )
+                plot = self.overlay if command == "overlay" else self.plot
+                supports.append(plot.call_args.kwargs["coverage_geometry"])
+            self.assertEqual(results[0]["stats"], results[1]["stats"])
+            self.assertTrue(supports[0].equals(supports[1]))
 
     def test_expected_errors_have_no_traceback(self):
         for command, date, args in [

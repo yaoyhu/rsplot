@@ -296,14 +296,17 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
 - `geo/footprints.py` remaps valid native polygons using overlap areas in
   EPSG:6933. Empty/boundary-touch-only targets stay NaN. Average scans and
   then days with the existing equal-time weighting rules.
-- GEMS commands and recent statistics use the globally aligned 0.05° analysis
-  spacing, independent of administrative level and `--res`. It is numerical
-  spacing, not a claimed native resolution. GEMS `--res` controls display
-  only; recent ignores it and records the actual analysis spacing.
-- Resample display values separately, then clip to the fixed analysis valid
-  cell union AND the administrative geometry. Preserve coverage holes during
-  display smoothing and resampling. Statistics always use the unfilled,
-  unsmoothed center-selected analysis grid. Subcell gaps are unresolved.
+- GEMS `raster`, `overlay`, and `recent` remap native footprints directly to
+  the globally aligned target spacing selected by `--res`; the default is
+  0.05° at every administrative level. There is no fixed intermediate grid.
+  This is numerical spacing, not a claimed native satellite resolution.
+- Draw the target grid directly, clipping to its valid-cell union AND the
+  administrative geometry. Preserve coverage holes during display smoothing.
+  Statistics use the unfilled, unsmoothed center-selected target grid and may
+  change with `--res`; use identical spacing for comparisons. Smoothing and
+  DPI must not change statistics. Subcell gaps remain unresolved.
+- Sidecars record the selected spacing for both analysis and display, with
+  `display_support` set to `analysis_valid_cells`.
 - Preserve separate analysis/display coordinates in result builders and
   record the remapping, resolution, and footprint provenance in JSON.
 
