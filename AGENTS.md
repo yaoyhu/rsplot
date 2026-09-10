@@ -86,7 +86,7 @@ not hard-coded in `src/rsplot/config.py`; use `~/.config/rsplot/config.toml`,
 `RSPLOT_CONFIG`, environment variables, or CLI directory options.
 
 Create a local config from the example. Optional paths such as `font_dir`
-and `hcho_cmap_file` may be left unset; required runtime paths include the
+may be left unset; required runtime paths include the
 GeoJSON boundary directory and whichever product data directories a command
 uses.
 
@@ -110,7 +110,6 @@ export RSPLOT_DATA_DIR_HCHO="/path/to/hcho"
 export RSPLOT_DATA_DIR_GUOKONG="/path/to/guokong"
 export RSPLOT_DATA_DIR_ERA5="/path/to/era5"
 export RSPLOT_DATA_DIR_FORECAST="/path/to/forecast"
-export RSPLOT_HCHO_CMAP_FILE="/path/to/256x3_rgb_table.txt"
 ```
 
 The boundary resolver expects province, city, and county GeoJSON files in the

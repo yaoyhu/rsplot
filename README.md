@@ -44,6 +44,10 @@ uv run rsplot --help
 
 ## Configuration
 
+Satellite HCHO, O3, and O3PR use the bundled `colormap_22.txt` by
+default; NO2 uses the built-in nine-color gradient. These defaults apply to
+both TROPOMI and GEMS. Use `--cmap` to select another registered colormap.
+
 `rsplot` does not ship site-specific data paths. Configure local satellite,
 station, boundary, and font paths with a TOML file:
 
@@ -58,7 +62,6 @@ Then edit `~/.config/rsplot/config.toml`:
 [paths]
 geojson_dir = "/path/to/geojson"
 font_dir = "/path/to/fonts"
-# hcho_cmap_file = "/path/to/256x3_rgb_table.txt"
 
 [paths.data_dirs]
 no2 = "/path/to/NO2"
@@ -101,7 +104,6 @@ export RSPLOT_DATA_DIR_GUOKONG="/path/to/guokong_combine"
 export RSPLOT_DATA_DIR_ERA5="/path/to/era5"
 export RSPLOT_DATA_DIR_FORECAST="/path/to/forecast"
 export RSPLOT_DATA_DIR_RECONSTRUCT="/path/to/reconstruct"
-export RSPLOT_HCHO_CMAP_FILE="/path/to/256x3_rgb_table.txt"
 ```
 
 Command-line directory options, such as `--data-dir`, take precedence for the

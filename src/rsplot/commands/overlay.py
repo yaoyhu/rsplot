@@ -353,7 +353,6 @@ def run_overlay(
         dpi=use_dpi,
         basemap=use_basemap,
         tianditu_key=cfg.tianditu_key,
-        hcho_cmap_file=cfg.hcho_cmap_file,
         title=title,
         output=output,
         **({"coverage_geometry": display_support} if sensor == "gems" else {}),

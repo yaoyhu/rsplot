@@ -10,9 +10,7 @@ from matplotlib import font_manager
 from rsplot.plotting.colormaps import register_rsplot_colormaps
 
 
-def setup_fonts(
-    font_dir: str | None, hcho_cmap_file: str | None = None
-) -> None:
+def setup_fonts(font_dir: str | None) -> None:
     """Register Chinese fonts and set matplotlib defaults.
 
     Looks for Microsoft YaHei in font_dir. Falls back gracefully
@@ -20,7 +18,7 @@ def setup_fonts(
     """
     if not font_dir:
         mpl.rcParams["axes.unicode_minus"] = False
-        register_rsplot_colormaps(hcho_cmap_file)
+        register_rsplot_colormaps()
         return
 
     font_root = Path(font_dir)
@@ -40,4 +38,4 @@ def setup_fonts(
         mpl.rcParams["font.sans-serif"] = ["Microsoft YaHei"]
 
     mpl.rcParams["axes.unicode_minus"] = False
-    register_rsplot_colormaps(hcho_cmap_file)
+    register_rsplot_colormaps()

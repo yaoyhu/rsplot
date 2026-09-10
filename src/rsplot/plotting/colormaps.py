@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import matplotlib as mpl
@@ -10,12 +9,31 @@ import matplotlib.colors as mcolors
 import numpy as np
 
 HCHO_CMAP = "rsplot_hcho"
+NO2_CMAP = "rsplot_no2"
+COLORMAP_22 = "rsplot_colormap_22"
 STATION_CONCENTRATION_CMAP = "rsplot_station_concentration"
 
 
-def register_rsplot_colormaps(hcho_cmap_file: str | None = None) -> None:
+def register_rsplot_colormaps() -> None:
     """Register custom colormaps used by rsplot plots."""
-    _register(_build_hcho_cmap(hcho_cmap_file))
+    _register(_build_colormap_22(COLORMAP_22))
+    _register(_build_colormap_22(HCHO_CMAP))
+    _register(
+        mcolors.LinearSegmentedColormap.from_list(
+            NO2_CMAP,
+            [
+                "#C2C8E1",
+                "#9BA9DC",
+                "#4C9DF4",
+                "#86D1F9",
+                "#A7E5EF",
+                "#FEFC59",
+                "#FD7822",
+                "#FC131F",
+                "#A3090E",
+            ],
+        )
+    )
     _register(
         mcolors.LinearSegmentedColormap.from_list(
             STATION_CONCENTRATION_CMAP,
@@ -34,32 +52,9 @@ def register_rsplot_colormaps(hcho_cmap_file: str | None = None) -> None:
     )
 
 
-def _build_hcho_cmap(hcho_cmap_file: str | None) -> mcolors.Colormap:
-    if hcho_cmap_file:
-        cmap_file = Path(os.path.expandvars(hcho_cmap_file)).expanduser()
-        if not cmap_file.exists():
-            raise FileNotFoundError(
-                f"Configured HCHO colormap file does not exist: {cmap_file}"
-            )
-        data = np.loadtxt(cmap_file)
-        if data.shape != (256, 3):
-            raise ValueError(
-                f"{cmap_file} must contain a 256x3 RGB colormap table, "
-                f"got shape {data.shape}"
-            )
-        cmap = mcolors.ListedColormap(data, name=HCHO_CMAP)
-    else:
-        cmap = mcolors.LinearSegmentedColormap.from_list(
-            HCHO_CMAP,
-            [
-                "#ffffff",
-                "#fff7bc",
-                "#fec44f",
-                "#fd8d3c",
-                "#e31a1c",
-                "#800026",
-            ],
-        )
+def _build_colormap_22(name: str) -> mcolors.Colormap:
+    cmap_file = Path(__file__).with_name("colormap_22.txt")
+    cmap = mcolors.ListedColormap(np.loadtxt(cmap_file), name=name)
     cmap.set_under("w")
     return cmap
 

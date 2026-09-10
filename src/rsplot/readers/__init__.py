@@ -14,6 +14,8 @@ from rsplot.readers.tropomi_o3 import TropomiO3Reader
 from rsplot.readers.tropomi_o3pr import TropomiO3PRReader
 
 HCHO_CMAP = "rsplot_hcho"
+NO2_CMAP = "rsplot_no2"
+COLORMAP_22 = "rsplot_colormap_22"
 
 
 @dataclass
@@ -53,7 +55,7 @@ PRODUCT_REGISTRY: dict[str, ProductInfo] = {
     "no2": ProductInfo(
         reader_cls=TropomiNO2Reader,
         colorbar_label="NO2 VCD (x10^15 molec/cm2)",
-        cmap="YlOrRd",
+        cmap=NO2_CMAP,
         vmin=0.0,
         vmax=20.0,
         min_range=5.0,
@@ -61,7 +63,7 @@ PRODUCT_REGISTRY: dict[str, ProductInfo] = {
     "o3": ProductInfo(
         reader_cls=TropomiO3Reader,
         colorbar_label="O3 Total Column (DU)",
-        cmap="YlOrRd",
+        cmap=COLORMAP_22,
         vmin=None,
         vmax=None,
         min_range=30.0,
@@ -69,7 +71,7 @@ PRODUCT_REGISTRY: dict[str, ProductInfo] = {
     "o3pr": ProductInfo(
         reader_cls=TropomiO3PRReader,
         colorbar_label="O3 Tropospheric Column from Profile (DU)",
-        cmap="YlOrRd",
+        cmap=COLORMAP_22,
         vmin=None,
         vmax=None,
         min_range=5.0,

@@ -221,7 +221,6 @@ def run_reconstruct(
         vmax=use_vmax,
         basemap=use_basemap,
         tianditu_key=cfg.tianditu_key,
-        hcho_cmap_file=cfg.hcho_cmap_file,
         title=title,
         output=output,
         colorbar_label=f"{data.label} reconstructed ({data.unit})",

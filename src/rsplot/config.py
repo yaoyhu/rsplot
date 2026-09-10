@@ -39,13 +39,11 @@ KNOWN_DATA_PRODUCTS = (
 DEFAULT_DATA_DIRS: dict[str, str] = {}
 DEFAULT_GEOJSON_DIR = None
 DEFAULT_FONT_DIR = None
-DEFAULT_HCHO_CMAP_FILE = None
 DEFAULT_TIANDITU_KEY = None
 
 
 CONFIG_PATH = Path.home() / ".config" / "rsplot" / "config.toml"
 CONFIG_ENV_VAR = "RSPLOT_CONFIG"
-HCHO_CMAP_FILE_ENV = "RSPLOT_HCHO_CMAP_FILE"
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +173,6 @@ class AppConfig:
     )
     geojson_dir: str | None = DEFAULT_GEOJSON_DIR
     font_dir: str | None = DEFAULT_FONT_DIR
-    hcho_cmap_file: str | None = DEFAULT_HCHO_CMAP_FILE
     tianditu_key: str | None = DEFAULT_TIANDITU_KEY
     config_files: list[str] = field(default_factory=list)
     subdivision_overrides: dict[str, SubdivisionSource] = field(
@@ -222,8 +219,6 @@ class AppConfig:
             self.geojson_dir = _normalize_path(v)
         if v := os.environ.get("RSPLOT_FONT_DIR"):
             self.font_dir = _normalize_path(v)
-        if v := os.environ.get(HCHO_CMAP_FILE_ENV):
-            self.hcho_cmap_file = _normalize_path(v)
         if v := os.environ.get("TIANDITU_API_KEY"):
             self.tianditu_key = v
 
@@ -267,8 +262,6 @@ class AppConfig:
             self.geojson_dir = _normalize_path(v)
         if v := paths.get("font_dir"):
             self.font_dir = _normalize_path(v)
-        if v := paths.get("hcho_cmap_file"):
-            self.hcho_cmap_file = _normalize_path(v)
 
         td = data.get("tianditu", {})
         if v := td.get("api_key"):

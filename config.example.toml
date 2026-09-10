@@ -7,7 +7,6 @@
 [paths]
 geojson_dir = "/path/to/geojson"
 font_dir = "/path/to/fonts"
-# hcho_cmap_file = "/path/to/256x3_rgb_table.txt"
 
 [paths.data_dirs]
 no2 = "/path/to/NO2"

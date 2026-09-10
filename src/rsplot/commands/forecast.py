@@ -315,7 +315,6 @@ def run_forecast(
             vmax=use_vmax,
             basemap=use_basemap,
             tianditu_key=cfg.tianditu_key,
-            hcho_cmap_file=cfg.hcho_cmap_file,
             title=title,
             output=output,
             colorbar_label=var_info.colorbar_label,
@@ -336,7 +335,6 @@ def run_forecast(
             dpi=use_dpi,
             basemap=use_basemap,
             tianditu_key=cfg.tianditu_key,
-            hcho_cmap_file=cfg.hcho_cmap_file,
             title=title,
             output=output,
         )

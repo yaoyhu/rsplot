@@ -43,7 +43,6 @@ def plot_raster(
     vmax: float = 20.0,
     basemap: bool | None = None,
     tianditu_key: str | None = None,
-    hcho_cmap_file: str | None = None,
     title: str | None = None,
     output: str | None = None,
     coverage_geometry: BaseGeometry | None = None,
@@ -58,7 +57,7 @@ def plot_raster(
     basemap : override region.params.basemap if not None.
     output : save to file path. If None, plt.show().
     """
-    register_rsplot_colormaps(hcho_cmap_file)
+    register_rsplot_colormaps()
 
     # --- Figure setup ---
     frame = create_map_frame(
