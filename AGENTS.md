@@ -15,7 +15,7 @@ The package uses a `src/` layout and exposes the console command:
 rsplot = rsplot.__main__:app
 ```
 
-Primary CLI commands are `raster`, `forecast`, `meteo`, `station`,
+Primary CLI commands are `raster`, `radius`, `forecast`, `meteo`, `station`,
 `trend`, `overlay`, `recent`, and `fnr`.
 The `forecast` command can optionally overlay station observations with
 `--station-overlay`; its JSON uses `mode` to distinguish pure forecast from
@@ -325,3 +325,34 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
   grid/data, never sum overlapping members for the union total. Empty members
   retain zero counts and null summaries. Keep `spatial_summary` separate.
 - Run `uv run python -m unittest discover -s tests -p 'test_multi_regions.py' -v`.
+
+## Station Radius Maps
+
+- `radius STATION_ID DATE --km KM` uses `commands.raster.prepare_raster`
+  and the existing raster/overlay renderers. Keep administrative `raster`
+  behavior unchanged when modifying the shared preparation path.
+- `geo/radius.py` builds squares in station-centered WGS84 AEQD meters.
+  `--km` is the distance from the center to each side; side length is 2 × km.
+  Select stations by their projected x/y offsets, including square corners,
+  not by radial distance. `RegionInfo.projection_center` keeps the default
+  map square and centered. Its axes fit the square exactly, with no exterior
+  padding or extra dashed outline; keep edge-station labels inside the frame.
+  `geometry_kind=station_radius` identifies the
+  non-administrative area; administrative context must not clip the square.
+  JSON records `radius.shape=square` and `radius.side_length_km`.
+- `--station-var` is optional. Locations-only mode uses
+  `read_station_locations` and requires no pollutant field. Coordinates
+  and observations in variable mode come from the same station hour.
+- Station observations are always one concrete China-time hour, never a
+  temporal mean. Daily/window satellite requests with a station variable
+  require `--station-datetime YYYYMMDDHH`. GEMS scans reuse nominal nearest
+  hour matching (ties forward); explicit overrides remain supported.
+- Use the same markers for center and other stations, retaining hollow
+  markers for missing values. Do not add a center ring or lower-right legend.
+  Keep satellite and station units/colorbars separate. Daily/window versus hourly time
+  differences are null; titles identify both time bases.
+- Radius JSON retains raster provenance and adds radius, administrative
+  context, time matching, and station rows. Empty center-selected grids
+  retain zero counts and null summaries even when intersecting cells display.
+- Run `uv run python -m unittest discover -s tests -p 'test_radius.py' -v`
+  alongside GEMS, footprint, multi-region, and boundary-display regressions.

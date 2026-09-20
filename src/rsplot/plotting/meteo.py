@@ -15,7 +15,10 @@ from rsplot.plotting.map_frame import (
     create_map_frame,
     finalize_map_figure,
 )
-from rsplot.plotting.station import draw_station_layer
+from rsplot.plotting.station import (
+    add_station_colorbar,
+    draw_station_layer,
+)
 from rsplot.plotting.wind import draw_wind_vectors
 
 if TYPE_CHECKING:
@@ -120,7 +123,9 @@ def plot_meteo(
         field_colorbar.ax.tick_params(labelsize=8)
 
         station_axis = ax.inset_axes([1.03, 0.04, 0.025, 0.42])
-        station_colorbar = fig.colorbar(station_scatter, cax=station_axis)
+        station_colorbar = add_station_colorbar(
+            fig, station_scatter, station.var_name, cax=station_axis
+        )
         if station_colorbar_label:
             station_colorbar.set_label(station_colorbar_label, fontsize=9)
         station_colorbar.ax.tick_params(labelsize=8)
@@ -133,8 +138,10 @@ def plot_meteo(
         )
         field_colorbar.set_label(f"Temperature ({field.unit})")
     elif station_scatter is not None:
-        station_colorbar = fig.colorbar(
+        station_colorbar = add_station_colorbar(
+            fig,
             station_scatter,
+            station.var_name,
             ax=ax,
             shrink=0.7,
             pad=0.05,

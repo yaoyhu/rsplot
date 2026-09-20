@@ -159,6 +159,133 @@ def raster(
 
 
 @app.command()
+def radius(
+    station_id: str = typer.Argument(
+        ...,
+        help="中心国控站点 ID，如 1379A",
+    ),
+    date_arg: str = typer.Argument(
+        ...,
+        help="GEMS: 北京时间 YYYYMMDDHHMM 精确扫描，YYYYMMDD 日均；单日 YYYYMMDD 走单日路径；带 --days 或写成 YYYYMMDD-YYYYMMDD "
+        "时切换为窗口均值（HCHO 单日覆盖率低，月均更可读）",
+    ),
+    # --- optional overrides ---
+    sensor: str = typer.Option(
+        "tropomi", "--sensor", help="卫星来源: tropomi / gems"
+    ),
+    product: str = typer.Option(
+        "o3",
+        "--product",
+        "-p",
+        help="产品类型: no2 / o3 / o3pr / hcho",
+    ),
+    days: int | None = typer.Option(
+        None,
+        "--days",
+        help="时间窗口天数；不指定且 DATE 为单日时走单日路径。"
+        "推荐值: 30 (月均，HCHO 首选) / 7 (周均) / 显式区间用 YYYYMMDD-YYYYMMDD",
+    ),
+    n_min: int | None = typer.Option(
+        None,
+        "--n-min",
+        help=(
+            "窗口模式下每像元最少有效天数。默认: NO2/O3/O3PR="
+            "max(3, 天数//2), HCHO=max(3, ceil(天数*0.25))"
+        ),
+    ),
+    km: float = typer.Option(
+        ...,
+        "--km",
+        help="从站点向上下左右各延伸的公里数，正方形边长为该值的两倍",
+    ),
+    station_var: str | None = typer.Option(
+        None,
+        "--station-var",
+        help="站点变量，如 NO2 / O3 / PM2.5；省略只标位置",
+    ),
+    station_datetime: str | None = typer.Option(
+        None,
+        "--station-datetime",
+        help="站点北京时间 YYYYMMDDHH；日均/窗口叠加变量时必填，GEMS 扫描默认匹配最近整点",
+    ),
+    station_data_dir: str | None = typer.Option(
+        None,
+        "--station-data-dir",
+        help="国控站点目录（覆盖配置）",
+    ),
+    data_dir: str | None = typer.Option(
+        None,
+        "--data-dir",
+        "-d",
+        help="数据目录 (覆盖配置默认值)",
+    ),
+    output: str | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="输出 PNG 路径，默认保存到 /tmp 并生成同名 JSON。",
+    ),
+    dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
+    res: float | None = typer.Option(
+        None,
+        "--res",
+        help="目标网格间距 (度)；GEMS 默认 0.05°，直接重映射原始像元",
+    ),
+    basemap: str | None = typer.Option(
+        "none",
+        "--basemap",
+        "-b",
+        help="底图控制: satellite / none (覆盖级别默认)",
+    ),
+    vmin: float | None = typer.Option(None, "--vmin", help="Colorbar 最小值"),
+    vmax: float | None = typer.Option(None, "--vmax", help="Colorbar 最大值"),
+    cmap: str | None = typer.Option(None, "--cmap", help="Colormap 名称"),
+    smooth: float | None = typer.Option(
+        None, "--smooth", help="高斯平滑 sigma"
+    ),
+    title: str | None = typer.Option(None, "--title", help="自定义标题"),
+    qa: float | None = typer.Option(
+        None, "--qa", help="TROPOMI QA 阈值 (0-1)，默认取配置；GEMS 不适用"
+    ),
+    cf: float = typer.Option(
+        0.5,
+        "--cf",
+        min=0.0,
+        max=1.0,
+        help="最大云量比例 (0-1)，保留 CF <= 该值的卫星像元",
+    ),
+) -> None:
+    """绘制站点居中、上下左右各延伸指定公里数的正方形卫星图，可叠加指定小时的站点变量。"""
+    from rsplot.commands.radius import run_radius
+
+    run_radius(
+        station_id=station_id,
+        date_arg=date_arg,
+        km=km,
+        station_var=station_var,
+        station_datetime=station_datetime,
+        station_data_dir=station_data_dir,
+        sensor=sensor,
+        product=product,
+        days=days,
+        n_min=n_min,
+        data_dir=data_dir,
+        output=output,
+        dpi=dpi,
+        res=res,
+        basemap=basemap,
+        vmin=vmin,
+        vmax=vmax,
+        cmap=cmap,
+        smooth=smooth,
+        title=title,
+        qa=qa,
+        cf=cf,
+        console=console,
+    )
+
+
+@app.command()
 def reconstruct(
     region: str = typer.Argument(
         ..., help="区域名称，如 中国、安徽、合肥、YRD、合肥/蜀山"

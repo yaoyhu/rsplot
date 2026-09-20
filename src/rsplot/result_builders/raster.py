@@ -82,7 +82,8 @@ def build_raster_result(
         "fixed_analysis_valid_cells",
     ):
         result["boundary_policy"]["display"]["clip"] = (
-            f"administrative_geometry_and_{swath_meta['display_support']}"
+            f"{region.geometry_kind}_geometry_and_"
+            f"{swath_meta['display_support']}"
         )
         result["boundary_policy"]["display"]["grid_shape"] = list(
             display_grid.shape

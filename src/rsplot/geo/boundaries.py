@@ -60,6 +60,8 @@ class RegionInfo:
     subdivision_level: str | None = None
     qualified_name: str | None = None
     members: tuple[RegionInfo, ...] = ()
+    geometry_kind: str = "administrative"
+    projection_center: tuple[float, float] | None = None
 
 
 def _strip_suffix(name: str) -> str:

@@ -69,7 +69,11 @@ def create_map_frame(
         projection = tiles.crs
     else:
         tiles = None
-        projection = ccrs.PlateCarree()
+        projection = (
+            ccrs.AzimuthalEquidistant(*region.projection_center)
+            if region.projection_center is not None
+            else ccrs.PlateCarree()
+        )
 
     fig, ax = plt.subplots(
         figsize=figure_size_for_level(region.level),
@@ -149,6 +153,18 @@ def add_region_boundaries(ax: GeoAxes, region: RegionInfo) -> None:
             )
         )
 
+    if region.geometry_kind == "station_radius":
+        from dataclasses import replace
+
+        add_subdivision_labels(
+            ax,
+            replace(
+                region,
+                sub_boundary_gdf=region.main_boundary_gdf,
+                subdivision_level="city",
+            ),
+        )
+
     if getattr(region, "members", ()):
         add_member_labels(ax, region)
 
@@ -171,7 +187,29 @@ def add_subdivision_labels(ax: GeoAxes, region: RegionInfo) -> None:
         if key in selected_geometry or (row[name_field], key) in seen_labels:
             continue
         seen_labels.add((row[name_field], key))
-        point = row.geometry.representative_point()
+        geometry = row.geometry
+        if region.geometry_kind == "station_radius":
+            from shapely.geometry import box
+
+            west, east, south, north = region.extent
+            pad = region.params.pad
+            geometry = geometry.intersection(
+                box(west - pad, south - pad, east + pad, north + pad)
+            )
+            if geometry.is_empty:
+                continue
+            if region.subdivision_level == "city":
+                upper = geometry.intersection(
+                    box(
+                        west - pad,
+                        south + (north - south) * 0.85,
+                        east + pad,
+                        north + pad,
+                    )
+                )
+                if not upper.is_empty:
+                    geometry = upper
+        point = geometry.representative_point()
         if region.level in (
             "key_region",
             "province",
@@ -238,6 +276,14 @@ def configure_map_axes(
         crs=ccrs.PlateCarree(),
     )
 
+    if region.projection_center is not None and not use_basemap:
+        projected = ax.projection.project_geometry(
+            region.geometry, ccrs.PlateCarree()
+        )
+        west, south, east, north = projected.bounds
+        ax.set_xlim(west, east)
+        ax.set_ylim(south, north)
+
     gridlines = ax.gridlines(
         draw_labels=True,
         linewidth=0.2,
@@ -247,7 +293,9 @@ def configure_map_axes(
     gridlines.top_labels = gridlines.right_labels = False
     gridlines.xformatter = LONGITUDE_FORMATTER
     gridlines.yformatter = LATITUDE_FORMATTER
-    if getattr(region, "members", ()):
+    if region.projection_center is not None:
+        gridlines.rotate_labels = False
+    if region.members or region.geometry_kind == "station_radius":
         gridlines.xlocator = mticker.MaxNLocator(nbins=5)
         gridlines.ylocator = mticker.MaxNLocator(nbins=5)
     else:

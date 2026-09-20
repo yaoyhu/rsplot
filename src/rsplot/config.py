@@ -412,3 +412,25 @@ def get_exceedance_threshold(var_name: str) -> float | None:
     if limits is None:
         return None
     return limits.get(limit_time)
+
+
+@dataclass(frozen=True)
+class StationColorScale:
+    """Fixed concentration scale for O3 and NO2 station map layers."""
+
+    threshold: float
+    vmax: float
+    vmin: float = 0.0
+    cmap: str = "rsplot_station_threshold"
+    exceedance_color: str = "#ff0000"
+
+
+def get_station_color_scale(var_name: str) -> StationColorScale | None:
+    """Use existing time-specific limits with 20 ug/m3 of red headroom."""
+    meta = STATION_VAR_META.get(var_name)
+    if meta is None or meta[1] not in ("O3", "NO2"):
+        return None
+    threshold = get_exceedance_threshold(var_name)
+    if threshold is None:
+        return None
+    return StationColorScale(threshold=threshold, vmax=threshold + 20.0)

@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from shapely.geometry.base import BaseGeometry
 
     from rsplot.geo.boundaries import RegionInfo
+    from rsplot.plotting.station_focus import StationFocus
 
 
 def plot_raster(
@@ -46,6 +47,7 @@ def plot_raster(
     title: str | None = None,
     output: str | None = None,
     coverage_geometry: BaseGeometry | None = None,
+    station_focus: StationFocus | None = None,
     colorbar_label: str = "NO2 VCD (x10^15 molec/cm2)",
 ) -> None:
     """Draw a raster map for the given region.
@@ -87,6 +89,10 @@ def plot_raster(
     # --- Basemap tiles (beneath boundaries, above raster) ---
     add_basemap_tiles(frame, region)
     add_region_boundaries(ax, region)
+    if station_focus is not None:
+        from rsplot.plotting.station_focus import add_station_focus
+
+        add_station_focus(ax, region, station_focus)
     configure_map_axes(ax, region, use_basemap=frame.use_basemap)
 
     # Colorbar

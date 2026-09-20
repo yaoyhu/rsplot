@@ -6,13 +6,13 @@ with red circles for stations exceeding air quality limits.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import cartopy.crs as ccrs
 import matplotlib.colors as mcolors
 import numpy as np
 
-from rsplot.config import AQI_COLORS
+from rsplot.config import AQI_COLORS, get_station_color_scale
 from rsplot.plotting.colormaps import STATION_CONCENTRATION_CMAP
 from rsplot.plotting.map_frame import (
     add_basemap_tiles,
@@ -24,7 +24,10 @@ from rsplot.plotting.map_frame import (
 
 if TYPE_CHECKING:
     from cartopy.mpl.geoaxes import GeoAxes
+    from matplotlib.cm import ScalarMappable
     from matplotlib.collections import PathCollection
+    from matplotlib.colorbar import Colorbar
+    from matplotlib.figure import Figure
 
     from rsplot.geo.boundaries import RegionInfo
     from rsplot.readers.guokong import StationData
@@ -39,6 +42,71 @@ def build_aqi_colormap() -> tuple[
     cmap = mcolors.ListedColormap(colors)
     norm = mcolors.BoundaryNorm(bounds, cmap.N)
     return cmap, norm
+
+
+def build_station_colormap(
+    data: StationData,
+    *,
+    expand_constant: bool = False,
+) -> tuple[mcolors.Colormap | str, mcolors.Normalize]:
+    """Share AQI bands, fixed O3/NO2 scales and legacy percentile scales."""
+    if data.var_name == "AQI":
+        return build_aqi_colormap()
+
+    scale = get_station_color_scale(data.var_name)
+    if scale is not None:
+        ramp = mcolors.LinearSegmentedColormap.from_list(
+            scale.cmap,
+            ["#1a9850", "#a6d96a", "#fee08b", "#fdae61"],
+        )
+        colors = ramp(np.linspace(0, 1, 255))
+        colors = np.vstack([colors, mcolors.to_rgba(scale.exceedance_color)])
+        cmap = mcolors.ListedColormap(colors, name=scale.cmap)
+        cmap.set_over(scale.exceedance_color)
+        # BoundaryNorm includes the lower edge. Shift the red boundary by
+        # one float so equality stays orange and only value > limit is red.
+        bounds = np.concatenate(
+            [
+                np.linspace(scale.vmin, scale.threshold, 256)[:-1],
+                [np.nextafter(scale.threshold, np.inf), scale.vmax],
+            ]
+        )
+        return cmap, mcolors.BoundaryNorm(bounds, cmap.N)
+
+    values = data.values[np.isfinite(data.values)]
+    if not values.size:
+        return STATION_CONCENTRATION_CMAP, mcolors.Normalize()
+    vmin, vmax = np.percentile(values, [5, 95]).astype(float)
+    if expand_constant and vmax <= vmin:
+        margin = max(abs(vmin) * 0.05, 0.1)
+        vmin, vmax = vmin - margin, vmax + margin
+    return STATION_CONCENTRATION_CMAP, mcolors.Normalize(vmin, vmax)
+
+
+def station_colorbar_options(var_name: str) -> dict[str, Any]:
+    """Keep fixed concentration bars proportional, with a red upper tip."""
+    scale = get_station_color_scale(var_name)
+    if scale is None:
+        return {}
+    return {
+        "spacing": "proportional",
+        "ticks": [*np.linspace(scale.vmin, scale.threshold, 5), scale.vmax],
+        "extend": "max",
+    }
+
+
+def add_station_colorbar(
+    fig: Figure,
+    mappable: ScalarMappable,
+    var_name: str,
+    **kwargs: Any,
+) -> Colorbar:
+    """Apply shared station colorbar settings without dense gradient ticks."""
+    options = station_colorbar_options(var_name)
+    colorbar = fig.colorbar(mappable, **kwargs, **options)
+    if options:
+        colorbar.minorticks_off()
+    return colorbar
 
 
 def station_marker_size(level: str) -> int:
@@ -82,36 +150,19 @@ def draw_station_layer(
         return None
 
     marker_size = station_marker_size(region.level)
-    if data.var_name == "AQI":
-        cmap, norm = build_aqi_colormap()
-        scatter = ax.scatter(
-            lon,
-            lat,
-            c=values,
-            cmap=cmap,
-            norm=norm,
-            s=marker_size,
-            edgecolors="#333",
-            linewidths=0.3,
-            transform=ccrs.PlateCarree(),
-            zorder=5,
-        )
-    else:
-        vmin = float(np.nanpercentile(values, 5))
-        vmax = float(np.nanpercentile(values, 95))
-        scatter = ax.scatter(
-            lon,
-            lat,
-            c=values,
-            cmap=STATION_CONCENTRATION_CMAP,
-            vmin=vmin,
-            vmax=vmax,
-            s=marker_size,
-            edgecolors="#333",
-            linewidths=0.3,
-            transform=ccrs.PlateCarree(),
-            zorder=5,
-        )
+    cmap, norm = build_station_colormap(data)
+    scatter = ax.scatter(
+        lon,
+        lat,
+        c=values,
+        cmap=cmap,
+        norm=norm,
+        s=marker_size,
+        edgecolors="#333",
+        linewidths=0.3,
+        transform=ccrs.PlateCarree(),
+        zorder=5,
+    )
 
     if threshold is not None:
         exceed_mask = values > threshold
@@ -161,7 +212,9 @@ def plot_station(
             if region.level in ("country", "key_region", "province")
             else 0.7
         )
-        colorbar = fig.colorbar(scatter, ax=ax, shrink=shrink, pad=0.05)
+        colorbar = add_station_colorbar(
+            fig, scatter, data.var_name, ax=ax, shrink=shrink, pad=0.05
+        )
         if colorbar_label:
             colorbar.set_label(colorbar_label)
 

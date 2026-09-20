@@ -102,25 +102,8 @@ class RegionStationSeries:
         return int(matches[0]) if len(matches) else None
 
 
-def read_stations(
-    data_dir: str,
-    datetime_str: str,
-    var_name: str,
-    extent: tuple[float, float, float, float] | None = None,
-) -> tuple[StationData, str]:
-    """Read station data for a given hour and variable.
-
-    Parameters
-    ----------
-    data_dir : directory containing {YYYYMMDDHH}.nc files.
-    datetime_str : YYYYMMDDHH (exact hour) or YYYYMMDD (latest hour).
-    var_name : variable name in the NC file (e.g. "AQI", "PM2.5", "O3").
-    extent : optional (lon_min, lon_max, lat_min, lat_max) for spatial filter.
-
-    Returns
-    -------
-    tuple of (StationData, resolved_datetime_str).
-    """
+def resolve_station_file(data_dir: str, datetime_str: str) -> Path:
+    """Resolve an exact local hour or the latest file on a local date."""
     if not datetime_str.isdigit() or len(datetime_str) not in (8, 10):
         raise ValueError(
             f"datetime 参数 '{datetime_str}' 格式不正确，"
@@ -151,6 +134,60 @@ def read_stations(
     else:
         path = root / f"{datetime_str}.nc"
 
+    return path
+
+
+@dataclass(frozen=True)
+class StationLocations:
+    """Station coordinates from one hourly snapshot, without observations."""
+
+    id: np.ndarray
+    lon: np.ndarray
+    lat: np.ndarray
+    source_file: str
+    datetime: str
+
+
+def read_station_locations(
+    data_dir: str,
+    datetime_str: str,
+) -> StationLocations:
+    """Read locations even when pollutant variables are absent or missing."""
+    path = resolve_station_file(data_dir, datetime_str)
+    with xr.open_dataset(path) as ds:
+        for name in ("id", "lon", "lat"):
+            if name not in ds:
+                raise ValueError(f"站点文件缺少 {name}: {path}")
+        ids = np.char.upper(_normalize_station_ids(ds["id"].values))
+        lon = ds["lon"].values.astype(float).ravel()
+        lat = ds["lat"].values.astype(float).ravel()
+    if not (len(ids) == len(lon) == len(lat)):
+        raise ValueError(f"站点 ID 与坐标数量不一致: {path}")
+    return StationLocations(ids, lon, lat, str(path), path.stem)
+
+
+def read_stations(
+    data_dir: str,
+    datetime_str: str,
+    var_name: str,
+    extent: tuple[float, float, float, float] | None = None,
+) -> tuple[StationData, str]:
+    """Read station data for a given hour and variable.
+
+    Parameters
+    ----------
+    data_dir : directory containing {YYYYMMDDHH}.nc files.
+    datetime_str : YYYYMMDDHH (exact hour) or YYYYMMDD (latest hour).
+    var_name : variable name in the NC file (e.g. "AQI", "PM2.5", "O3").
+    extent : optional (lon_min, lon_max, lat_min, lat_max) for spatial filter.
+
+    Returns
+    -------
+    tuple of (StationData, resolved_datetime_str).
+    """
+    path = resolve_station_file(data_dir, datetime_str)
+    datetime_str = path.stem
+
     try:
         ds = xr.open_dataset(path)
     except FileNotFoundError as e:
@@ -165,6 +202,8 @@ def read_stations(
         station_id = ds["id"].values
 
         # Read variable — xarray auto-applies scale_factor/add_offset for CO
+        if var_name not in ds:
+            raise ValueError(f"站点文件缺少变量 {var_name}: {path}")
         raw = ds[var_name].values.astype(float)
     finally:
         ds.close()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -23,6 +24,34 @@ from rsplot.config import AppConfig
 
 if TYPE_CHECKING:
     from rich.console import Console
+
+    from rsplot.geo.boundaries import RegionInfo
+
+
+@dataclass
+class RasterRun:
+    """Prepared satellite layer and sidecar, independent of rendering."""
+
+    lon: np.ndarray
+    lat: np.ndarray
+    grid: np.ndarray
+    region: RegionInfo
+    plot_options: dict[str, Any]
+    result: dict[str, Any]
+
+
+@satellite_errors
+def run_raster(**kwargs: Any) -> None:
+    """Prepare, render, and emit the administrative raster command."""
+    from rsplot.plotting.raster import plot_raster
+    from rsplot.results import emit_result
+
+    run = prepare_raster(**kwargs)
+    plot_raster(run.lon, run.lat, run.grid, run.region, **run.plot_options)
+    emit_result(run.result, run.plot_options["output"])
+    kwargs["console"].print(
+        f"[bold green]✓ 已保存:[/bold green] {run.plot_options['output']}"
+    )
 
 
 def default_raster_n_min(product: str, window_n: int) -> int:
@@ -63,10 +92,9 @@ def parse_raster_dates(
     return dates, window_mode
 
 
-@satellite_errors
-def run_raster(
+def prepare_raster(
     *,
-    region: str,
+    region: str | RegionInfo,
     date_arg: str,
     product: str,
     sensor: str = "tropomi",
@@ -86,19 +114,18 @@ def run_raster(
     qa: float | None,
     cf: float = 0.5,
     console: Console,
-) -> None:
-    """Execute raster orchestration without owning the Typer signature."""
-    from rsplot.geo.boundaries import resolve_regions
+) -> RasterRun:
+    """Prepare a satellite layer for an administrative or supplied geometry."""
+    from rsplot.geo.boundaries import RegionInfo, resolve_regions
     from rsplot.geo.processing import (
         buffered_extent,
         prepare_display_grid,
         prepare_existing_grid,
         prepare_swath_grid,
     )
-    from rsplot.plotting.raster import plot_raster
     from rsplot.plotting.styles import setup_fonts
     from rsplot.readers import auto_vrange
-    from rsplot.results import build_raster_result, emit_result
+    from rsplot.results import build_raster_result
     from rsplot.temporal import compute_window_mean, read_scan_mean
 
     cfg = AppConfig.load()
@@ -141,8 +168,12 @@ def run_raster(
 
     setup_fonts(cfg.font_dir)
 
-    console.print(f"[bold]解析区域:[/bold] {region}")
-    info = resolve_regions(region, cfg, level_override=level)
+    info = (
+        region
+        if isinstance(region, RegionInfo)
+        else resolve_regions(region, cfg, level_override=level)
+    )
+    console.print(f"[bold]分析范围:[/bold] {info.name}")
     console.print(f"  → [green]{info.name}[/green] (级别: {info.level})")
     if info.members:
         console.print(
@@ -462,12 +493,7 @@ def run_raster(
             f"({dates[0]}~{dates[-1]}, {window_n}d mean)"
         )
 
-    console.print("\n[bold]绘图中...[/bold]")
-    plot_raster(
-        display_lon,
-        display_lat,
-        display_grid,
-        info,
+    plot_options = dict(
         dpi=use_dpi,
         cmap=use_cmap,
         vmin=use_vmin,
@@ -479,7 +505,6 @@ def run_raster(
         **({"coverage_geometry": display_support} if sensor == "gems" else {}),
         colorbar_label=prod_info.colorbar_label,
     )
-    console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
 
     result = build_raster_result(
         region=info,
@@ -500,4 +525,6 @@ def run_raster(
         display_lon=display_lon,
         display_lat=display_lat,
     )
-    emit_result(result, output)
+    return RasterRun(
+        display_lon, display_lat, display_grid, info, plot_options, result
+    )

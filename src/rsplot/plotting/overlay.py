@@ -12,10 +12,7 @@ from typing import TYPE_CHECKING
 import cartopy.crs as ccrs
 import numpy as np
 
-from rsplot.plotting.colormaps import (
-    STATION_CONCENTRATION_CMAP,
-    register_rsplot_colormaps,
-)
+from rsplot.plotting.colormaps import register_rsplot_colormaps
 from rsplot.plotting.map_frame import (
     add_basemap_tiles,
     add_region_boundaries,
@@ -25,7 +22,8 @@ from rsplot.plotting.map_frame import (
     finalize_map_figure,
 )
 from rsplot.plotting.station import (
-    build_aqi_colormap,
+    add_station_colorbar,
+    build_station_colormap,
     station_marker_size,
 )
 
@@ -33,6 +31,7 @@ if TYPE_CHECKING:
     from shapely.geometry.base import BaseGeometry
 
     from rsplot.geo.boundaries import RegionInfo
+    from rsplot.plotting.station_focus import StationFocus
     from rsplot.readers.guokong import StationData
 
 
@@ -58,6 +57,7 @@ def plot_overlay(
     title: str | None = None,
     output: str | None = None,
     coverage_geometry: BaseGeometry | None = None,
+    station_focus: StationFocus | None = None,
 ) -> None:
     """Draw satellite raster + station scatter on the same axes.
 
@@ -108,37 +108,21 @@ def plot_overlay(
     if len(vals) > 0:
         marker_size = station_marker_size(region.level)
 
-        is_aqi = data.var_name == "AQI"
-        if is_aqi:
-            cmap, norm = build_aqi_colormap()
-            sc = ax.scatter(
-                lon,
-                lat,
-                c=vals,
-                cmap=cmap,
-                norm=norm,
-                s=marker_size,
-                edgecolors="#111",
-                linewidths=0.4,
-                transform=ccrs.PlateCarree(),
-                zorder=5,
-            )
-        else:
-            p5 = float(np.nanpercentile(vals, 5))
-            p95 = float(np.nanpercentile(vals, 95))
-            sc = ax.scatter(
-                lon,
-                lat,
-                c=vals,
-                cmap=STATION_CONCENTRATION_CMAP,
-                vmin=p5,
-                vmax=p95,
-                s=marker_size,
-                edgecolors="#111",
-                linewidths=0.4,
-                transform=ccrs.PlateCarree(),
-                zorder=5,
-            )
+        cmap, norm = build_station_colormap(
+            data, expand_constant=station_focus is not None
+        )
+        sc = ax.scatter(
+            lon,
+            lat,
+            c=vals,
+            cmap=cmap,
+            norm=norm,
+            s=marker_size,
+            edgecolors="#111",
+            linewidths=0.4,
+            transform=ccrs.PlateCarree(),
+            zorder=5,
+        )
 
         # Red circle for exceedance
         if station_threshold is not None:
@@ -155,6 +139,10 @@ def plot_overlay(
                     zorder=6,
                 )
 
+    if station_focus is not None:
+        from rsplot.plotting.station_focus import add_station_focus
+
+        add_station_focus(ax, region, station_focus)
     configure_map_axes(ax, region, use_basemap=frame.use_basemap)
 
     # --- Twin colorbars, hugging the right edge of the map ---
@@ -170,7 +158,9 @@ def plot_overlay(
 
     if sc is not None:
         cax_station = ax.inset_axes([1.03, 0.04, 0.025, 0.42])
-        cb_station = fig.colorbar(sc, cax=cax_station)
+        cb_station = add_station_colorbar(
+            fig, sc, data.var_name, cax=cax_station
+        )
         if station_label:
             cb_station.set_label(station_label, fontsize=9)
         cb_station.ax.tick_params(labelsize=8)

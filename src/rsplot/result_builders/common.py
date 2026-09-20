@@ -21,6 +21,9 @@ def serialize_region(region: RegionInfo) -> dict[str, Any]:
         "level": region.level,
         "extent": [round(value, 3) for value in region.extent],
     }
+    if region.geometry_kind != "administrative":
+        result["geometry_kind"] = region.geometry_kind
+        result["level"] = None
     if region.administrative_level not in (None, region.level):
         result["administrative_level"] = region.administrative_level
     if region.subdivision_level is not None:
@@ -212,7 +215,7 @@ def grid_boundary_policy(
         },
         "display": {
             "selection": "valid_cells_intersecting_region",
-            "clip": "administrative_geometry",
+            "clip": f"{region.geometry_kind}_geometry",
             "n_valid_intersecting_cells": int(visible.sum()),
             "n_cells_with_centers_outside": int((visible & ~inside).sum()),
         },

@@ -211,6 +211,102 @@ writes a JSON sidecar with the same base name. Reconstructed-grid JSON records
 both the China-time input and matched UTC archive hour, source file, native and
 output resolution, regional statistics, administrative summaries, and hotspots.
 
+## Station map color scales
+
+Station layers in `station`, `overlay`, `forecast --station-overlay`, `meteo`,
+and `radius --station-var` share fixed O3 and NO2 color scales. Concentrations
+at or below the threshold use a green–yellow–orange gradient. Values strictly
+above the threshold are red, including values beyond the colorbar maximum;
+a red upper extension marks this overflow. Equality is not exceedance.
+
+| Station variable | Threshold (μg/m³) | Colorbar range (μg/m³) |
+| --- | --- | --- |
+| `O3_8h`, `O3_8h_24h` (8h O3 / MDA8 O3) | 160 | 0–180 |
+| `O3` (hourly) | 200 | 0–220 |
+| `O3_24h` (existing hourly-limit mapping) | 200 | 0–220 |
+| `NO2` (hourly) | 200 | 0–220 |
+| `NO2_24h` (daily) | 80 | 0–100 |
+
+AQI retains its existing discrete bands. Other station variables retain their
+P5–P95 scales. These station rules do not change satellite, forecast-grid or
+temperature colorbars. No station `--vmin` or `--vmax` options are added.
+Fixed station-scale metadata appears in `display` for `station`,
+`station.display` for overlay/forecast/meteo, and `stations.display` for radius.
+Original observations, summary statistics and exceedance counts are preserved.
+
+## Satellite maps around a monitoring station
+
+`radius STATION_ID DATE --km KM` draws a square centered on a national
+monitoring station, extending KM kilometers north, south, east, and west.
+For example, `--km 5` produces a 10 km × 10 km square in a station-centered
+WGS84 azimuthal equidistant projection. All stations within the square,
+including its corners, use the same markers and ID labels. The square fills
+the map axes without exterior padding or an extra dashed outline. City boundaries
+and county/township names remain visible across administrative borders;
+configured city-specific township layers are reused.
+
+```bash
+# GEMS daily satellite mean, station locations only
+uv run rsplot radius 1379A 20260907 --km 5 \
+  --sensor gems --product no2 --output /tmp/radius_positions.png
+
+# The same satellite mean plus ONE station observation hour (China time)
+uv run rsplot radius 1379A 20260907 --km 5 \
+  --sensor gems --product no2 \
+  --station-var NO2 --station-datetime 2026090713 \
+  --output /tmp/radius_no2.png
+
+# Exact GEMS scan: 12:45 China time matches the 13:00 station file
+uv run rsplot radius 1379A 202609071245 --km 5 \
+  --sensor gems --product no2 --station-var NO2 \
+  --output /tmp/radius_scan.png
+```
+
+- `--km` is required and accepts positive fractional kilometers measured
+  from the center to each side, not the full side length. Satellite
+  options (`--sensor`, `--product`, `--days`, `--n-min`, `--res`, `--cf`,
+  `--qa`, color limits and smoothing) follow `raster`. Defaults are
+  TROPOMI/O3, county product plotting settings, and `--basemap none`.
+- Without `--station-var`, only station IDs and coordinates are read, using
+  the latest location snapshot on the requested end date unless
+  `--station-datetime YYYYMMDDHH` is supplied. No pollutant field is needed.
+- With `--station-var`, daily/window satellite maps require an explicit
+  station hour. GEMS exact scans automatically match the nearest hour,
+  with half-hour ties rounded forward; an explicit hour overrides this.
+  Missing hourly files are errors, not a request to select another hour.
+- Station observations are **never averaged across hours**. `NO2`, `O3`,
+  `PM2.5`, `PM10`, `SO2`, `CO`, `AQI`, and the existing derived fields are
+  supported. Fields such as `O3_8h` are read as stored in the selected file.
+  Use `--station-data-dir` for the station archive and `--data-dir` for
+  satellite files.
+- GEMS dates mean equal-weight averages of the day's available valid scans,
+  not a 24-hour mean. Actual scan counts vary; archive filenames are UTC,
+  while command dates and station hours are China time. Titles distinguish
+  satellite aggregation from the selected station hour. Scan matching uses
+  the nominal scan time, not each pixel's actual observation time.
+- Satellite and station values have independent colorbars and units.
+  Missing station values retain hollow location markers. No extra center
+  ring or lower-right legend is drawn. No station colorbar is drawn when all
+  observations are missing.
+- Statistics count strictly interior grid centers; intersecting valid cells
+  are displayed and clipped to the square. GEMS defaults to 0.05° and `--res`
+  changes both analysis and display spacing. Small squares can contain no grid
+  centers while still showing portions of intersecting cells: counts are
+  then zero and statistical summaries null. Coverage is a center count,
+  not a fraction of polygon area.
+
+A PNG and same-basename JSON are saved (under `/tmp` by default). The JSON
+uses `command: radius` and `mode: station_locations | station_overlay`,
+retains raster statistics/provenance, and adds `radius`,
+`administrative_context`, `time_matching`, and `stations`. `radius.shape`
+is `square`, `radius.km` is the center-to-side distance, and
+`radius.side_length_km` is twice that value. Station distances are still
+geodesic distances from the center, so corner stations can exceed `--km`.
+The station block
+records the exact snapshot, IDs, coordinates, distances, and, when selected,
+values and missing status. Daily/window versus hourly comparisons have a
+null time difference; scan comparisons record the nominal time difference.
+
 ## Select multiple regions without configuration
 
 `raster` and `overlay` accept a quoted, comma-separated region argument.

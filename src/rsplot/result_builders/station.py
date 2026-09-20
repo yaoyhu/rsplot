@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from rsplot.config import get_station_color_scale
 from rsplot.result_builders.common import serialize_region
 from rsplot.stats import basic_stats, round_finite
 
@@ -97,6 +98,24 @@ def top_station_entries(
     return entries
 
 
+def build_station_display(data: StationData) -> dict[str, Any] | None:
+    """Describe the fixed scale shared by station map renderers."""
+    scale = get_station_color_scale(data.var_name)
+    if scale is None:
+        return None
+    return {
+        "colorbar": bool(np.isfinite(data.values).any()),
+        "cmap": scale.cmap,
+        "range_method": "fixed_exceedance",
+        "vmin": scale.vmin,
+        "vmax": scale.vmax,
+        "threshold": scale.threshold,
+        "exceedance_operator": ">",
+        "exceedance_color": scale.exceedance_color,
+        "extend": "max",
+    }
+
+
 def build_station_result(
     *,
     region: RegionInfo,
@@ -132,6 +151,10 @@ def build_station_result(
         "n_valid": int(data.n_valid),
         "stats": basic_stats(values),
     }
+
+    display = build_station_display(data)
+    if display is not None:
+        result["display"] = display
 
     station_areas = None
     if admin_gdf is not None and len(admin_gdf) > 0 and len(values) > 0:
