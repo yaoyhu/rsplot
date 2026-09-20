@@ -45,6 +45,13 @@ class ProductInfo:
     sensor: str = "tropomi"
     data_key: str | None = None
     quantity: str | None = None
+    processing: str | None = None
+
+    def create_reader(self) -> BaseReader:
+        """Construct the configured reader without changing legacy callers."""
+        if self.processing is not None:
+            return self.reader_cls(processing=self.processing)
+        return self.reader_cls()
 
     def defaults_for_level(self, level: str) -> ProductPlotDefaults:
         """Return product-specific defaults for an administrative level."""
@@ -97,8 +104,19 @@ PRODUCT_REGISTRY: dict[str, ProductInfo] = {
 }
 
 
-def get_product_info(product: str, *, sensor: str = "tropomi") -> ProductInfo:
+def get_product_info(
+    product: str,
+    *,
+    sensor: str = "tropomi",
+    processing: str | None = None,
+) -> ProductInfo:
     """Resolve a product within a sensor, preserving legacy registry keys."""
+    if processing is not None:
+        processing = processing.lower()
+        if processing != "nrti":
+            raise ValueError("--processing 仅支持 nrti；省略时保持原有行为。")
+        if sensor.lower() != "tropomi":
+            raise ValueError("--processing nrti 仅用于 --sensor tropomi。")
     key = product.lower()
     sensor = sensor.lower()
     if sensor not in ("tropomi", "gems"):
@@ -109,6 +127,12 @@ def get_product_info(product: str, *, sensor: str = "tropomi") -> ProductInfo:
             f"Unsupported product '{product}'. Available: {available}"
         )
     if sensor == "tropomi":
+        if processing == "nrti":
+            return replace(
+                PRODUCT_REGISTRY[key],
+                processing=processing,
+                data_key=f"tropomi_nrti_{key}",
+            )
         return PRODUCT_REGISTRY[key]
     from rsplot.config import LEVEL_DEFAULTS
     from rsplot.readers.gems import (

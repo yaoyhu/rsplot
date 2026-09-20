@@ -61,6 +61,9 @@ def build_raster_result(
             total_key="total_region_pixels",
         ),
     }
+    if prod_info.processing == "nrti":
+        result["sensor"] = "tropomi"
+        result["processing"] = "nrti"
     if prod_info.sensor == "gems":
         result["sensor"] = "gems"
         result["quantity"] = prod_info.quantity

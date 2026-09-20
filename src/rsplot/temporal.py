@@ -330,6 +330,13 @@ def read_scan_mean(
             "mean": float(covered.mean()) if covered.size else 0.0,
         },
     }
+    if getattr(reader, "processing", None) == "nrti" and scans:
+        metadata = {
+            **scans[0],
+            "request": request,
+            "coverage_scope": "read_extent",
+            "read_extent": list(extent),
+        }
     if footprints:
         metadata["spatial_aggregation"] = "footprint_overlap_area_mean"
         metadata["area_crs"] = "EPSG:6933"

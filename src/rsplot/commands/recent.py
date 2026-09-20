@@ -28,6 +28,7 @@ def run_recent(
     source: str,
     product: str,
     sensor: str = "tropomi",
+    processing: str | None = None,
     var: str,
     level: str | None,
     data_dir: str | None,
@@ -62,9 +63,12 @@ def run_recent(
     cfg = AppConfig.load()
     if use_source == "raster":
         prod_info, use_qa = resolve_satellite(
-            product, sensor, qa, cfg, console
+            product, sensor, qa, cfg, console, processing
         )
         sensor = prod_info.sensor
+        processing = prod_info.processing
+    elif processing is not None:
+        raise ValueError("--processing 仅用于 --source raster。")
     elif sensor.lower() != "tropomi":
         raise ValueError("--sensor gems 仅用于 --source raster。")
     console.print(f"[bold]解析区域:[/bold] {region}")
@@ -76,8 +80,11 @@ def run_recent(
 
     if output is None:
         if use_source == "raster":
+            prefix = (
+                "nrti_" if processing else "gems_" if sensor == "gems" else ""
+            )
             output = (
-                f"/tmp/rsplot_recent_{'gems_' if sensor == 'gems' else ''}"
+                f"/tmp/rsplot_recent_{prefix}"
                 f"{info.name}_{product}_"
                 f"{dates[0]}_{dates[-1]}.json"
             )
@@ -137,6 +144,7 @@ def run_recent(
             },
             product=product,
             sensor=sensor,
+            processing=processing,
             quantity=prod_info.quantity,
             unit=prod_info.colorbar_label,
             output=output,

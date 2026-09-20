@@ -104,6 +104,7 @@ def run_radius(
     options = {
         "product": "o3",
         "sensor": "tropomi",
+        "processing": None,
         "days": None,
         "n_min": None,
         "level": None,
@@ -121,7 +122,12 @@ def run_radius(
         "cf": 0.5,
         **raster_options,
     }
-    prod = get_product_info(options["product"], sensor=options["sensor"])
+    prod = get_product_info(
+        options["product"],
+        sensor=options["sensor"],
+        processing=options["processing"],
+    )
+    options["processing"] = prod.processing
     options["sensor"] = prod.sensor
     request, matching, dates, window_mode = station_time_request(
         date_arg,
@@ -186,6 +192,8 @@ def run_radius(
         n_stations=len(selected),
         n_valid=int(np.isfinite(values[selected]).sum()),
     )
+    source_label = prod.sensor.upper() + (" NRTI" if prod.processing else "")
+    source_name = prod.sensor + ("_nrti" if prod.processing else "")
     period = f"{dates[0]}~{dates[-1]}" if window_mode else date_arg
     if options["output"] is None:
         suffix = (
@@ -196,7 +204,7 @@ def run_radius(
         options["output"] = str(
             Path("/tmp")
             / (
-                f"rsplot_radius_{station_id}_{prod.sensor}_{options['product']}_"
+                f"rsplot_radius_{station_id}_{source_name}_{options['product']}_"
                 f"{period}_{km:g}km{suffix}.png"
             )
         )
@@ -227,7 +235,7 @@ def run_radius(
             else f"站点位置快照 · {station_hour} 北京时间"
         )
         options["title"] = (
-            f"{info.name}\n{prod.sensor.upper()} {options['product'].upper()} "
+            f"{info.name}\n{source_label} {options['product'].upper()} "
             f"· {pretty_period} {aggregation}（北京时间）\n{station_label}"
         )
     console.print(

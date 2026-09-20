@@ -39,6 +39,7 @@ def run_overlay(
     datetime_str: str,
     product: str,
     sensor: str = "tropomi",
+    processing: str | None = None,
     station_datetime: str | None = None,
     var: str | None,
     level: str | None,
@@ -73,8 +74,11 @@ def run_overlay(
     from rsplot.results import build_overlay_result, emit_result
 
     cfg = AppConfig.load()
-    prod_info, use_qa = resolve_satellite(product, sensor, qa, cfg, console)
+    prod_info, use_qa = resolve_satellite(
+        product, sensor, qa, cfg, console, processing
+    )
     sensor = prod_info.sensor
+    processing = prod_info.processing
     pairing = None
     station_request = datetime_str
     if sensor == "gems":
@@ -165,7 +169,7 @@ def run_overlay(
         if raster_dir is not None
         else cfg.get_data_dir(prod_info.data_key or product)
     )
-    reader = prod_info.reader_cls()
+    reader = prod_info.create_reader()
     reader.cloud_fraction_max = cf
     if sensor == "gems":
         console.print(f"  → GEMS 目标网格 {use_res}°（分析与显示）")
@@ -231,6 +235,7 @@ def run_overlay(
             "n_pixels": int(swath.n_pixels),
             "n_files": int(swath.n_files),
             "n_broken": int(swath.n_broken),
+            **(swath.metadata if prod_info.processing else {}),
             "qa_threshold": use_qa,
             "cloud_fraction_max": cf,
             "resolution_deg": use_res,
@@ -320,6 +325,18 @@ def run_overlay(
         console.print(
             f"  → 超标阈值: {threshold}, 超标站点: [red]{n_exceed}[/red]"
         )
+
+    if processing == "nrti":
+        if output is None:
+            output = (
+                f"/tmp/rsplot_overlay_nrti_{info.name}_{product}_"
+                f"{date}_{resolved_dt}.png"
+            )
+        if title is None:
+            title = (
+                f"TROPOMI NRTI {product.upper()} {date} + "
+                f"Station {var} {resolved_dt} CST - {info.name}"
+            )
 
     if output is None and sensor == "gems":
         output = (

@@ -23,6 +23,10 @@ else:
 # Safe built-in path defaults
 # ---------------------------------------------------------------------------
 KNOWN_DATA_PRODUCTS = (
+    "tropomi_nrti_no2",
+    "tropomi_nrti_hcho",
+    "tropomi_nrti_o3",
+    "tropomi_nrti_o3pr",
     "gems_no2",
     "gems_hcho",
     "gems_o3",

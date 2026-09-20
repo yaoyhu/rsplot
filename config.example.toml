@@ -13,6 +13,12 @@ no2 = "/path/to/NO2"
 o3 = "/path/to/O3"
 o3pr = "/path/to/O3PR"
 hcho = "/path/to/HCHO"
+# Optional TROPOMI NRTI roots, selected with --processing nrti.
+# Each root directly contains S5P_NRTI_*.nc or NetCDF .nc.zip files.
+tropomi_nrti_no2 = "/path/to/NO2/NRT"
+tropomi_nrti_hcho = "/path/to/HCHO/NRT"
+tropomi_nrti_o3 = "/path/to/O3/NRT"
+tropomi_nrti_o3pr = "/path/to/O3PR/NRT"
 # GEMS roots contain YYYYMM/DD/*.nc. Both o3 and o3pr use gems_o3.
 gems_no2 = "/path/to/GEMS/NO2"
 gems_hcho = "/path/to/GEMS/HCHO"

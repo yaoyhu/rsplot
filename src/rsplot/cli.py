@@ -57,6 +57,11 @@ def raster(
     sensor: str = typer.Option(
         "tropomi", "--sensor", help="卫星来源: tropomi / gems"
     ),
+    processing: str | None = typer.Option(
+        None,
+        "--processing",
+        help="TROPOMI 处理流: nrti；省略时沿用原有目录与读取行为",
+    ),
     product: str = typer.Option(
         "o3",
         "--product",
@@ -139,6 +144,7 @@ def raster(
         date_arg=date_arg,
         product=product,
         sensor=sensor,
+        processing=processing,
         days=days,
         n_min=n_min,
         level=level,
@@ -172,6 +178,11 @@ def radius(
     # --- optional overrides ---
     sensor: str = typer.Option(
         "tropomi", "--sensor", help="卫星来源: tropomi / gems"
+    ),
+    processing: str | None = typer.Option(
+        None,
+        "--processing",
+        help="TROPOMI 处理流: nrti；省略时沿用原有目录与读取行为",
     ),
     product: str = typer.Option(
         "o3",
@@ -266,6 +277,7 @@ def radius(
         station_datetime=station_datetime,
         station_data_dir=station_data_dir,
         sensor=sensor,
+        processing=processing,
         product=product,
         days=days,
         n_min=n_min,
@@ -770,6 +782,11 @@ def overlay(
     sensor: str = typer.Option(
         "tropomi", "--sensor", help="卫星来源: tropomi / gems"
     ),
+    processing: str | None = typer.Option(
+        None,
+        "--processing",
+        help="TROPOMI 处理流: nrti；省略时沿用原有目录与读取行为",
+    ),
     product: str = typer.Option(
         "o3",
         "--product",
@@ -864,6 +881,7 @@ def overlay(
         station_datetime=station_datetime,
         product=product,
         sensor=sensor,
+        processing=processing,
         var=var,
         level=level,
         raster_dir=raster_dir,
@@ -903,6 +921,11 @@ def recent(
     ),
     sensor: str = typer.Option(
         "tropomi", "--sensor", help="卫星来源: tropomi / gems"
+    ),
+    processing: str | None = typer.Option(
+        None,
+        "--processing",
+        help="TROPOMI 处理流: nrti；省略时沿用原有目录与读取行为",
     ),
     product: str = typer.Option(
         "o3",
@@ -965,6 +988,7 @@ def recent(
         source=source,
         product=product,
         sensor=sensor,
+        processing=processing,
         var=var,
         level=level,
         data_dir=data_dir,
@@ -1064,6 +1088,11 @@ def fnr(
         max=1.0,
         help="最大云量比例，同时应用于 NO2 和 HCHO；保留 CF <= 该值的像元",
     ),
+    processing: str | None = typer.Option(
+        None,
+        "--processing",
+        help="TROPOMI 处理流: nrti，同时用于 NO2 与 HCHO",
+    ),
     title: str | None = typer.Option(None, "--title", help="自定义标题"),
 ) -> None:
     """绘制 FNR (HCHO / NO2) 区域控制 regime 图。
@@ -1079,6 +1108,7 @@ def fnr(
     from rsplot.commands.fnr import run_fnr
 
     run_fnr(
+        processing=processing,
         region=region,
         date_arg=date_arg,
         days=days,

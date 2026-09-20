@@ -83,7 +83,7 @@ def summarize_recent_raster(
     if console is None:
         console = Console()
 
-    reader = prod_info.reader_cls()
+    reader = prod_info.create_reader()
     reader.cloud_fraction_max = cloud_fraction_max
     read_extent = buffered_extent(region.extent, 1.0)
     out: list[RecentDaily] = []
@@ -130,6 +130,7 @@ def summarize_recent_raster(
                     "n_pixels": int(swath.n_pixels),
                     "n_files": int(swath.n_files),
                     "n_broken": int(swath.n_broken),
+                    **(swath.metadata if prod_info.processing else {}),
                 }
             stats = _grid_stats(
                 prepared.lon,
@@ -149,6 +150,7 @@ def summarize_recent_raster(
                 )
             )
         except (FileNotFoundError, ValueError) as e:
+            meta.update(getattr(e, "metadata", {}))
             out.append(
                 RecentDaily(
                     date=d,
@@ -238,6 +240,7 @@ def build_recent_result(
     variable: str | None = None,
     unit: str | None = None,
     sensor: str | None = None,
+    processing: str | None = None,
     quantity: str | None = None,
 ) -> dict[str, Any]:
     """Build the JSON payload for a recent run."""
@@ -272,6 +275,9 @@ def build_recent_result(
         "trend": _trend_summary(daily),
         "warnings": _warnings(daily),
     }
+    if source == "raster" and processing == "nrti":
+        result["sensor"] = "tropomi"
+        result["processing"] = "nrti"
     if source == "raster" and sensor == "gems":
         result["sensor"] = sensor
         result["quantity"] = quantity

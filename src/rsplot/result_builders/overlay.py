@@ -98,6 +98,9 @@ def build_overlay_result(
         "raster": raster_block,
         "station": station_block,
     }
+    if prod_info.processing == "nrti":
+        result["sensor"] = "tropomi"
+        result["processing"] = "nrti"
     if prod_info.sensor == "gems":
         result["sensor"] = "gems"
     if time_matching is not None:

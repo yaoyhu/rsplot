@@ -98,6 +98,7 @@ def prepare_raster(
     date_arg: str,
     product: str,
     sensor: str = "tropomi",
+    processing: str | None = None,
     days: int | None,
     n_min: int | None,
     level: str | None,
@@ -129,8 +130,11 @@ def prepare_raster(
     from rsplot.temporal import compute_window_mean, read_scan_mean
 
     cfg = AppConfig.load()
-    prod_info, use_qa = resolve_satellite(product, sensor, qa, cfg, console)
+    prod_info, use_qa = resolve_satellite(
+        product, sensor, qa, cfg, console, processing
+    )
     sensor = prod_info.sensor
+    processing = prod_info.processing
     scan_mode = sensor == "gems" and len(date_arg) == 12
     if scan_mode:
         from rsplot.readers.gems import parse_gems_time
@@ -232,7 +236,7 @@ def prepare_raster(
         if data_dir is not None
         else cfg.get_data_dir(prod_info.data_key or product)
     )
-    reader = prod_info.reader_cls()
+    reader = prod_info.create_reader()
     reader.cloud_fraction_max = cf
     if sensor == "gems":
         console.print(f"  → GEMS 目标网格 {use_res}°（分析与显示）")
@@ -295,6 +299,7 @@ def prepare_raster(
                 "n_pixels": int(swath.n_pixels),
                 "n_files": int(swath.n_files),
                 "n_broken": int(swath.n_broken),
+                **(swath.metadata if prod_info.processing else {}),
                 "qa_threshold": use_qa,
                 "cloud_fraction_max": cf,
                 "resolution_deg": use_res,
@@ -370,6 +375,12 @@ def prepare_raster(
             "dates_failed": window.dates_failed,
             "coverage_days": coverage_days,
         }
+
+        if processing == "nrti":
+            window_meta["aggregation"] = (
+                "equal_day_mean_of_deduplicated_pixels"
+            )
+            window_meta["daily"] = window.daily_metadata
 
         if sensor == "gems":
             swath_meta.pop("qa_threshold", None)
@@ -467,6 +478,17 @@ def prepare_raster(
         console.print(f"[red]色标范围无效：{e}[/red]")
         raise typer.Exit(1) from e
     console.print(f"  → 色标范围: {use_vmin:.1f} ~ {use_vmax:.1f}")
+
+    if processing == "nrti":
+        period = f"{dates[0]}_{dates[-1]}" if window_mode else date_arg
+        if output is None:
+            output = f"/tmp/rsplot_nrti_{product}_{info.name}_{period}.png"
+        if title is None:
+            label = " mean" if window_mode else ""
+            title = (
+                f"TROPOMI NRTI {product.upper()} - {info.name} "
+                f"({period}{label})"
+            )
 
     if output is None and sensor == "gems":
         suffix = f"{dates[0]}_{dates[-1]}" if window_mode else date_arg

@@ -24,8 +24,8 @@ dimensionless and directly comparable with the literature.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from rich.console import Console
@@ -130,6 +130,9 @@ class FnrResult:
     n_min: int
     no2_min_column: float
     diagnostic_masks: dict[str, np.ndarray]
+    processing: str | None = None
+    daily_metadata_no2: dict[str, Any] = field(default_factory=dict)
+    daily_metadata_hcho: dict[str, Any] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +145,7 @@ def compute_fnr(
     res: float,
     qa_threshold: float,
     cloud_fraction_max: float = 0.5,
+    processing: str | None = None,
     n_min: int,
     raster_dir_no2: str,
     raster_dir_hcho: str,
@@ -167,8 +171,15 @@ def compute_fnr(
         region.extent[3] + buf,
     )
 
-    no2_reader = get_product_info("no2").reader_cls()
-    hcho_reader = get_product_info("hcho").reader_cls()
+    if processing is None:
+        no2_reader = get_product_info("no2").reader_cls()
+        hcho_reader = get_product_info("hcho").reader_cls()
+    else:
+        no2_info = get_product_info("no2", processing=processing)
+        hcho_info = get_product_info("hcho", processing=processing)
+        no2_reader = no2_info.create_reader()
+        hcho_reader = hcho_info.create_reader()
+        processing = no2_info.processing
     no2_reader.cloud_fraction_max = cloud_fraction_max
     hcho_reader.cloud_fraction_max = cloud_fraction_max
 
@@ -268,6 +279,9 @@ def compute_fnr(
         fnr[~fnr_valid_mask] = np.nan
 
     return FnrResult(
+        processing=processing,
+        daily_metadata_no2=no2_win.daily_metadata,
+        daily_metadata_hcho=hcho_win.daily_metadata,
         LON=LON,
         LAT=LAT,
         fnr=fnr,

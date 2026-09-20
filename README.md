@@ -394,6 +394,83 @@ and both PlateCarree and Mercator projections):
 uv run python -m unittest discover -s tests -p 'test_boundary_display.py' -v
 ```
 
+## TROPOMI NRTI processing stream
+
+Use `--processing nrti` with `raster`, `radius`, `overlay`,
+`recent --source raster`, or `fnr`. Keep `--sensor tropomi` for commands with
+a sensor option; FNR is already TROPOMI-only and has no sensor option. All four
+products are supported: `no2`, `hcho`, `o3`, and `o3pr`. Omitting
+`--processing` preserves the existing directories and reading behavior.
+The NRTI option cannot be combined with GEMS or station-only recent summaries.
+
+Configure independent archive roots under `[paths.data_dirs]`:
+
+```toml
+[paths.data_dirs]
+tropomi_nrti_no2 = "/path/to/NO2/NRT"
+tropomi_nrti_hcho = "/path/to/HCHO/NRT"
+tropomi_nrti_o3 = "/path/to/O3/NRT"
+tropomi_nrti_o3pr = "/path/to/O3PR/NRT"
+```
+
+The corresponding environment variables are `RSPLOT_DATA_DIR_TROPOMI_NRTI_NO2`,
+`RSPLOT_DATA_DIR_TROPOMI_NRTI_HCHO`, `RSPLOT_DATA_DIR_TROPOMI_NRTI_O3`, and
+`RSPLOT_DATA_DIR_TROPOMI_NRTI_O3PR`. Existing directory options override these:
+`--data-dir` for raster/radius/recent, `--raster-dir` for overlay, and
+`--no2-dir`/`--hcho-dir` for FNR. Missing NRTI configuration or files produce
+an error; rsplot does not fall back to another processing stream.
+
+Each root directly contains `S5P_NRTI_L2__*.nc` or `.nc.zip` files. The checked
+NRT archive's `.nc.zip` files are HDF5/NetCDF containers despite the extension;
+rsplot opens them directly, without ZIP extraction. Dates retain the existing
+TROPOMI filename-start-date selection in UTC. NRTI does not introduce an
+hourly satellite selector; overlay/radius station-hour rules stay unchanged.
+
+```bash
+rsplot raster 安徽 20260918 --product no2 --processing nrti \
+  --basemap none --output /tmp/anhui_no2_nrti.png
+
+rsplot overlay 安徽 2026091812 --product no2 --processing nrti \
+  --basemap none --output /tmp/anhui_no2_nrti_overlay.png
+
+rsplot radius 1379A 20260918 --km 20 --product no2 --processing nrti \
+  --station-var NO2 --station-datetime 2026091812 \
+  --basemap none --output /tmp/station_no2_nrti.png
+
+rsplot recent 安徽 20260919 --source raster --product no2 \
+  --processing nrti --days 3 --output /tmp/anhui_no2_nrti_recent.json
+
+rsplot fnr 安徽 20260917-20260919 --processing nrti --n-min 1 \
+  --basemap none --output /tmp/anhui_fnr_nrti.png
+```
+
+NRTI uses the existing TROPOMI QA/cloud filters, unit conversions, plotting
+settings and statistical masks. Before gridding, overlapping granules are
+deduplicated by orbit, UTC observation time and ground-pixel index. Among
+valid copies of an observation, the newest file production time wins; ties
+use ascending filename order. Observations from different orbits remain
+separate. Negative valid retrievals remain available to the existing science
+rules. Missing identity fields cause a file failure, not unverified merging.
+
+Daily grids average the deduplicated pixels; windows weight valid daily grids
+equally. FNR still averages NO2 and HCHO separately before division. The latest
+date may contain only the granules received so far: a successful read does not
+mean the archive contains a complete day, and results can change as files arrive.
+
+NRTI sidecars identify `sensor: "tropomi"` and `processing: "nrti"` (also in the
+raster layer for overlay). Swath/daily metadata records source files, failed
+files, processor/product versions, retained observation time range, valid
+pixel counts before and after deduplication, and `n_duplicates_removed`.
+Window results retain daily diagnostics; FNR records `window.daily_no2` and
+`window.daily_hcho`. Default titles and output filenames identify NRTI;
+explicit `--title` and `--output` still take precedence.
+
+Run the self-contained NRTI regressions:
+
+```bash
+uv run python -m unittest discover -s tests -p 'test_tropomi_nrti.py' -v
+```
+
 ## GEMS satellite products
 
 Use `--sensor gems` with `raster`, `recent`, and `overlay`. Omitting

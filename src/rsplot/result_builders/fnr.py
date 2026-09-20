@@ -172,6 +172,11 @@ def build_fnr_result(
             "no2_mean_filled_stats": basic_stats(fnr_out.no2_mean_filled),
         },
     }
+    if fnr_out.processing == "nrti":
+        result["sensor"] = "tropomi"
+        result["processing"] = "nrti"
+        result["window"]["daily_no2"] = fnr_out.daily_metadata_no2
+        result["window"]["daily_hcho"] = fnr_out.daily_metadata_hcho
     if qa_threshold is not None:
         result["params"]["qa_threshold"] = qa_threshold
 

@@ -123,12 +123,13 @@ def resolve_satellite(
     qa: float | None,
     cfg: AppConfig,
     console: Console,
+    processing: str | None = None,
 ) -> tuple[ProductInfo, float]:
     """Resolve source and QA policy before opening regional/data files."""
     from rsplot.readers import get_product_info
 
     try:
-        info = get_product_info(product, sensor=sensor)
+        info = get_product_info(product, sensor=sensor, processing=processing)
         if info.sensor == "gems" and qa is not None:
             raise ValueError(
                 "--qa 仅用于 TROPOMI；GEMS 使用最终质量标记 = 0 "

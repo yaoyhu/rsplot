@@ -10,6 +10,8 @@ import typer
 from rsplot.commands.common import (
     parse_basemap,
     print_failed_dates,
+    resolve_satellite,
+    satellite_errors,
     validate_non_negative,
     validate_positive,
     validate_unit_interval,
@@ -21,6 +23,7 @@ if TYPE_CHECKING:
     from rich.console import Console
 
 
+@satellite_errors
 def run_fnr(
     *,
     region: str,
@@ -41,6 +44,7 @@ def run_fnr(
     smooth: float | None,
     qa: float | None,
     cf: float = 0.5,
+    processing: str | None = None,
     title: str | None,
     console: Console,
 ) -> None:
@@ -58,6 +62,13 @@ def run_fnr(
     from rsplot.temporal import parse_date_window
 
     cfg = AppConfig.load()
+    no2_info, _ = resolve_satellite(
+        "no2", "tropomi", qa, cfg, console, processing
+    )
+    hcho_info, _ = resolve_satellite(
+        "hcho", "tropomi", qa, cfg, console, processing
+    )
+    processing = no2_info.processing
     setup_fonts(cfg.font_dir)
 
     if days < 1:
@@ -137,12 +148,12 @@ def run_fnr(
     use_no2_dir = (
         raster_dir_no2
         if raster_dir_no2 is not None
-        else cfg.get_data_dir("no2")
+        else cfg.get_data_dir(no2_info.data_key or "no2")
     )
     use_hcho_dir = (
         raster_dir_hcho
         if raster_dir_hcho is not None
-        else cfg.get_data_dir("hcho")
+        else cfg.get_data_dir(hcho_info.data_key or "hcho")
     )
     console.print("\n[bold]读取数据:[/bold]")
     console.print(f"  NO2 : {use_no2_dir}")
@@ -158,6 +169,7 @@ def run_fnr(
         n_min=use_n_min,
         raster_dir_no2=use_no2_dir,
         raster_dir_hcho=use_hcho_dir,
+        processing=processing,
         no2_min_column=no2_min,
         smooth_sigma=use_smooth,
         console=console,
@@ -224,7 +236,12 @@ def run_fnr(
     )
 
     if output is None:
-        output = f"/tmp/rsplot_fnr_{info.name}_{dates[0]}_{dates[-1]}.png"
+        prefix = "nrti_" if processing else ""
+        output = (
+            f"/tmp/rsplot_fnr_{prefix}{info.name}_{dates[0]}_{dates[-1]}.png"
+        )
+    if title is None and processing == "nrti":
+        title = f"TROPOMI NRTI FNR - {info.name}"
 
     subtitle = (
         f"{dates[0]}~{dates[-1]}  ·  N_days={window_n} "
