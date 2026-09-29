@@ -50,8 +50,13 @@ def raster(
     ),
     date_arg: str = typer.Argument(
         ...,
-        help="GEMS: 北京时间 YYYYMMDDHHMM 精确扫描，YYYYMMDD 日均；单日 YYYYMMDD 走单日路径；带 --days 或写成 YYYYMMDD-YYYYMMDD "
-        "时切换为窗口均值（HCHO 单日覆盖率低，月均更可读）",
+        metavar="DATE",
+        help=(
+            "TROPOMI: YYYYMMDD 按文件名日期合并当天轨道；"
+            "GEMS: 北京时间 YYYYMMDD 日均或 YYYYMMDDHHMM 精确扫描。"
+            "两者均支持 YYYYMMDD-YYYYMMDD 闭区间，"
+            "或结束日期 YYYYMMDD 配合 --days N，逐日等权平均。"
+        ),
     ),
     # --- optional overrides ---
     sensor: str = typer.Option(
@@ -60,7 +65,7 @@ def raster(
     processing: str | None = typer.Option(
         None,
         "--processing",
-        help="TROPOMI 处理流: nrti；省略时沿用原有目录与读取行为",
+        help="TROPOMI 处理流: nrti（筛选并去重）；省略则读取目录内匹配文件",
     ),
     product: str = typer.Option(
         "o3",
@@ -71,15 +76,18 @@ def raster(
     days: int | None = typer.Option(
         None,
         "--days",
-        help="时间窗口天数；不指定且 DATE 为单日时走单日路径。"
-        "推荐值: 30 (月均，HCHO 首选) / 7 (周均) / 显式区间用 YYYYMMDD-YYYYMMDD",
+        help=(
+            "以 DATE 为结束日期、向前共 N 天（含当天），按日等权平均；"
+            "不能与日期区间同时使用。省略时 YYYYMMDD 仅处理当天。"
+        ),
     ),
     n_min: int | None = typer.Option(
         None,
         "--n-min",
         help=(
-            "窗口模式下每像元最少有效天数。默认: NO2/O3/O3PR="
-            "max(3, 天数//2), HCHO=max(3, ceil(天数*0.25))"
+            "仅窗口模式：每个网格最少有效天数。默认 NO2/O3/O3PR="
+            "max(3, 天数//2)，HCHO=max(3, ceil(天数*0.25))，"
+            "均以窗口天数为上限。"
         ),
     ),
     level: str | None = typer.Option(
@@ -98,7 +106,7 @@ def raster(
         None,
         "--output",
         "-o",
-        help="输出文件路径，不指定则弹窗显示。",
+        help="输出 PNG 路径，同时写同名 JSON；省略时自动保存至 /tmp。",
     ),
     dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
     res: float | None = typer.Option(
@@ -131,6 +139,9 @@ def raster(
     ),
 ) -> None:
     """绘制卫星遥感栅格图。
+
+    TROPOMI 单日合并轨道后网格化并填补小空洞；窗口模式先逐日网格化，
+    再按有效天等权平均，不填补空洞。因此 --days 1 与省略 --days 不等价。
 
     示例:
         rsplot raster 北京    20260108 --dpi 300 --output yrd.png        # 单日

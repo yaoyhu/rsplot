@@ -43,6 +43,12 @@ class RasterRun:
 @satellite_errors
 def run_raster(**kwargs: Any) -> None:
     """Prepare, render, and emit the administrative raster command."""
+    if kwargs.get("days") is not None and "-" in kwargs["date_arg"]:
+        raise ValueError(
+            "日期区间不能与 --days 同时使用；"
+            "请选择 YYYYMMDD-YYYYMMDD 或结束日期 YYYYMMDD 配合 --days N。"
+        )
+
     from rsplot.plotting.raster import plot_raster
     from rsplot.results import emit_result
 
@@ -419,10 +425,16 @@ def prepare_raster(
         )
 
     if not np.isfinite(display_grid).any():
-        console.print(
-            "[red]窗口均值全区无有效像元，可能原因：窗口内覆盖不足，"
-            "或 --n-min 太严。可放宽 --n-min / 扩大窗口。[/red]"
-        )
+        if window_mode:
+            console.print(
+                "[red]窗口均值全区无有效像元，可能原因：窗口内覆盖不足，"
+                "或 --n-min 太严。可放宽 --n-min / 扩大窗口。[/red]"
+            )
+        else:
+            console.print(
+                f"[red]{date_arg} 在目标区域 {info.name} 内无有效像元。"
+                "请检查所选日期、区域及质量/云量筛选条件。[/red]"
+            )
         raise typer.Exit(1)
 
     if (
