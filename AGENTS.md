@@ -21,6 +21,10 @@ The `forecast` command can optionally overlay station observations with
 `--station-overlay`; its JSON uses `mode` to distinguish pure forecast from
 forecast/station overlay output.
 The `station` command draws national monitoring-station pollutant maps only.
+Its datetime argument requires a valid 10-digit `YYYYMMDDHH` in
+`Asia/Shanghai`; reject date-only inputs before configuration/data access.
+Do not auto-select the latest hour or fall back when that hour is missing.
+The shared station reader retains date-only support for other commands.
 The `meteo` command is the sole ERA5 wind-map entry point. It draws temperature,
 black wind arrows, station observations plus wind, or all three layers. Wind
 magnitude is encoded by arrow length and a reference arrow; wind has no
@@ -142,15 +146,39 @@ silently reformat or lint-fix broad application code during unrelated work.
 For focused changes, check the touched files with `--no-fix` and document any
 unrelated existing failures.
 
-`tests/test_gems.py` contains self-contained unittest regressions. Run:
+### Testing Rules
 
-```bash
-uv run python -m unittest discover -s tests -p 'test_gems.py' -v
-```
+Review and validate one CLI subcommand at a time. Apply these rules to new
+tests and changes to existing tests:
 
-Other local tests may be ignored/untracked and require pytest, which is not
-currently a project dependency. Do not assume full test discovery is isolated
-from local files. If adding pytest-based tests, add the dependency deliberately.
+1. **Behavior over implementation.** Assert on user-visible outcomes such as
+   exit status, responses, persisted state, rendered images, and JSON files.
+   Never assert on internal calls or private functions. Test one behavior per
+   test and keep test bodies free of logic.
+2. **Scenarios first.** Write acceptance scenarios before implementation,
+   using Given/When/Then. Name scenarios `user ...`; use `test_user_...` for
+   Python test functions or methods so test discovery still works. Never
+   implement first and retrofit tests. For bugs, reproduce the failure in a
+   failing test before fixing it.
+3. **No mocks.** Do not mock readers, region resolution, plotters, or other
+   internals. Use real input files; small isolated fixtures are acceptable.
+   Where needed, use real Postgres/Redis, for example via Testcontainers.
+   External-system fakes must be verified by contract tests against the real
+   system. Use fake clocks and seeded randomness; never use `sleep()`.
+4. **Prefer E2E.** Exercise the actual CLI from user input to visible result,
+   including generated PNG/JSON outputs where applicable. Use lower-level
+   tests only when E2E is impractical, and document why. Tier tests, run only
+   affected tests locally, and run the full suite on a schedule.
+5. **Coverage last.** Target at least 90% branch coverage. Explain uncovered
+   branches, especially failure paths. Do not add filler tests to inflate
+   coverage numbers.
+6. **Enforce with lint and CI.** Ban mock imports, sleep calls, and focused or
+   skipped tests (`.only`/`.skip` and Python equivalents). Enforce test naming.
+   CI must fail on coverage drops.
+
+The previous non-E2E suites have been removed; no E2E suite exists yet.
+These rules specify required enforcement; test lint, coverage gates, and
+scheduled full-suite CI still need to be configured.
 
 Package build command when needed:
 
@@ -283,8 +311,6 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
 - `raster`, `overlay`, `forecast`, and `reconstruct` sidecars add
   `boundary_policy` (under `raster` for `overlay`). Keep statistics valid when
   only exterior-center cells overlap: zero selected cells, null summaries.
-- Run `uv run python -m unittest discover -s tests -p
-  'test_boundary_display.py' -v` for boundary and projection regressions.
 
 ## GEMS Footprint Remapping
 
@@ -324,7 +350,6 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
   statistics under each layer. Compute members from the shared statistical
   grid/data, never sum overlapping members for the union total. Empty members
   retain zero counts and null summaries. Keep `spatial_summary` separate.
-- Run `uv run python -m unittest discover -s tests -p 'test_multi_regions.py' -v`.
 
 ## Station Radius Maps
 
@@ -354,5 +379,3 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
 - Radius JSON retains raster provenance and adds radius, administrative
   context, time matching, and station rows. Empty center-selected grids
   retain zero counts and null summaries even when intersecting cells display.
-- Run `uv run python -m unittest discover -s tests -p 'test_radius.py' -v`
-  alongside GEMS, footprint, multi-region, and boundary-display regressions.
