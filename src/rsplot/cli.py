@@ -616,13 +616,14 @@ def station(
         ..., help="区域名称，如 中国、安徽、合肥、YRD、合肥/蜀山"
     ),
     datetime_str: str = typer.Argument(
-        ..., help="YYYYMMDDHH (精确小时) 或 YYYYMMDD (自动取最新小时)"
+        ...,
+        help="北京时间 YYYYMMDDHH（必须指定小时，不自动选择最新小时）",
     ),
     var: str = typer.Option(
-        "AQI",
+        "O3_8h_24h",
         "--var",
         "-v",
-        help="变量名: AQI, PM2.5, PM10, NO2, O3, SO2, CO, O3_8h, *_24h",
+        help="变量名: AQI, PM2.5, PM2.5_24h, PM10, PM10_24h, SO2, SO2_24h, NO2, NO2_24h, O3, O3_24h, O3_8h, O3_8h_24h, CO, CO_24h",
     ),
     level: str | None = typer.Option(
         None,
@@ -653,10 +654,11 @@ def station(
 ) -> None:
     """绘制国控站点污染物散点图。
 
+    时间必须为北京时间 YYYYMMDDHH；不接受仅日期或自动选择最新小时。
+
     示例:
-        rsplot station 安徽 20260414
         rsplot station 安徽 2026041415
-        rsplot station 中国 20260414 --var PM2.5_24h
+        rsplot station 中国 2026041415 --var PM2.5_24h
         rsplot station YRD 2026041415 --var NO2 -o logs/yrd_no2.png
     """
     from rsplot.commands.station import run_station

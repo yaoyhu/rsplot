@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -33,6 +34,24 @@ def run_station(
     console: Console,
 ) -> None:
     """Execute station plotting without owning the Typer signature."""
+    # Validate before configuration, boundary lookup, or any source reads.
+    # The shared reader still supports date-only selection for other commands.
+    try:
+        if (
+            len(datetime_str) != 10
+            or not datetime_str.isascii()
+            or not datetime_str.isdigit()
+        ):
+            raise ValueError("Expected ten ASCII digits")
+        datetime.strptime(datetime_str, "%Y%m%d%H")
+    except ValueError as error:
+        console.print(
+            "[red]station 时间必须是有效的北京时间 YYYYMMDDHH"
+            "（10 位数字，小时 00–23），如 2026041415；"
+            "不支持仅日期 YYYYMMDD，也不会自动选择最新小时。[/red]"
+        )
+        raise typer.Exit(1) from error
+
     from rsplot.config import (
         STATION_VAR_LABELS,
         STATION_VAR_META,
@@ -81,8 +100,6 @@ def run_station(
         extent=read_extent,
     )
     data = mask_stations_to_region(data, info.geometry)
-    if resolved_dt != datetime_str:
-        console.print(f"  → 自动选择最新时次: [cyan]{resolved_dt}[/cyan]")
     console.print(
         f"  → [green]{data.n_valid}[/green] 有效站点 (共 {data.n_stations} 站)"
     )
