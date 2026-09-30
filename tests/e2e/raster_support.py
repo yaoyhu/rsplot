@@ -23,6 +23,11 @@ PRODUCTS = {
     "o3": ("O3_____", "ozone_total_vertical_column", 60221.4076 / 26.867),
     "o3pr": ("O3__PR_", "ozone_tropospheric_column", 2241.15),
 }
+# GEMS file token, column variable and cloud variable in "Data Fields".
+GEMS_PRODUCTS = {
+    "no2": ("NO2", "ColumnAmountNO2Trop", "CloudFraction"),
+    "hcho": ("HCHO", "ColumnAmount", "CloudRadianceFraction"),
+}
 
 
 class RasterWorkspace:
@@ -170,10 +175,15 @@ class RasterWorkspace:
                 ] = [0, 1, 2, 3]
         return path
 
-    def write_gems_scan(self, utc: str, value: float) -> None:
+    def write_gems_scan(
+        self, utc: str, value: float, *, product: str = "no2"
+    ) -> None:
+        token, variable, cloud = GEMS_PRODUCTS[product]
         folder = self.data / utc[:6] / utc[6:8]
         folder.mkdir(parents=True, exist_ok=True)
-        path = folder / f"GK2_GEMS_L2_{utc[:8]}_{utc[8:]}_NO2_FW_DPRO_ORI.nc"
+        path = (
+            folder / f"GK2_GEMS_L2_{utc[:8]}_{utc[8:]}_{token}_FW_DPRO_ORI.nc"
+        )
         lon, lat = np.meshgrid(
             np.arange(117.125, 118, 0.25), np.arange(31.125, 32, 0.25)
         )
@@ -195,13 +205,11 @@ class RasterWorkspace:
                 ("ViewingZenithAngle", 30),
             ):
                 geo.createVariable(name, "f8", ("y", "x"))[:] = values
-            column = data.createVariable(
-                "ColumnAmountNO2Trop", "f8", ("y", "x")
-            )
+            column = data.createVariable(variable, "f8", ("y", "x"))
             column.units = "molecules cm-2"
             column[:] = value * 1e15
             data.createVariable("FinalAlgorithmFlags", "i4", ("y", "x"))[:] = 0
-            data.createVariable("CloudFraction", "f8", ("y", "x"))[:] = 0.1
+            data.createVariable(cloud, "f8", ("y", "x"))[:] = 0.1
             times = geo.createVariable("Time", "f8", ("x",))
             times.units = "seconds since 2000-01-01 12:00:00 UTC"
             times[:] = (nominal - epoch).total_seconds()

@@ -10,6 +10,8 @@ import numpy as np
 from PIL import Image
 from raster_support import RasterWorkspace
 
+SUPPORT_KEYS = ("valid_region_pixels", "total_region_pixels", "coverage_pct")
+
 
 class RasterE2E(unittest.TestCase):
     def setUp(self):
@@ -133,6 +135,18 @@ class RasterE2E(unittest.TestCase):
         )
         self.assertEqual(window["stats"]["valid_region_pixels"], 1)
         self.assertGreater(daily["stats"]["valid_region_pixels"], 1)
+
+    def test_user_keeps_observed_support_while_smoothing(self):
+        """Given one observed cell, when smoothing, then support is unchanged."""
+        self.workspace.write_swath("20260101", 4, sparse=True)
+        plain = self.assert_plot(self.workspace.raster("20260101"))
+        smoothed = self.assert_plot(
+            self.workspace.raster("20260101", "--smooth", "1.5")
+        )
+        self.assertEqual(
+            [plain["stats"][key] for key in SUPPORT_KEYS],
+            [smoothed["stats"][key] for key in SUPPORT_KEYS],
+        )
 
     def test_user_sees_missing_day_diagnostics(self):
         """Given Jan 1 missing, when permitting one valid day, then report it."""

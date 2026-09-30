@@ -17,6 +17,7 @@ by the fixtures, independently of rsplot's implementation.
 | user includes both range endpoints | Same two-day archive | Select Jan 1–Jan 2 | Same window and mean 6 |
 | user requests a one-day window | Jan 1 has two orbits valued 2 and 4 | Select Jan 1 with --days 1 | Window has one day, n-min 1, mean 3 |
 | user distinguishes gap filling | Only one grid cell has observations in a larger region | Compare single day with --days 1 | Single day fills nearby holes; window retains observed-cell support |
+| user keeps observed support while smoothing | One observed NO2 cell in a region too large for gap filling to cover | Plot one TROPOMI day with --smooth 0 and --smooth 1.5 | Both PNGs are produced and valid-cell count, total cells and coverage are identical; smoothing creates no observed cells |
 | user sees missing-day diagnostics | Jan 1 is missing, Jan 2 has value 9 | Request two days with --n-min 1 | PNG and JSON mean 9, one found day, Jan 1 listed as failed |
 | user enforces minimum valid days | Same incomplete archive | Request two days with default n-min | Nonzero exit and no PNG/JSON |
 | user filters QA and clouds | Valid observations are 2; large outliers have QA at threshold or excessive cloud | Plot with --qa 0.5 --cf 0.5 | Mean 2; QA equality rejected and cloud equality retained |

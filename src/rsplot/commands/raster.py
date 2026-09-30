@@ -43,12 +43,6 @@ class RasterRun:
 @satellite_errors
 def run_raster(**kwargs: Any) -> None:
     """Prepare, render, and emit the administrative raster command."""
-    if kwargs.get("days") is not None and "-" in kwargs["date_arg"]:
-        raise ValueError(
-            "日期区间不能与 --days 同时使用；"
-            "请选择 YYYYMMDD-YYYYMMDD 或结束日期 YYYYMMDD 配合 --days N。"
-        )
-
     from rsplot.plotting.raster import plot_raster
     from rsplot.results import emit_result
 
@@ -80,6 +74,11 @@ def parse_raster_dates(
 
     if days is not None and days < 1:
         raise ValueError("--days 必须 >= 1。")
+    if days is not None and "-" in date_arg:
+        raise ValueError(
+            "日期区间不能与 --days 同时使用；"
+            "请选择 YYYYMMDD-YYYYMMDD 或结束日期 YYYYMMDD 配合 --days N。"
+        )
     if "-" in date_arg:
         dates = parse_date_window(date_arg, default_days=0)
         window_mode = True
@@ -301,6 +300,7 @@ def prepare_raster(
                 use_res,
                 info.geometry,
             )
+            scientific_valid_mask = np.isfinite(prepared.values)
             swath_meta = {
                 "n_pixels": int(swath.n_pixels),
                 "n_files": int(swath.n_files),

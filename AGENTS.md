@@ -25,6 +25,19 @@ Its datetime argument requires a valid 10-digit `YYYYMMDDHH` in
 `Asia/Shanghai`; reject date-only inputs before configuration/data access.
 Do not auto-select the latest hour or fall back when that hour is missing.
 The shared station reader retains date-only support for other commands.
+The `overlay` command's `DATE` selects satellite time exactly as `raster`
+does, including date ranges and `--days`/`--n-min` windows; TROPOMI stays
+daily. Station observations are one explicit China-time hour: require
+`--station-datetime YYYYMMDDHH` for TROPOMI and for GEMS daily/window means.
+Only a GEMS 12-digit scan matches the nearest station hour automatically.
+Never auto-select the latest station hour. Its satellite layer comes from
+`commands.raster.prepare_raster`; do not reintroduce a separate satellite
+preparation path. Every overlay sidecar has `time_matching`; TROPOMI and
+window requests use `reference=period_mean_with_explicit_station_hour` with a
+`satellite_period` (`date_basis` is `filename_start_date_utc` for TROPOMI,
+`asia_shanghai_calendar_day` for GEMS windows) and null time difference.
+Default station variables are `NO2` for `no2` and `O3_8h_24h` for `o3`,
+`o3pr`, and `hcho`; `--var` overrides them.
 The `meteo` command is the sole ERA5 wind-map entry point. It draws temperature,
 black wind arrows, station observations plus wind, or all three layers. Wind
 magnitude is encoded by arrow length and a reference arrow; wind has no
@@ -176,9 +189,22 @@ tests and changes to existing tests:
    skipped tests (`.only`/`.skip` and Python equivalents). Enforce test naming.
    CI must fail on coverage drops.
 
-The previous non-E2E suites have been removed; no E2E suite exists yet.
-These rules specify required enforcement; test lint, coverage gates, and
-scheduled full-suite CI still need to be configured.
+The previous non-E2E suites have been removed. Acceptance scenarios and
+subprocess E2E tests live in `tests/e2e/`: `RASTER_SCENARIOS.md` with
+`test_raster.py`, and `OVERLAY_SCENARIOS.md` with `test_overlay.py`. Run the
+affected suite with:
+
+```bash
+uv run python -B -m unittest discover -s tests/e2e -p 'test_raster.py' -v
+uv run python -B -m unittest discover -s tests/e2e -p 'test_overlay.py' -v
+```
+
+`overlay` and `radius` reuse `prepare_raster`, so changes to it must pass
+both the raster and overlay suites.
+
+These tests use temporary NetCDF/GeoJSON/TOML files and real PNG/JSON output.
+They do not require configured satellite data or network basemaps. Test lint,
+coverage gates, and scheduled full-suite CI still need to be configured.
 
 Package build command when needed:
 
@@ -291,8 +317,9 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
 - GEMS overlay accepts a 12-digit scan and pairs the nearest station hour
   (ties forward, <=30 minutes), with `--station-datetime` as an explicit
   local-hour override. An 8-digit daily mean requires `--station-datetime`;
-  label the daily/hourly comparison and set its time difference to null. HCHO requires `--var`. Keep column and surface units
-  separate. Existing TROPOMI JSON fields and behavior remain compatible.
+  label the daily/hourly comparison and set its time difference to null.
+  Keep column and surface units separate. Existing JSON fields remain
+  compatible.
 
 ## Raster Boundary Display
 
@@ -308,6 +335,9 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
   boundary centers are excluded. Coverage counts centers, not polygon area.
   Preserve existing product-specific statistical preprocessing, including
   unfilled/unsmoothed GEMS statistics. Never pass a display grid as statistics.
+  TROPOMI statistical smoothing may change values but must restore the
+  pre-smoothing valid mask in single-day and window modes; smoothing must
+  never create valid cells or change coverage.
 - `raster`, `overlay`, `forecast`, and `reconstruct` sidecars add
   `boundary_policy` (under `raster` for `overlay`). Keep statistics valid when
   only exterior-center cells overlap: zero selected cells, null summaries.

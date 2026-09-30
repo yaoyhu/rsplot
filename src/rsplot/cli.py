@@ -786,10 +786,15 @@ def overlay(
         ...,
         help="区域名称；支持逗号分隔多个省市县街道，如 '中山市/东区街道,中山市/南区街道'，无需配置",
     ),
-    datetime_str: str = typer.Argument(
+    date_arg: str = typer.Argument(
         ...,
-        help="GEMS: 北京时间 YYYYMMDD 日均（需 --station-datetime），或 YYYYMMDDHHMM 精确扫描（自动匹配最近站点整点）；TROPOMI: YYYYMMDDHH (精确小时) 或 YYYYMMDD (自动取最新小时)；"
-        "日期部分用于卫星，小时部分用于站点",
+        metavar="DATE",
+        help=(
+            "卫星时间，与 raster 相同。TROPOMI: YYYYMMDD 按文件名日期合并"
+            "当天轨道；GEMS: 北京时间 YYYYMMDD 日均或 YYYYMMDDHHMM 精确扫描。"
+            "两者均支持 YYYYMMDD-YYYYMMDD 闭区间，或结束日期 YYYYMMDD 配合"
+            " --days N，逐日等权平均。"
+        ),
     ),
     # --- satellite product ---
     sensor: str = typer.Option(
@@ -806,17 +811,34 @@ def overlay(
         "-p",
         help="卫星产品类型: no2 / o3 / o3pr / hcho",
     ),
+    days: int | None = typer.Option(
+        None,
+        "--days",
+        help=(
+            "以 DATE 为结束日期、向前共 N 天（含当天），按日等权平均；"
+            "不能与日期区间同时使用。"
+        ),
+    ),
+    n_min: int | None = typer.Option(
+        None,
+        "--n-min",
+        help="仅窗口模式：每个网格最少有效天数，默认规则同 raster。",
+    ),
     station_datetime: str | None = typer.Option(
         None,
         "--station-datetime",
-        help="GEMS 叠加站点时间，北京时间 YYYYMMDDHH",
+        help=(
+            "站点观测小时，北京时间 YYYYMMDDHH。TROPOMI、GEMS 日均及窗口"
+            "均值必须指定；GEMS 精确扫描默认匹配最近整点，也可显式覆盖。"
+            "不会自动选择最新小时。"
+        ),
     ),
     # --- station variable ---
     var: str | None = typer.Option(
         None,
         "--var",
         "-v",
-        help="站点变量名，省略时按 product 自动选同名变量 (NO2 / O3)",
+        help="站点变量名；省略时 no2→NO2，o3 / o3pr / hcho→O3_8h_24h",
     ),
     # --- overrides ---
     level: str | None = typer.Option(
@@ -878,19 +900,21 @@ def overlay(
     """叠加绘制卫星栅格+国控站点图。
 
     两种数据同时输出到一张 PNG 和一个合并的 JSON sidecar。
-    日期部分 (YYYYMMDD) 用于卫星，整串 (YYYYMMDDHH) 用于站点；
-    YYYYMMDD 会自动选当天最新小时的站点数据。
+    DATE 只决定卫星时间；站点始终是一个北京时间整点，从不做时间平均。
 
     示例:
-        rsplot overlay YRD    20260208   -p no2
-        rsplot overlay 安徽   2026041415 -p o3  -v O3_8h
-        rsplot overlay 中国   20260208   -p no2 -o logs/overlay/china_no2.png
+        rsplot overlay YRD  20260208 -p no2 --station-datetime 2026020813
+        rsplot overlay 安徽 20260414 -p o3 --days 7 \\
+            --station-datetime 2026041414
+        rsplot overlay 合肥 202604141200 --sensor gems -p no2
     """
     from rsplot.commands.overlay import run_overlay
 
     run_overlay(
         region=region,
-        datetime_str=datetime_str,
+        date_arg=date_arg,
+        days=days,
+        n_min=n_min,
         station_datetime=station_datetime,
         product=product,
         sensor=sensor,

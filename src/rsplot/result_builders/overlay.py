@@ -4,14 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
-
 from rsplot.result_builders.common import (
     member_basic_stats,
     serialize_member,
     serialize_region,
 )
-from rsplot.result_builders.raster import build_raster_result
 from rsplot.result_builders.station import build_station_result
 
 if TYPE_CHECKING:
@@ -24,44 +21,20 @@ if TYPE_CHECKING:
 
 def build_overlay_result(
     *,
+    raster: dict[str, Any],
     region: RegionInfo,
-    product: str,
     date: str,
     prod_info: ProductInfo,
-    LON: np.ndarray,
-    LAT: np.ndarray,
-    grid: np.ndarray,
-    swath_meta: dict[str, Any],
-    raster_vmin: float,
-    raster_vmax: float,
     data: StationData,
     datetime_str: str,
     threshold: float | None,
     unit: str,
     cities_gdf: gpd.GeoDataFrame | None,
     output: str,
-    display_grid: np.ndarray | None = None,
-    display_lon: np.ndarray | None = None,
-    display_lat: np.ndarray | None = None,
-    time_matching: dict[str, Any] | None = None,
+    time_matching: dict[str, Any],
 ) -> dict[str, Any]:
-    """Combine raster and station result blocks without shared duplication."""
-    raster_block = build_raster_result(
-        region=region,
-        product=product,
-        date=date,
-        prod_info=prod_info,
-        LON=LON,
-        LAT=LAT,
-        grid=grid,
-        swath_meta=swath_meta,
-        display_grid=display_grid,
-        display_lon=display_lon,
-        display_lat=display_lat,
-        vmin=raster_vmin,
-        vmax=raster_vmax,
-        output=output,
-    )
+    """Combine a prepared raster result with a station block."""
+    raster_block = dict(raster)
     station_block = build_station_result(
         region=region,
         data=data,
@@ -97,12 +70,11 @@ def build_overlay_result(
         "date": date,
         "raster": raster_block,
         "station": station_block,
+        "time_matching": time_matching,
     }
     if prod_info.processing == "nrti":
         result["sensor"] = "tropomi"
         result["processing"] = "nrti"
     if prod_info.sensor == "gems":
         result["sensor"] = "gems"
-    if time_matching is not None:
-        result["time_matching"] = time_matching
     return result

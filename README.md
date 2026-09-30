@@ -176,7 +176,7 @@ rsplot meteo 南京 2026051115 --station-var O3 \
 rsplot meteo 南京 2026051115 --temp-level 850 --station-var O3 \
   --wind-level 850 -o meteo_nanjing_t850_o3_wind850.png
 
-# Plot national monitoring station observations.
+# Plot national monitoring station observations at an explicit China-time hour.
 rsplot station 合肥 2026041415 --var O3 -o station_hefei_o3.png
 
 # Plot one station's hourly observations over the latest seven days.
@@ -194,7 +194,8 @@ rsplot trend 重庆 20260520 --days 7 --var O3 --region --view mean \
   --focus-station 3347A --threshold 200 -o trend_chongqing_focus.png
 
 # Overlay satellite raster data and station observations.
-rsplot overlay 合肥 2026041415 -p no2 --var NO2 -o overlay_hefei_no2.png
+rsplot overlay 合肥 20260414 -p no2 --station-datetime 2026041413 \
+  -o overlay_hefei_no2.png
 
 # Plot an FNR regime map with the default 7-day window.
 rsplot fnr 合肥 20260114 -o fnr_hefei.png
@@ -210,6 +211,96 @@ When `-o/--output` is provided, `rsplot` writes the image to that path and also
 writes a JSON sidecar with the same base name. Reconstructed-grid JSON records
 both the China-time input and matched UTC archive hour, source file, native and
 output resolution, regional statistics, administrative summaries, and hotspots.
+
+`station REGION YYYYMMDDHH` requires an exact hour in China standard time
+(`Asia/Shanghai`). Date-only input (`YYYYMMDD`), invalid dates, and hours outside
+00–23 are rejected with exit code 1 before configuration or data access.
+The command reads only the requested hour; it never selects the latest hour
+or falls back to another file when that hour is missing. Existing date-only
+`station` calls must supply an explicit hour.
+
+## Raster dates and temporal aggregation
+
+`rsplot raster REGION DATE` defaults to TROPOMI. `DATE` selects satellite
+observations, not a ground-station hour:
+
+| Input | TROPOMI | GEMS (`--sensor gems`) |
+| --- | --- | --- |
+| `YYYYMMDD` | Merge matching orbit files for that filename date, then grid their pixels | Equal-scan daily mean for that date in China standard time |
+| `YYYYMMDD --days N` | Average daily grids over N days ending on DATE, including DATE | Average daily scan means over the same inclusive window |
+| `YYYYMMDD-YYYYMMDD` | Average daily grids over the inclusive date range | Average daily scan means over the inclusive date range |
+| `YYYYMMDDHHMM` | Not supported | One exact nominal scan in China standard time |
+
+A date range and `--days` cannot be used together. TROPOMI dates match the
+UTC start date in standard S5P filenames; they do not select an hourly
+observation or convert a China-time day into an observation-time window.
+Without `--processing`, all matching files in the selected directory are
+eligible. `--processing nrti` restricts selection to NRTI and deduplicates
+overlapping observations using orbit, observation time and ground-pixel ID.
+
+TROPOMI processing filters QA/clouds and invalid values, converts units, and
+averages pixels in each target grid cell. Single-day mode fills small grid
+gaps. Window mode first grids each day without filling gaps, then averages
+valid daily values with equal day weights. Thus `--days 1` is an explicit
+one-day window and can have different coverage from omitting `--days`.
+Existing TROPOMI smoothing also affects reported statistic values; use
+`--smooth 0` for unsmoothed comparisons. Smoothing never creates valid cells,
+so coverage and valid-cell counts do not depend on `--smooth`. GEMS statistics remain unfilled and unsmoothed.
+
+`--n-min` applies only to windows and counts valid days per cell. Its default
+is `min(N, max(3, N // 2))` for NO2/O3/O3PR and
+`min(N, max(3, ceil(N * 0.25)))` for HCHO. Missing days are recorded in the
+JSON `window.dates_failed`; they are not treated as zero-valued observations.
+
+`raster` always saves an image and a same-basename JSON sidecar. Use `-o` for
+an explicit PNG path; otherwise files are saved under `/tmp`.
+
+## Satellite and station overlays
+
+`rsplot overlay REGION DATE` draws one satellite layer and one hour of
+national monitoring-station observations on the same map. `DATE` selects
+satellite time exactly as `raster` does, including `YYYYMMDD-YYYYMMDD`,
+`--days N`, `--n-min`, and GEMS `YYYYMMDDHHMM` scans. TROPOMI remains daily:
+the orbits for one filename date are merged, and there is no hourly
+TROPOMI selector.
+
+Station observations are always one concrete China-time hour, never a
+temporal mean. rsplot never picks the latest available hour and never falls
+back to another file.
+
+| Satellite request | Station hour |
+| --- | --- |
+| TROPOMI day or window | `--station-datetime YYYYMMDDHH` is required |
+| GEMS daily mean or window | `--station-datetime YYYYMMDDHH` is required |
+| GEMS scan `YYYYMMDDHHMM` | Nearest station hour (at most 30 minutes, ties forward); `--station-datetime` overrides it |
+
+```bash
+# TROPOMI 7-day NO2 mean with 13:00 China-time station observations.
+rsplot overlay 合肥 20260919 -p no2 --days 7 \
+  --station-datetime 2026091913 -o overlay_hefei_no2_week.png
+```
+
+Without `--var`, `no2` pairs with station `NO2`, and `o3`, `o3pr` and `hcho`
+pair with `O3_8h_24h` (MDA8 O3). `--var` selects any other station variable.
+Satellite columns and station concentrations keep independent colorbars and
+units; the map shows spatial juxtaposition, not a column-to-surface
+conversion.
+
+The JSON sidecar keeps the full raster result under `raster` and the station
+summary under `station`. Top-level `date` is the satellite date (the window
+end date for windows) and `datetime` is the station hour. Every sidecar
+has `time_matching`:
+
+- GEMS scans record the scan time, station hour, time difference in minutes
+  and whether the hour was overridden.
+- GEMS daily means use `reference: daily_mean_with_explicit_station_hour`.
+- TROPOMI requests and all windows use
+  `reference: period_mean_with_explicit_station_hour` with
+  `satellite_period` (`start`, `end`, `aggregation` of `daily` or
+  `window_mean`, and `date_basis`). TROPOMI dates are UTC filename dates
+  (`filename_start_date_utc`); GEMS window days are China-time days
+  (`asia_shanghai_calendar_day`). The time difference is null because a
+  daily or window mean has no single observation time.
 
 ## Station map color scales
 
@@ -357,12 +448,6 @@ selection retains the existing boundary-tolerance rule. `spatial_summary`
 continues to describe subdivisions, independently of selected-member stats.
 Single-region inputs retain their existing output contract.
 
-Run the isolated multi-region regressions:
-
-```bash
-uv run python -m unittest discover -s tests -p 'test_multi_regions.py' -v
-```
-
 ## Raster boundaries and regional statistics
 
 `raster`, `overlay`, `forecast` (including station overlays), and
@@ -386,13 +471,6 @@ A small region can display overlapping cells while having no interior grid
 centers: its statistics then report zero valid cells and null summaries.
 This change does not increase the satellite's native resolution or fill
 missing observations.
-
-Run boundary-selection and actual rendering regressions (including holes
-and both PlateCarree and Mercator projections):
-
-```bash
-uv run python -m unittest discover -s tests -p 'test_boundary_display.py' -v
-```
 
 ## TROPOMI NRTI processing stream
 
@@ -430,8 +508,8 @@ hourly satellite selector; overlay/radius station-hour rules stay unchanged.
 rsplot raster 安徽 20260918 --product no2 --processing nrti \
   --basemap none --output /tmp/anhui_no2_nrti.png
 
-rsplot overlay 安徽 2026091812 --product no2 --processing nrti \
-  --basemap none --output /tmp/anhui_no2_nrti_overlay.png
+rsplot overlay 安徽 20260918 --product no2 --processing nrti \
+  --station-datetime 2026091812 --basemap none --output /tmp/anhui_no2_nrti_overlay.png
 
 rsplot radius 1379A 20260918 --km 20 --product no2 --processing nrti \
   --station-var NO2 --station-datetime 2026091812 \
@@ -464,12 +542,6 @@ pixel counts before and after deduplication, and `n_duplicates_removed`.
 Window results retain daily diagnostics; FNR records `window.daily_no2` and
 `window.daily_hcho`. Default titles and output filenames identify NRTI;
 explicit `--title` and `--output` still take precedence.
-
-Run the self-contained NRTI regressions:
-
-```bash
-uv run python -m unittest discover -s tests -p 'test_tropomi_nrti.py' -v
-```
 
 ## GEMS satellite products
 
@@ -592,22 +664,9 @@ settings, file failures, and scan-count summaries. Window metadata retains
 per-day diagnostics. Existing TROPOMI fields remain compatible; the boundary
 policy block described above is additive.
 
-GEMS `overlay` accepts an exact scan or a daily mean. A daily mean requires
-an explicit `--station-datetime YYYYMMDDHH`; its title and JSON distinguish
-the daily satellite mean from the hourly station observation, without a
-fictitious scan-time offset. Exact scans match the nearest station hour
-(at most 30 minutes, ties forward). A missing station hour is an error.
-`--station-datetime` records a manual override and its time difference.
-NO2 pairs with NO2; O3/O3PR pair with O3; HCHO requires an explicit `--var`.
-Satellite columns and station concentrations retain independent colorbars
-and units; the map shows spatial juxtaposition, not a column-to-surface
-conversion.
-
-Run the self-contained GEMS regressions without adding pytest:
-
-```bash
-uv run python -m unittest discover -s tests -p 'test_gems.py' -v
-```
+GEMS `overlay` accepts an exact scan, a daily mean or a window. Station-hour
+rules, default station variables and `time_matching` are described in
+[Satellite and station overlays](#satellite-and-station-overlays).
 
 ## License
 

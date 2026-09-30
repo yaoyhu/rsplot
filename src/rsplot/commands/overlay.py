@@ -2,44 +2,94 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import typer
 
 from rsplot.commands.common import (
     load_fallback_city_boundaries,
-    parse_basemap,
     resolve_satellite,
     satellite_errors,
-    satellite_filter_label,
-    validate_color_range,
-    validate_non_negative,
-    validate_positive,
-    validate_unit_interval,
-    warn_missing_tianditu_key,
 )
+from rsplot.commands.raster import parse_raster_dates, prepare_raster
 from rsplot.config import AppConfig
 
 if TYPE_CHECKING:
     from rich.console import Console
 
 
+# Default station variable for each satellite product.
 PRODUCT_STATION_PAIR = {
     "no2": "NO2",
-    "o3": "O3",
-    "o3pr": "O3",
+    "o3": "O3_8h_24h",
+    "o3pr": "O3_8h_24h",
+    "hcho": "O3_8h_24h",
 }
+
+
+def resolve_station_hour(
+    date_arg: str,
+    sensor: str,
+    days: int | None,
+    n_min: int | None,
+    station_datetime: str | None,
+) -> tuple[str, dict[str, Any], list[str], bool]:
+    """Resolve satellite dates and one station hour; never pick the latest."""
+    from rsplot.readers.gems import match_station_hour, parse_gems_time
+    from rsplot.temporal import adapt_hourly_time
+
+    scan_mode = sensor == "gems" and len(date_arg) == 12
+    if scan_mode:
+        parse_gems_time(date_arg)
+        if days is not None or n_min is not None:
+            raise ValueError("GEMS 单次扫描不能同时使用 --days 或 --n-min。")
+        dates, window_mode = [date_arg[:8]], False
+    else:
+        dates, window_mode = parse_raster_dates(date_arg, days)
+    if station_datetime is not None:
+        adapt_hourly_time(station_datetime, label="--station-datetime ")
+    if scan_mode:
+        hour, matching = match_station_hour(date_arg, station_datetime)
+        return hour, matching, dates, window_mode
+    if station_datetime is None:
+        raise ValueError(
+            "卫星日均或窗口均值叠加站点时，必须通过 --station-datetime "
+            "YYYYMMDDHH（北京时间）指定一个站点小时；不会自动选择。"
+        )
+    if sensor == "gems" and not window_mode:
+        hour, matching = match_station_hour(date_arg, station_datetime)
+        return hour, matching, dates, window_mode
+    matching = {
+        "satellite_period": {
+            "start": dates[0],
+            "end": dates[-1],
+            "aggregation": "window_mean" if window_mode else "daily",
+            "date_basis": (
+                "asia_shanghai_calendar_day"
+                if sensor == "gems"
+                else "filename_start_date_utc"
+            ),
+        },
+        "station_datetime": station_datetime,
+        "timezone": "Asia/Shanghai",
+        "difference_minutes": None,
+        "manual_override": True,
+        "reference": "period_mean_with_explicit_station_hour",
+    }
+    return station_datetime, matching, dates, window_mode
 
 
 @satellite_errors
 def run_overlay(
     *,
     region: str,
-    datetime_str: str,
+    date_arg: str,
     product: str,
     sensor: str = "tropomi",
     processing: str | None = None,
+    days: int | None = None,
+    n_min: int | None = None,
     station_datetime: str | None = None,
     var: str | None,
     level: str | None,
@@ -58,261 +108,45 @@ def run_overlay(
     title: str | None,
     console: Console,
 ) -> None:
-    """Execute satellite/station overlay orchestration."""
+    """Read one station hour, then reuse raster satellite preparation."""
     from rsplot.config import STATION_VAR_META, get_exceedance_threshold
     from rsplot.geo.boundaries import resolve_regions
-    from rsplot.geo.processing import (
-        buffered_extent,
-        prepare_display_grid,
-        prepare_existing_grid,
-        prepare_swath_grid,
-    )
+    from rsplot.geo.processing import buffered_extent
     from rsplot.plotting.overlay import plot_overlay
-    from rsplot.plotting.styles import setup_fonts
-    from rsplot.readers import auto_vrange
     from rsplot.readers.guokong import mask_stations_to_region, read_stations
     from rsplot.results import build_overlay_result, emit_result
 
     cfg = AppConfig.load()
-    prod_info, use_qa = resolve_satellite(
+    prod_info, _ = resolve_satellite(
         product, sensor, qa, cfg, console, processing
     )
     sensor = prod_info.sensor
     processing = prod_info.processing
-    pairing = None
-    station_request = datetime_str
-    if sensor == "gems":
-        from rsplot.readers.gems import match_station_hour
-
-        station_request, pairing = match_station_hour(
-            datetime_str, station_datetime
-        )
-        if product.lower() == "hcho" and var is None:
-            raise ValueError("GEMS HCHO 叠加需通过 --var 显式指定站点变量。")
-    elif station_datetime is not None:
-        raise ValueError("--station-datetime 在此命令中仅用于 GEMS。")
-    setup_fonts(cfg.font_dir)
+    station_hour, pairing, dates, window_mode = resolve_station_hour(
+        date_arg, sensor, days, n_min, station_datetime
+    )
 
     if var is None:
-        var = PRODUCT_STATION_PAIR.get(product.lower(), "AQI")
+        var = PRODUCT_STATION_PAIR[product.lower()]
     if var not in STATION_VAR_META:
         available = ", ".join(STATION_VAR_META)
         console.print(f"[red]未知站点变量 '{var}'[/red]。可用: {available}")
         raise typer.Exit(1)
 
-    if sensor != "gems" and (
-        not datetime_str.isdigit() or len(datetime_str) not in (8, 10)
-    ):
-        console.print(
-            f"[red]datetime 参数 '{datetime_str}' 格式不正确[/red]，"
-            "请使用 YYYYMMDD 或 YYYYMMDDHH。"
-        )
-        raise typer.Exit(1)
-    date = datetime_str[:8]
-
-    console.print(f"[bold]解析区域:[/bold] {region}")
     info = resolve_regions(region, cfg, level_override=level)
-    console.print(f"  → [green]{info.name}[/green] (级别: {info.level})")
-    if info.members:
-        console.print(
-            "  → 成员: "
-            + "、".join(
-                member.qualified_name or member.name for member in info.members
-            )
-        )
-    console.print(
-        f"  → 范围: {info.extent[0]:.2f}°~{info.extent[1]:.2f}°E, "
-        f"{info.extent[2]:.2f}°~{info.extent[3]:.2f}°N"
-    )
-
-    params = info.params
-    use_dpi = dpi if dpi is not None else cfg.dpi
-    product_defaults = prod_info.defaults_for_level(info.level)
-    use_res = (
-        res
-        if res is not None
-        else product_defaults.res
-        if product_defaults.res is not None
-        else params.res
-    )
-    use_cmap = cmap if cmap is not None else prod_info.cmap
-    use_smooth = (
-        smooth
-        if smooth is not None
-        else product_defaults.smooth_sigma
-        if product_defaults.smooth_sigma is not None
-        else params.smooth_sigma
-    )
-    try:
-        use_basemap = parse_basemap(basemap)
-        validate_positive(use_dpi, "--dpi")
-        validate_positive(use_res, "--res")
-        validate_unit_interval(use_qa, "--qa")
-        validate_unit_interval(cf, "--cf")
-        validate_color_range(vmin, vmax)
-        if use_smooth is not None:
-            validate_non_negative(use_smooth, "--smooth")
-    except ValueError as e:
-        console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1) from e
-    if use_smooth == 0:
-        use_smooth = None
-    warn_missing_tianditu_key(
-        basemap=use_basemap,
-        default_basemap=params.basemap,
-        tianditu_key=cfg.tianditu_key,
-        console=console,
-    )
-
-    use_raster_dir = (
-        raster_dir
-        if raster_dir is not None
-        else cfg.get_data_dir(prod_info.data_key or product)
-    )
-    reader = prod_info.create_reader()
-    reader.cloud_fraction_max = cf
-    if sensor == "gems":
-        console.print(f"  → GEMS 目标网格 {use_res}°（分析与显示）")
-    read_extent = buffered_extent(info.extent, 1.0)
-    console.print(
-        f"\n[bold]读取卫星数据:[/bold] {use_raster_dir} (产品: {product})"
-    )
-    console.print(
-        f"  时间: {datetime_str}, {satellite_filter_label(sensor, use_qa, cf)}"
-    )
-    statistics_grid = None
-    if sensor == "gems":
-        from rsplot.temporal import read_scan_mean
-
-        batch = read_scan_mean(
-            reader=reader,
-            data_dir=use_raster_dir,
-            request=datetime_str,
-            extent=read_extent,
-            res=use_res,
-        )
-        prepared = prepare_existing_grid(
-            batch.LON,
-            batch.LAT,
-            batch.grid,
-            info.geometry,
-            fill_gaps=False,
-        )
-        display_source = prepared.unmasked_values
-        statistics_grid = prepared.values.copy()
-        swath_meta = {
-            "n_pixels": batch.n_pixels,
-            "n_files": batch.n_files,
-            "n_broken": batch.n_broken,
-            "resolution_deg": use_res,
-            "cloud_fraction_max": cf,
-            **batch.metadata,
-        }
-    else:
-        swath = reader.read(
-            use_raster_dir,
-            date,
-            read_extent,
-            qa_threshold=use_qa,
-        )
-        console.print(
-            f"  → [green]{swath.n_pixels}[/green] 有效像元 "
-            f"({swath.n_files} 文件, {swath.n_broken} 损坏)"
-        )
-
-        console.print(f"\n[bold]网格化:[/bold] {use_res}° 分辨率")
-        prepared = prepare_swath_grid(
-            swath.lon,
-            swath.lat,
-            swath.values,
-            read_extent,
-            use_res,
-            info.geometry,
-            smooth_sigma=use_smooth,
-        )
-        display_source = prepared.unmasked_values
-        swath_meta = {
-            "n_pixels": int(swath.n_pixels),
-            "n_files": int(swath.n_files),
-            "n_broken": int(swath.n_broken),
-            **(swath.metadata if prod_info.processing else {}),
-            "qa_threshold": use_qa,
-            "cloud_fraction_max": cf,
-            "resolution_deg": use_res,
-        }
-    display_lon, display_lat = prepared.lon, prepared.lat
-    display_support = None
-    if sensor == "gems":
-        from rsplot.geo.footprints import prepare_footprint_display
-
-        display = prepare_footprint_display(
-            prepared.lon,
-            prepared.lat,
-            display_source,
-            info.geometry,
-            analysis_res=use_res,
-            display_res=use_res,
-            smooth_sigma=use_smooth,
-        )
-        display_lon, display_lat = display.lon, display.lat
-        display_grid, display_support = display.values, display.support
-        swath_meta["resolution_deg"] = use_res
-        swath_meta["analysis_resolution_deg"] = use_res
-        swath_meta["display_resolution_deg"] = use_res
-        swath_meta["display_support"] = "analysis_valid_cells"
-    else:
-        display_grid = prepare_display_grid(
-            prepared.lon,
-            prepared.lat,
-            display_source,
-            info.geometry,
-            smooth_sigma=use_smooth,
-        )
-    if not np.isfinite(display_grid).any():
-        console.print("[red]目标区域没有相交的有效卫星网格。[/red]")
-        raise typer.Exit(1)
-    console.print(
-        f"  → 网格 {prepared.values.shape}, "
-        f"区域内覆盖率 {prepared.coverage_pct:.1f}% "
-        f"({prepared.n_valid_region}/{prepared.total_region_pixels})"
-    )
-
-    if vmin is not None and vmax is not None:
-        use_vmin, use_vmax = vmin, vmax
-    elif prod_info.vmin is not None and prod_info.vmax is not None:
-        use_vmin = vmin if vmin is not None else prod_info.vmin
-        use_vmax = vmax if vmax is not None else prod_info.vmax
-    else:
-        auto_min, auto_max = auto_vrange(
-            prepared.values
-            if np.isfinite(prepared.values).any()
-            else display_grid,
-            prod_info,
-        )
-        use_vmin = vmin if vmin is not None else auto_min
-        use_vmax = vmax if vmax is not None else auto_max
-    try:
-        validate_color_range(use_vmin, use_vmax)
-    except ValueError as e:
-        console.print(f"[red]色标范围无效：{e}[/red]")
-        raise typer.Exit(1) from e
-    console.print(f"  → 色标范围: {use_vmin:.1f} ~ {use_vmax:.1f}")
 
     use_station_dir = (
         station_dir if station_dir is not None else cfg.get_data_dir("guokong")
     )
     console.print(f"\n[bold]读取站点数据:[/bold] {use_station_dir}")
-    console.print(f"  时间: {station_request}, 变量: {var}")
-    station_extent = buffered_extent(info.extent, 0.5)
-    data, resolved_dt = read_stations(
+    console.print(f"  时间: {station_hour} 北京时间, 变量: {var}")
+    data, _ = read_stations(
         use_station_dir,
-        station_request,
+        station_hour,
         var,
-        extent=station_extent,
+        extent=buffered_extent(info.extent, 0.5),
     )
     data = mask_stations_to_region(data, info.geometry)
-    if resolved_dt != station_request:
-        console.print(f"  → 自动选择最新时次: [cyan]{resolved_dt}[/cyan]")
     console.print(
         f"  → [green]{data.n_valid}[/green] 有效站点 (共 {data.n_stations} 站)"
     )
@@ -326,75 +160,78 @@ def run_overlay(
             f"  → 超标阈值: {threshold}, 超标站点: [red]{n_exceed}[/red]"
         )
 
+    source = "GEMS" if sensor == "gems" else "TROPOMI"
     if processing == "nrti":
-        if output is None:
-            output = (
-                f"/tmp/rsplot_overlay_nrti_{info.name}_{product}_"
-                f"{date}_{resolved_dt}.png"
-            )
-        if title is None:
-            title = (
-                f"TROPOMI NRTI {product.upper()} {date} + "
-                f"Station {var} {resolved_dt} CST - {info.name}"
-            )
-
-    if output is None and sensor == "gems":
-        output = (
-            f"/tmp/rsplot_overlay_gems_{info.name}_{product}_"
-            f"{datetime_str}_{resolved_dt}.png"
-        )
-    if title is None and sensor == "gems":
-        period = "daily mean" if len(datetime_str) == 8 else "scan"
-        title = (
-            f"GEMS {product.upper()} {datetime_str} {period} CST + "
-            f"Station {var} {resolved_dt} CST - {info.name}"
-        )
+        source += " NRTI"
+    if window_mode:
+        period = f"{dates[0]}~{dates[-1]} mean"
+        period_name = f"{dates[0]}_{dates[-1]}"
+    else:
+        period = date_arg
+        period_name = date_arg
+        if sensor == "gems":
+            period += " CST scan" if len(date_arg) == 12 else " CST daily mean"
     if output is None:
-        output = f"/tmp/rsplot_overlay_{info.name}_{product}_{resolved_dt}.png"
-    unit = STATION_VAR_META[var][0]
-    station_label = f"{var} ({unit})" if unit else var
+        output = (
+            f"/tmp/rsplot_overlay_{source.lower().replace(' ', '_')}_"
+            f"{info.name}_{product}_{period_name}_{station_hour}.png"
+        )
+    if title is None:
+        title = (
+            f"{source} {product.upper()} {period} + "
+            f"Station {var} {station_hour} CST - {info.name}"
+        )
 
+    run = prepare_raster(
+        region=info,
+        date_arg=date_arg,
+        product=product,
+        sensor=sensor,
+        processing=processing,
+        days=days,
+        n_min=n_min,
+        level=level,
+        data_dir=raster_dir,
+        output=output,
+        dpi=dpi,
+        res=res,
+        basemap=basemap,
+        vmin=vmin,
+        vmax=vmax,
+        cmap=cmap,
+        smooth=smooth,
+        title=title,
+        qa=qa,
+        cf=cf,
+        console=console,
+    )
+
+    unit = STATION_VAR_META[var][0]
+    plot_options = dict(run.plot_options)
+    for key in ("cmap", "vmin", "vmax"):
+        plot_options[f"raster_{key}"] = plot_options.pop(key)
+    plot_options["raster_label"] = plot_options.pop("colorbar_label")
     console.print("\n[bold]绘图中...[/bold]")
     plot_overlay(
-        display_lon,
-        display_lat,
-        display_grid,
+        run.lon,
+        run.lat,
+        run.grid,
         data,
         info,
-        raster_cmap=use_cmap,
-        raster_vmin=use_vmin,
-        raster_vmax=use_vmax,
-        raster_label=prod_info.colorbar_label,
         station_threshold=threshold,
-        station_label=station_label,
-        dpi=use_dpi,
-        basemap=use_basemap,
-        tianditu_key=cfg.tianditu_key,
-        title=title,
-        output=output,
-        **({"coverage_geometry": display_support} if sensor == "gems" else {}),
+        station_label=f"{var} ({unit})" if unit else var,
+        **plot_options,
     )
     console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
 
     result = build_overlay_result(
+        raster=run.result,
         region=info,
-        product=product,
-        date=date,
+        date=run.result["date"],
         prod_info=prod_info,
-        LON=prepared.lon,
-        LAT=prepared.lat,
-        grid=statistics_grid
-        if statistics_grid is not None
-        else prepared.values,
-        swath_meta=swath_meta,
         time_matching=pairing,
-        display_grid=display_grid,
-        display_lon=display_lon,
-        display_lat=display_lat,
-        raster_vmin=use_vmin,
-        raster_vmax=use_vmax,
         data=data,
-        datetime_str=resolved_dt,
+        datetime_str=station_hour,
         threshold=threshold,
         unit=unit,
         cities_gdf=load_fallback_city_boundaries(
