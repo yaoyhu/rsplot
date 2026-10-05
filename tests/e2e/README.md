@@ -1,7 +1,8 @@
 # E2E reviews
 
-Acceptance scenarios are in [RASTER_SCENARIOS.md](RASTER_SCENARIOS.md) and
-[OVERLAY_SCENARIOS.md](OVERLAY_SCENARIOS.md).
+Acceptance scenarios are in [RASTER_SCENARIOS.md](RASTER_SCENARIOS.md),
+[OVERLAY_SCENARIOS.md](OVERLAY_SCENARIOS.md) and
+[CLI_SCENARIOS.md](CLI_SCENARIOS.md) (the enabled command set).
 Each test launches the installed `rsplot` console command in a separate
 process. Fixtures are real temporary NetCDF, GeoJSON and TOML files, with
 deterministic values and no mocks. Successful plotting scenarios decode the
@@ -11,6 +12,7 @@ requests must not leave output files.
 Run only the affected command's E2E tier locally:
 
 ```bash
+uv run python -B -m unittest discover -s tests/e2e -p 'test_cli.py' -v
 uv run python -B -m unittest discover -s tests/e2e -p 'test_raster.py' -v
 uv run python -B -m unittest discover -s tests/e2e -p 'test_overlay.py' -v
 ```

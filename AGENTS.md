@@ -15,11 +15,12 @@ The package uses a `src/` layout and exposes the console command:
 rsplot = rsplot.__main__:app
 ```
 
-Primary CLI commands are `raster`, `radius`, `forecast`, `meteo`, `station`,
-`trend`, `overlay`, `recent`, and `fnr`.
-The `forecast` command can optionally overlay station observations with
-`--station-overlay`; its JSON uses `mode` to distinguish pure forecast from
-forecast/station overlay output.
+Primary CLI commands are `raster`, `radius`, `meteo`, `station`, `trend`,
+`overlay`, `recent`, and `fnr`.
+`forecast` and `reconstruct` are disabled: their Typer wrappers were removed
+from `cli.py`, so the CLI reports "No such command". Their modules under
+`commands/`, `readers/`, and `result_builders/` remain unchanged for later
+re-enabling; do not route other commands through them.
 The `station` command draws national monitoring-station pollutant maps only.
 Its datetime argument requires a valid 10-digit `YYYYMMDDHH` in
 `Asia/Shanghai`; reject date-only inputs before configuration/data access.
@@ -110,8 +111,8 @@ introduce new code that violates them.
    `--qa`, `--cf`, `--level`, `--n-min`, FNR thresholds) are kept and
    recorded.
 
-`forecast` and `reconstruct` are out of scope for this refactor and are not
-being brought under these conventions.
+The disabled `forecast` and `reconstruct` commands are out of scope for this
+refactor.
 
 ## Repository Layout
 
@@ -249,10 +250,12 @@ tests and changes to existing tests:
 
 The previous non-E2E suites have been removed. Acceptance scenarios and
 subprocess E2E tests live in `tests/e2e/`: `RASTER_SCENARIOS.md` with
-`test_raster.py`, and `OVERLAY_SCENARIOS.md` with `test_overlay.py`. Run the
-affected suite with:
+`test_raster.py`, `OVERLAY_SCENARIOS.md` with `test_overlay.py`, and
+CLI-wide scenarios (the enabled command set) in `CLI_SCENARIOS.md` with
+`test_cli.py`. Run the affected suite with:
 
 ```bash
+uv run python -B -m unittest discover -s tests/e2e -p 'test_cli.py' -v
 uv run python -B -m unittest discover -s tests/e2e -p 'test_raster.py' -v
 uv run python -B -m unittest discover -s tests/e2e -p 'test_overlay.py' -v
 ```
@@ -332,14 +335,14 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
 - ERA5 files are indexed in UTC. `meteo` input and station hours are fixed to
   `Asia/Shanghai`, and rsplot converts that hour to the matching ERA5 UTC
   archive time.
-- Forecast files are grouped as
+- (Disabled `forecast` command.) Forecast files are grouped as
   `forecast{lead}/{YYYYMMDDHH}_forecast{lead}.nc`, where the filename is the
   UTC initialization time. Forecast input and station hours are fixed to
   `Asia/Shanghai`; rsplot converts the input initialization hour to UTC for
   lookup, adds the lead in UTC, then converts the valid hour back for display
   and station matching.
-- Forecast station overlays default the station datetime to the converted local
-  `forecast.valid_datetime`. Use `--station-datetime` only when intentionally
+- (Disabled `forecast` command.) Forecast station overlays default the
+  station datetime to the converted local `forecast.valid_datetime`. Use `--station-datetime` only when intentionally
   comparing against a different observation hour.
 
 ## GEMS Integration
@@ -396,9 +399,10 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
   TROPOMI statistical smoothing may change values but must restore the
   pre-smoothing valid mask in single-day and window modes; smoothing must
   never create valid cells or change coverage.
-- `raster`, `overlay`, `forecast`, and `reconstruct` sidecars add
-  `boundary_policy` (under `raster` for `overlay`). Keep statistics valid when
-  only exterior-center cells overlap: zero selected cells, null summaries.
+- `raster` and `overlay` sidecars (and the disabled `forecast` and
+  `reconstruct` builders) add `boundary_policy` (under `raster` for
+  `overlay`). Keep statistics valid when only exterior-center cells overlap:
+  zero selected cells, null summaries.
 
 ## GEMS Footprint Remapping
 

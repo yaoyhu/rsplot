@@ -1,7 +1,7 @@
 # rsplot
 
-`rsplot` is an Agent-oriented command-line tool for plotting remote-sensing,
-reconstructed, and air-quality data. It provides a small, stable CLI surface for
+`rsplot` is an Agent-oriented command-line tool for plotting remote-sensing
+and air-quality data. It provides a small, stable CLI surface for
 [tianpu-agent](https://git.lug.ustc.edu.cn/yaoyhu/tianpu-agent).
 
 
@@ -135,25 +135,6 @@ rsplot raster 安徽 20260227 -p o3pr -o o3pr_anhui_20260227.png
 # Plot an explicit TROPOMI date range.
 rsplot raster 长三角 20260101-20260131 -p no2 -o no2_yrd_202601.png
 
-# Reconstructed-grid input is China standard time; rsplot converts it to the
-# matching UTC archive filename. This reads 2026051100.nc.
-rsplot reconstruct 安徽 2026051108 --var PM2.5 \
-  -o reconstruct_anhui_pm25.png
-
-# Date-only input selects the latest complete hour in that China-time day.
-rsplot reconstruct 合肥 20260511 --var O3 --res 0.01 \
-  -o reconstruct_hefei_o3.png
-
-# Forecast input is China standard time; rsplot converts it
-# to the matching UTC archive initialization hour before reading.
-rsplot forecast 安徽 2026063000 --lead 24 --var O3 -o forecast_anhui_o3.png
-
-# Date-only input selects the latest initialization within that China-time day.
-rsplot forecast 合肥 20260630 --lead 72 --var PM2.5 -o forecast_hefei_pm25.png
-
-# Overlay station observations on the forecast valid time.
-rsplot forecast 合肥 2026041409 --lead 6 --var O3 --station-overlay -o forecast_station_hefei_o3.png
-
 # Plot ERA5 2 m temperature. Input hours are China standard time; rsplot
 # converts them to the matching UTC archive day and hour automatically.
 rsplot meteo 南京 2026051115 --temp-level 2m -o meteo_nanjing_t2m.png
@@ -208,9 +189,11 @@ rsplot fnr 合肥 20260114 --voc-threshold 0.8 --nox-threshold 1.8 --display-max
 ```
 
 When `-o/--output` is provided, `rsplot` writes the image to that path and also
-writes a JSON sidecar with the same base name. Reconstructed-grid JSON records
-both the China-time input and matched UTC archive hour, source file, native and
-output resolution, regional statistics, administrative summaries, and hotspots.
+writes a JSON sidecar with the same base name.
+
+The `forecast` and `reconstruct` commands are disabled and no longer part of
+the CLI. Their `forecast` and `reconstruct` data-directory keys remain valid
+in configuration but are unused.
 
 `station REGION YYYYMMDDHH` requires an exact hour in China standard time
 (`Asia/Shanghai`). Date-only input (`YYYYMMDD`), invalid dates, and hours outside
@@ -304,8 +287,8 @@ has `time_matching`:
 
 ## Station map color scales
 
-Station layers in `station`, `overlay`, `forecast --station-overlay`, `meteo`,
-and `radius --station-var` share fixed O3 and NO2 color scales. Concentrations
+Station layers in `station`, `overlay`, `meteo`, and
+`radius --station-var` share fixed O3 and NO2 color scales. Concentrations
 at or below the threshold use a green–yellow–orange gradient. Values strictly
 above the threshold are red, including values beyond the colorbar maximum;
 a red upper extension marks this overflow. Equality is not exceedance.
@@ -319,10 +302,10 @@ a red upper extension marks this overflow. Equality is not exceedance.
 | `NO2_24h` (daily) | 80 | 0–100 |
 
 AQI retains its existing discrete bands. Other station variables retain their
-P5–P95 scales. These station rules do not change satellite, forecast-grid or
-temperature colorbars. No station `--vmin` or `--vmax` options are added.
+P5–P95 scales. These station rules do not change satellite or temperature
+colorbars. No station `--vmin` or `--vmax` options are added.
 Fixed station-scale metadata appears in `display` for `station`,
-`station.display` for overlay/forecast/meteo, and `stations.display` for radius.
+`station.display` for overlay/meteo, and `stations.display` for radius.
 Original observations, summary statistics and exceedance counts are preserved.
 
 ## Satellite maps around a monitoring station
@@ -450,8 +433,7 @@ Single-region inputs retain their existing output contract.
 
 ## Raster boundaries and regional statistics
 
-`raster`, `overlay`, `forecast` (including station overlays), and
-`reconstruct` prepare separate display and statistics grids:
+`raster` and `overlay` prepare separate display and statistics grids:
 
 - **Display:** retain valid grid cells that intersect the administrative
   geometry, even when their centers are outside. Clip the colored layer to
