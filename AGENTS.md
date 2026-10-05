@@ -56,6 +56,63 @@ values or compact regional summaries.
 The `recent` command writes JSON only; the other plotting commands write a PNG
 and a same-basename `.json` sidecar.
 
+## CLI Conventions (Agent Contract)
+
+rsplot is used only by agents running in a fully configured environment. The
+JSON sidecar is the machine contract; stdout is for humans. These rules are
+the target for every command and are adopted one command at a time, each with
+its own E2E suite. When refactoring a command, apply all of them; do not
+introduce new code that violates them.
+
+1. **Data paths come from configuration only.** Use `config.toml`,
+   `RSPLOT_CONFIG`, or `RSPLOT_DATA_DIR_*`. Commands have no data-directory
+   options. E2E fixtures write their directories into the test config.
+2. **Long option names only.** Do not add short aliases such as `-p` or `-o`.
+3. **Nothing that selects data is implicit.** `--output` is required, and so
+   are `--product` and `--var` wherever they select the command's main
+   variable, and `--station-var` wherever a station layer is always drawn.
+   There are no product-to-station-variable defaults.
+4. **Time is explicit.** Hourly inputs are China-time `YYYYMMDDHH`
+   (`Asia/Shanghai`). Never auto-select the latest file or hour and never fall
+   back to another hour. Satellite dates and windows follow `raster`
+   (`YYYYMMDD`, `YYYYMMDD-YYYYMMDD`, `--days`, `--n-min`, GEMS
+   `YYYYMMDDHHMM`); TROPOMI stays daily. Station observations are always one
+   concrete hour, never a temporal mean.
+5. **Variable naming.** `--var` selects what the command is about.
+   `--station-var` selects the station variable drawn alongside another
+   layer. Each command documents what happens without `--station-var`:
+
+   | Command | Main variable | Without `--station-var` |
+   | --- | --- | --- |
+   | `raster` | `--product` | no station layer option |
+   | `station`, `trend` | `--var` | no station layer option |
+   | `recent` | `--product` (`--source raster`) or `--var` (`--source station`) | no station layer option |
+   | `overlay` | `--product` | rejected; `--station-var` is required |
+   | `radius` | `--product` | station locations only |
+   | `meteo` | `--temp-level` / `--wind-level` | no station layer |
+
+   Station variable names (`AQI`, `PM2.5`, `O3`, `O3_8h_24h`, ...) are used
+   everywhere; map any differing file variable names internally.
+6. **JSON records how the result was made.** Every sidecar has `command`,
+   `image`, and `sidecar`; satellite commands always record `sensor` and
+   `processing`; time-dependent commands record `input_timezone`; all record
+   the data root and source files used. Whenever two layers come from
+   different times, record one consistent `time_matching` block. Keep
+   existing JSON field names backward compatible.
+7. **Failures are machine-readable.** On an expected input or data error,
+   exit 1 and write `{"command": ..., "error": {"code": ..., "message":
+   ...}}` to the sidecar path derived from `--output`; never write a PNG for a
+   failed run.
+8. **Display options stay.** `--dpi`, `--cmap`, `--vmin`/`--vmax`,
+   `--title`, `--basemap`, `--smooth`, and wind styling only change the
+   image. The JSON records the values actually used, and they never change
+   coverage or valid-cell counts. Options that change the science (`--res`,
+   `--qa`, `--cf`, `--level`, `--n-min`, FNR thresholds) are kept and
+   recorded.
+
+`forecast` and `reconstruct` are out of scope for this refactor and are not
+being brought under these conventions.
+
 ## Repository Layout
 
 - `pyproject.toml`: package metadata, runtime dependencies, CLI entry point,
@@ -100,7 +157,8 @@ Cartopy, GeoPandas, Shapely, xarray, SciPy, Astropy, Matplotlib, and NetCDF4.
 
 Most real commands require external data paths. Runtime paths are intentionally
 not hard-coded in `src/rsplot/config.py`; use `~/.config/rsplot/config.toml`,
-`RSPLOT_CONFIG`, environment variables, or CLI directory options.
+`RSPLOT_CONFIG`, or environment variables. CLI directory options are being
+removed command by command (see CLI Conventions rule 1).
 
 Create a local config from the example. Optional paths such as `font_dir`
 may be left unset; required runtime paths include the
