@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import xarray as xr
 
+from rsplot.errors import RsplotError
 from rsplot.temporal import DEFAULT_INPUT_TIMEZONE, adapt_hourly_time
 
 if TYPE_CHECKING:
@@ -18,6 +19,8 @@ if TYPE_CHECKING:
 
 PRESSURE_LEVELS = ("1000", "925", "850", "700", "500")
 TEMPERATURE_LEVELS = ("2m", *PRESSURE_LEVELS)
+# CDS files written since the 2024 backend change use `valid_time`.
+TIME_NAMES = ("valid_time", "time")
 
 
 @dataclass(frozen=True)
@@ -129,20 +132,27 @@ def read_era5_grid(
         raise FileNotFoundError(f"未找到 {field_label}文件: {path}")
 
     with xr.open_dataset(path) as ds:
-        required = {"time", "latitude", "longitude", variable}
+        time_name = next(
+            (name for name in TIME_NAMES if name in ds.variables), None
+        )
+        required = {"latitude", "longitude", variable}
         missing = sorted(required - set(ds.variables))
+        if time_name is None:
+            missing.insert(0, " / ".join(TIME_NAMES))
         if missing:
             raise ValueError(
                 f"{field_label}文件 {path} 缺少变量: {', '.join(missing)}"
             )
 
         target = np.datetime64(data_datetime.replace(tzinfo=None), "ns")
-        times = np.asarray(ds["time"].values).astype("datetime64[ns]")
+        times = np.asarray(ds[time_name].values).astype("datetime64[ns]")
         time_indices = np.flatnonzero(times == target)
         if len(time_indices) == 0:
             target_label = data_datetime.strftime("%Y-%m-%d %H:%M UTC")
-            raise ValueError(
-                f"{field_label}文件 {path} 中没有时次 {target_label}。"
+            raise RsplotError(
+                "data_not_found",
+                f"{field_label}文件 {path} 中没有时次 {target_label}。",
+                details={"path": str(path), "time_utc": target_label},
             )
 
         lon_raw = np.asarray(ds["longitude"].values, dtype=float)
@@ -166,9 +176,11 @@ def read_era5_grid(
         values = np.asarray(
             ds[variable]
             .isel(
-                time=int(time_indices[0]),
-                latitude=lat_indices,
-                longitude=lon_indices,
+                {
+                    time_name: int(time_indices[0]),
+                    "latitude": lat_indices,
+                    "longitude": lon_indices,
+                }
             )
             .values,
             dtype=float,

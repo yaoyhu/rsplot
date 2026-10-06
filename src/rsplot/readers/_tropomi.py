@@ -166,7 +166,11 @@ class TropomiReader(BaseReader):
                 all_lat.append(lat[mask])
                 all_values.append(values[mask] * spec.unit_conversion)
 
-        metadata = {}
+        # Every stream records its inputs; NRTI adds deduplication details.
+        metadata: dict = {
+            "source_files": files,
+            "failed_files": failed_files,
+        }
         if self.processing == "nrti":
             metadata = {
                 "sensor": "tropomi",

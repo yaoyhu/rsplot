@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 import xarray as xr
 
+from rsplot.errors import RsplotError
+
 if TYPE_CHECKING:
     from shapely.geometry.base import BaseGeometry
 
@@ -317,12 +319,15 @@ def read_station_series(
                 f"{timestamp}: {message}"
                 for timestamp, message in list(failed_files.items())[:3]
             )
-            raise ValueError(
+            raise RsplotError(
+                "read_failed",
                 f"窗口 {dates[0]}~{dates[-1]} 内无法读取变量 "
-                f"'{var_name}': {examples}"
+                f"'{var_name}': {examples}",
             )
-        raise ValueError(
-            f"窗口 {dates[0]}~{dates[-1]} 内未找到站点 '{station_id}'"
+        raise RsplotError(
+            "region_not_found",
+            f"窗口 {dates[0]}~{dates[-1]} 内未找到站点 '{station_id}'",
+            details={"station_id": station_id},
         )
 
     return StationSeries(

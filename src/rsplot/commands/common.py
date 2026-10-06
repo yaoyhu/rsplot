@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
 import typer
 
+from rsplot.errors import RsplotError
+
 if TYPE_CHECKING:
     import geopandas as gpd
     from rich.console import Console
@@ -143,9 +145,10 @@ def resolve_satellite(
             else cfg.qa_threshold
         )
         validate_unit_interval(threshold, "--qa")
+    except RsplotError:
+        raise
     except ValueError as error:
-        console.print(f"[red]{error}[/red]")
-        raise typer.Exit(1) from error
+        raise RsplotError("invalid_argument", str(error)) from error
     return info, threshold
 
 

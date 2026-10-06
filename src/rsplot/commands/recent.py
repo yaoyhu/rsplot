@@ -2,25 +2,79 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
-import typer
+import numpy as np
 
 from rsplot.commands.common import (
     resolve_satellite,
-    satellite_errors,
     satellite_filter_label,
     validate_positive,
     validate_unit_interval,
 )
 from rsplot.config import AppConfig
+from rsplot.errors import RsplotError
 
 if TYPE_CHECKING:
     from rich.console import Console
 
+    from rsplot.recent import RecentDaily
 
-@satellite_errors
-def run_recent(
+# Keyword argument -> CLI spellings, for recording where values came from.
+RECENT_OPTIONS = {
+    "days": ("--days",),
+    "source": ("--source",),
+    "sensor": ("--sensor",),
+    "processing": ("--processing",),
+    "product": ("--product", "-p"),
+    "var": ("--var", "-v"),
+    "level": ("--level", "-l"),
+    "data_dir": ("--data-dir", "-d"),
+    "output": ("--output", "-o"),
+    "res": ("--res",),
+    "qa": ("--qa",),
+    "cf": ("--cf",),
+}
+RASTER_COLUMNS = [
+    "date",
+    "ok",
+    "value",
+    "n_valid",
+    "coverage_fraction",
+    "pixels",
+    "error",
+]
+STATION_COLUMNS = [
+    "date",
+    "ok",
+    "value",
+    "hour",
+    "n_valid",
+    "n_stations",
+    "n_exceed",
+    "error",
+]
+
+
+def run_recent(**kwargs: Any) -> None:
+    """Summarize recent days as JSON for an agent; no image is drawn."""
+    from rsplot.commands.sidecar import run_with_sidecar
+
+    run_with_sidecar(
+        command="recent",
+        kwargs=kwargs,
+        options=RECENT_OPTIONS,
+        positionals={
+            "region": kwargs["region"],
+            "end_date": kwargs["end_date"],
+        },
+        emit=lambda created: _emit_recent(created, **kwargs),
+    )
+
+
+def _emit_recent(
+    created: list[Path],
     *,
     region: str,
     end_date: str,
@@ -38,27 +92,48 @@ def run_recent(
     cf: float = 0.5,
     console: Console,
 ) -> None:
-    """Execute recent-day summaries without owning the Typer signature."""
     from rsplot.config import STATION_VAR_META
+    from rsplot.data_files import data_path, write_table_csv
     from rsplot.geo.boundaries import resolve_region
     from rsplot.recent import (
-        build_recent_result,
         parse_recent_dates,
         summarize_recent_raster,
         summarize_recent_station,
-        write_recent_result,
+        temporal_summary,
     )
+    from rsplot.result_builders.envelope import (
+        capped,
+        coverage_block,
+        flag,
+        option_given,
+        request_block,
+        resolved,
+        sidecar_path,
+        stats_block,
+        success_envelope,
+        write_sidecar,
+    )
+    from rsplot.result_builders.satellite import (
+        FILES_LIMIT,
+        collect_provenance,
+    )
+    from rsplot.stats import round_finite
 
     use_source = source.lower()
     if use_source not in ("raster", "station"):
-        console.print("[red]--source 仅支持 raster / station[/red]")
-        raise typer.Exit(1)
-
+        raise RsplotError(
+            "invalid_argument",
+            "--source 仅支持 raster / station",
+            option="--source",
+        )
+    if days < 1:
+        raise RsplotError(
+            "invalid_argument", "--days 必须 >= 1", option="--days"
+        )
     try:
         dates = parse_recent_dates(end_date, days)
-    except ValueError as e:
-        console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1) from e
+    except ValueError as error:
+        raise RsplotError("invalid_time", str(error)) from error
 
     cfg = AppConfig.load()
     if use_source == "raster":
@@ -68,11 +143,32 @@ def run_recent(
         sensor = prod_info.sensor
         processing = prod_info.processing
     elif processing is not None:
-        raise ValueError("--processing 仅用于 --source raster。")
+        raise RsplotError(
+            "invalid_argument",
+            "--processing 仅用于 --source raster。",
+            option="--processing",
+        )
     elif sensor.lower() != "tropomi":
-        raise ValueError("--sensor gems 仅用于 --source raster。")
+        raise RsplotError(
+            "invalid_argument",
+            "--sensor gems 仅用于 --source raster。",
+            option="--sensor",
+        )
+    elif var not in STATION_VAR_META:
+        raise RsplotError(
+            "invalid_argument",
+            f"未知变量 '{var}'。可用: {', '.join(STATION_VAR_META)}",
+            option="--var",
+        )
     console.print(f"[bold]解析区域:[/bold] {region}")
-    info = resolve_region(region, cfg, level_override=level)
+    try:
+        info = resolve_region(region, cfg, level_override=level)
+    except RsplotError:
+        raise
+    except ValueError as error:
+        raise RsplotError(
+            "region_not_found", str(error), details={"region": region}
+        ) from error
     console.print(f"  → [green]{info.name}[/green] (级别: {info.level})")
     console.print(
         f"[bold]统计窗口:[/bold] {dates[0]} ~ {dates[-1]} ({len(dates)} 天)"
@@ -93,6 +189,21 @@ def run_recent(
                 f"/tmp/rsplot_recent_{info.name}_{var}_"
                 f"{dates[0]}_{dates[-1]}.json"
             )
+    sidecar = sidecar_path(str(Path(output).resolve()))
+
+    def source_of(name: str, value: Any, default: str) -> dict[str, Any]:
+        if option_given(*RECENT_OPTIONS[name]):
+            return resolved(value, "cli")
+        return resolved(value, default)
+
+    request: dict[str, Any] = {
+        "region": resolved(region, "cli"),
+        "end_date": resolved(end_date, "cli"),
+        "days": source_of("days", days, "built_in"),
+        "source": source_of("source", use_source, "built_in"),
+        "level": source_of("level", info.level, "built_in"),
+        "output": source_of("output", output, "built_in"),
+    }
 
     if use_source == "raster":
         product_defaults = prod_info.defaults_for_level(info.level)
@@ -107,9 +218,8 @@ def run_recent(
             validate_positive(use_res, "--res")
             validate_unit_interval(use_qa, "--qa")
             validate_unit_interval(cf, "--cf")
-        except ValueError as e:
-            console.print(f"[red]{e}[/red]")
-            raise typer.Exit(1) from e
+        except ValueError as error:
+            raise RsplotError("invalid_argument", str(error)) from error
         use_data_dir = (
             data_dir
             if data_dir is not None
@@ -131,29 +241,60 @@ def run_recent(
             cloud_fraction_max=cf,
             console=console,
         )
-        result = build_recent_result(
-            region=info,
-            source=use_source,
-            dates=dates,
-            daily=daily,
-            params={
-                "data_dir": use_data_dir,
-                "qa_threshold": use_qa,
-                "cloud_fraction_max": cf,
-                "resolution_deg": use_res,
-            },
-            product=product,
-            sensor=sensor,
-            processing=processing,
-            quantity=prod_info.quantity,
-            unit=prod_info.colorbar_label,
-            output=output,
+        gems = sensor == "gems"
+        layer_id = "satellite"
+        quantity = {
+            "name": prod_info.quantity,
+            "unit": prod_info.unit,
+            "scale": prod_info.unit_scale,
+            "label": prod_info.colorbar_label,
+        }
+        time_zone = "Asia/Shanghai" if gems else "UTC"
+        basis = (
+            "asia_shanghai_calendar_day" if gems else "filename_start_date_utc"
+        )
+        files, failed, versions = collect_provenance(
+            [row.meta for row in daily], str(use_data_dir)
+        )
+        source_block = {
+            "sensor": sensor,
+            "processing": (processing or "offl") if not gems else None,
+            "data_root": str(use_data_dir),
+            "files": files[:FILES_LIMIT],
+            "files_total": len(files),
+            "files_manifest": None,
+            "failed_files": failed,
+            "versions": versions,
+        }
+        method: dict[str, Any] = {
+            "daily_value": "regional_mean_of_valid_cells",
+            "cloud_fraction_max": cf,
+            "grid_deg": use_res,
+            "gap_fill": "none" if gems else "nearest_within_3_cells",
+            "smoothing_sigma": 0,
+            "cell_selection": "center_strictly_inside",
+            "cell_weighting": "equal",
+        }
+        if gems:
+            method["quality_filter"] = (
+                "final_algorithm_flag_0_sza_vza_below_70"
+            )
+        else:
+            method["qa_min_exclusive"] = use_qa
+        rows = [_raster_row(row) for row in daily]
+        columns = RASTER_COLUMNS
+        request.update(
+            product=source_of("product", product, "built_in"),
+            sensor=source_of("sensor", sensor, "built_in"),
+            processing=source_of(
+                "processing", source_block["processing"], "built_in"
+            ),
+            data_dir=source_of("data_dir", str(use_data_dir), "config"),
+            res=source_of("res", use_res, "level_default"),
+            qa=None if gems else source_of("qa", use_qa, "config"),
+            cf=source_of("cf", cf, "built_in"),
         )
     else:
-        if var not in STATION_VAR_META:
-            available = ", ".join(STATION_VAR_META)
-            console.print(f"[red]未知变量 '{var}'[/red]。可用: {available}")
-            raise typer.Exit(1)
         use_data_dir = (
             data_dir if data_dir is not None else cfg.get_data_dir("guokong")
         )
@@ -166,21 +307,150 @@ def run_recent(
             var_name=var,
             console=console,
         )
-        result = build_recent_result(
-            region=info,
-            source=use_source,
-            dates=dates,
-            daily=daily,
-            params={"data_dir": use_data_dir},
-            variable=var,
-            unit=unit or None,
-            output=output,
+        layer_id = "station"
+        quantity = {
+            "name": var,
+            "unit": unit or "1",
+            "scale": 1,
+            "label": f"{var} ({unit})" if unit else var,
+        }
+        time_zone = "Asia/Shanghai"
+        basis = "station_hour"
+        source_block = {
+            "sensor": "station",
+            "processing": None,
+            "data_root": str(use_data_dir),
+            "files": sorted(
+                f"{row.meta['datetime']}.nc" for row in daily if row.ok
+            ),
+            "files_total": sum(row.ok for row in daily),
+            "files_manifest": None,
+            "failed_files": {
+                row.date: row.error or "" for row in daily if not row.ok
+            },
+        }
+        method = {
+            "daily_value": "mean_of_in_region_stations",
+            "station_hour": "latest_available_per_day",
+            "region_selection": "point_inside_region",
+        }
+        rows = [_station_row(row) for row in daily]
+        columns = STATION_COLUMNS
+        request.update(
+            var=source_of("var", var, "built_in"),
+            data_dir=source_of("data_dir", str(use_data_dir), "config"),
         )
 
-    write_recent_result(result, output)
-    found = result["availability"]["days_found"]
-    failed = result["availability"]["days_failed"]
-    console.print(
-        f"\n[bold green]✓ 已保存:[/bold green] {output} "
-        f"(有效 {found}/{len(dates)} 天，失败 {failed})"
+    values = np.array(
+        [
+            row.value if row.ok and row.value is not None else np.nan
+            for row in daily
+        ],
+        dtype=float,
     )
+    valid = np.isfinite(values)
+    coverage = coverage_block(int(valid.sum()), len(dates), "days")
+    order = np.flatnonzero(valid)[np.argsort(values[valid])[::-1]]
+    table_path = data_path(sidecar, "daily", ".csv")
+    layer = {
+        "id": layer_id,
+        "kind": "series",
+        "quantity": quantity,
+        "time": {
+            "aggregation": "daily_series",
+            "start": dates[0],
+            "end": dates[-1],
+            "timezone": time_zone,
+            "basis": basis,
+        },
+        "source": source_block,
+        "method": method,
+        "coverage": coverage,
+        "stats": stats_block(values),
+        "by_admin": [],
+        "extremes": capped(
+            [
+                {"date": dates[index], "value": round_finite(values[index])}
+                for index in order
+            ],
+            coverage["valid"],
+            "value_desc",
+        ),
+        "temporal_summary": temporal_summary(daily),
+        "data": str(table_path),
+    }
+    failed_days = {row.date: row.error for row in daily if not row.ok}
+    flags: list[dict[str, Any]] = []
+    if coverage["valid"] == 0:
+        flags.append(
+            flag(
+                "no_valid_data",
+                "critical",
+                "No requested day has a valid regional value.",
+                layer=layer_id,
+                evidence={"failed": failed_days},
+            )
+        )
+    elif failed_days:
+        flags.append(
+            flag(
+                "missing_days",
+                "warning",
+                f"{len(failed_days)} of {len(dates)} days have no valid "
+                "regional value; window comparisons use fewer days.",
+                layer=layer_id,
+                evidence={"failed": failed_days},
+            )
+        )
+
+    created.append(table_path)
+    table_entry = write_table_csv(
+        table_path,
+        rows,
+        columns,
+        content="daily_table",
+        layer=layer_id,
+    )
+    payload = success_envelope(
+        command="recent",
+        request=request_block(request),
+        region=info,
+        layers=[layer],
+        flags=flags,
+        render=None,
+        artifacts={"image": None, "sidecar": sidecar, "data": [table_entry]},
+    )
+    created.append(Path(sidecar))
+    write_sidecar(payload, sidecar)
+    console.print(
+        f"\n[bold green]✓ 已保存:[/bold green] {sidecar} "
+        f"(有效 {coverage['valid']}/{len(dates)} 天，失败 {len(failed_days)})"
+    )
+
+
+def _raster_row(row: RecentDaily) -> dict[str, Any]:
+    stats = row.stats
+    total = stats.get("total_region_pixels") or 0
+    valid = stats.get("valid_region_pixels") or 0
+    return {
+        "date": row.date,
+        "ok": int(row.ok),
+        "value": float(row.value) if row.value is not None else np.nan,
+        "n_valid": valid,
+        "coverage_fraction": float(valid / total) if total else np.nan,
+        "pixels": row.meta.get("n_pixels", ""),
+        "error": row.error or "",
+    }
+
+
+def _station_row(row: RecentDaily) -> dict[str, Any]:
+    return {
+        "date": row.date,
+        "ok": int(row.ok),
+        "value": float(row.value) if row.value is not None else np.nan,
+        "hour": row.meta.get("datetime", ""),
+        "n_valid": row.meta.get("n_valid", ""),
+        "n_stations": row.meta.get("n_stations", ""),
+        "n_exceed": row.meta.get("n_exceed", ""),
+        "error": row.error or "",
+    }

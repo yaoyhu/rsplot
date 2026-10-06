@@ -137,6 +137,8 @@ rsplot raster 长三角 20260101-20260131 -p no2 -o no2_yrd_202601.png
 
 # Plot ERA5 2 m temperature. Input hours are China standard time; rsplot
 # converts them to the matching UTC archive day and hour automatically.
+# meteo needs an exact China-time hour (YYYYMMDDHH) in every mode. Each
+# layer writes a data file, e.g. meteo_nanjing_t2m.temperature.nc.
 rsplot meteo 南京 2026051115 --temp-level 2m -o meteo_nanjing_t2m.png
 
 # Plot black 850 hPa wind arrows; length represents speed and no wind
@@ -173,12 +175,16 @@ rsplot trend 重庆 20260520 --days 7 --var O3 --region -o trend_chongqing_o3.pn
 # Plot only the regional mean and highlight one or more explicit stations.
 rsplot trend 重庆 20260520 --days 7 --var O3 --region --view mean \
   --focus-station 3347A --threshold 200 -o trend_chongqing_focus.png
+# Each trend also writes <name>.series.nc: value(station, time) with
+# time_cst labels, plus regional_mean and n_stations in region mode.
 
 # Overlay satellite raster data and station observations.
 rsplot overlay 合肥 20260414 -p no2 --station-datetime 2026041413 \
   -o overlay_hefei_no2.png
 
-# Plot an FNR regime map with the default 7-day window.
+# Plot an FNR regime map with the default 7-day window. The sidecar has
+# no2, hcho and fnr layers (regime counts in the fnr layer's categories),
+# with fnr_hefei.no2.nc, fnr_hefei.hcho.nc and fnr_hefei.fnr.nc.
 rsplot fnr 合肥 20260114 -o fnr_hefei.png
 
 # Plot an FNR regime map with an explicit date range.
@@ -191,6 +197,36 @@ rsplot fnr 合肥 20260114 --voc-threshold 0.8 --nox-threshold 1.8 --display-max
 When `-o/--output` is provided, `rsplot` writes the image to that path and also
 writes a JSON sidecar with the same base name.
 
+### Result sidecars (`rsplot.result/2`)
+
+Every command writes the agent-oriented sidecar specified in
+[docs/result-schema.md](docs/result-schema.md) and validated by the shipped
+JSON Schema `src/rsplot/schemas/result-2.schema.json`.
+
+```bash
+rsplot raster 合肥 20260919 -p no2 --days 7 -o out/hefei_no2_week.png
+# out/hefei_no2_week.png            image
+# out/hefei_no2_week.json           sidecar (schema rsplot.result/2)
+# out/hefei_no2_week.satellite.nc   statistical grid: value, counted, valid_days
+```
+
+| Question an agent asks | Where to read it |
+| --- | --- |
+| Did it work? | `status`; on failure `error.code` and `error.message` |
+| How far can I trust it? | `quality.grade` (`good`, `limited`, `unreliable`) and `quality.flags` |
+| What was measured, in which unit? | `layers[0].quantity` (`unit` and `scale`) |
+| Over which time? | `layers[0].time`, including `days` for windows |
+| From which files? | `layers[0].source` (`data_root`, `files`, `failed_files`) |
+| How was it processed? | `layers[0].method` |
+| Regional result | `layers[0].coverage`, `stats`, `by_admin`, `by_member`, `extremes` |
+| Full values | the NetCDF in `layers[0].data` / `artifacts.data` |
+| How to reproduce it | `request.argv` and `request.resolved` (value and source of every parameter) |
+
+A failed run exits 1 and writes the same envelope with `status: "error"`
+and no PNG or data file. For example, the real Hefei 7-day NO2 window above
+covers only 2.9 % of the city's cells and is graded `unreliable` with
+`very_low_coverage` and `few_valid_days`.
+
 The `forecast` and `reconstruct` commands are disabled and no longer part of
 the CLI. Their `forecast` and `reconstruct` data-directory keys remain valid
 in configuration but are unused.
@@ -200,7 +236,11 @@ in configuration but are unused.
 00–23 are rejected with exit code 1 before configuration or data access.
 The command reads only the requested hour; it never selects the latest hour
 or falls back to another file when that hour is missing. Existing date-only
-`station` calls must supply an explicit hour.
+`station` calls must supply an explicit hour. Its `rsplot.result/2` sidecar
+has one `station` layer (statistics over in-region stations, exceedances,
+per-district rows, and AQI bands in `categories` for AQI) and a
+`<name>.station.csv` listing every station read around the region with
+`in_region`.
 
 ## Raster dates and temporal aggregation
 
@@ -233,10 +273,12 @@ so coverage and valid-cell counts do not depend on `--smooth`. GEMS statistics r
 `--n-min` applies only to windows and counts valid days per cell. Its default
 is `min(N, max(3, N // 2))` for NO2/O3/O3PR and
 `min(N, max(3, ceil(N * 0.25)))` for HCHO. Missing days are recorded in the
-JSON `window.dates_failed`; they are not treated as zero-valued observations.
+satellite layer's `time.days.failed`; they are not treated as zero-valued
+observations.
 
-`raster` always saves an image and a same-basename JSON sidecar. Use `-o` for
-an explicit PNG path; otherwise files are saved under `/tmp`.
+`raster` always saves an image, a same-basename JSON sidecar and a
+`<name>.satellite.nc` data file. Use `-o` for an explicit PNG path; otherwise
+files are saved under `/tmp`.
 
 ## Satellite and station overlays
 
@@ -269,21 +311,24 @@ Satellite columns and station concentrations keep independent colorbars and
 units; the map shows spatial juxtaposition, not a column-to-surface
 conversion.
 
-The JSON sidecar keeps the full raster result under `raster` and the station
-summary under `station`. Top-level `date` is the satellite date (the window
-end date for windows) and `datetime` is the station hour. Every sidecar
-has `time_matching`:
+The `rsplot.result/2` sidecar has two layers. `satellite` is the same layer
+`raster` writes, with its period in `time` (TROPOMI dates are UTC filename
+dates, GEMS days are China-time days). `station` holds the station hour in
+`time.at`, statistics over in-region stations, exceedances against the
+variable's limit, and per-district rows. Next to the image are
+`<name>.satellite.nc` and `<name>.station.csv`; the CSV lists every station
+read around the region with `in_region`, its value, and the satellite value
+of the cell it falls in.
 
-- GEMS scans record the scan time, station hour, time difference in minutes
-  and whether the hour was overridden.
-- GEMS daily means use `reference: daily_mean_with_explicit_station_hour`.
-- TROPOMI requests and all windows use
-  `reference: period_mean_with_explicit_station_hour` with
-  `satellite_period` (`start`, `end`, `aggregation` of `daily` or
-  `window_mean`, and `date_basis`). TROPOMI dates are UTC filename dates
-  (`filename_start_date_utc`); GEMS window days are China-time days
-  (`asia_shanghai_calendar_day`). The time difference is null because a
-  daily or window mean has no single observation time.
+`relations.time_matching` says how the two times were paired:
+`nominal_scan_time` for GEMS scans (with the difference in minutes),
+`daily_mean_with_explicit_station_hour` for GEMS daily means, and
+`period_mean_with_explicit_station_hour` for TROPOMI days and all windows
+(difference null, because a daily or window mean has no single observation
+time). `relations.colocation` counts stations that fall in a valid satellite
+cell and gives the Spearman rank correlation of satellite and station values
+(null with fewer than 3 pairs). It measures spatial agreement only; the
+`column_vs_surface` flag says the units are not comparable.
 
 ## Station map color scales
 
@@ -304,8 +349,8 @@ a red upper extension marks this overflow. Equality is not exceedance.
 AQI retains its existing discrete bands. Other station variables retain their
 P5–P95 scales. These station rules do not change satellite or temperature
 colorbars. No station `--vmin` or `--vmax` options are added.
-Fixed station-scale metadata appears in `display` for `station`,
-`station.display` for overlay/meteo, and `stations.display` for radius.
+Fixed station-scale metadata appears in `render.layers.station` for
+`station`, `overlay`, `radius` and `meteo`.
 Original observations, summary statistics and exceedance counts are preserved.
 
 ## Satellite maps around a monitoring station
@@ -369,17 +414,20 @@ uv run rsplot radius 1379A 202609071245 --km 5 \
   then zero and statistical summaries null. Coverage is a center count,
   not a fraction of polygon area.
 
-A PNG and same-basename JSON are saved (under `/tmp` by default). The JSON
-uses `command: radius` and `mode: station_locations | station_overlay`,
-retains raster statistics/provenance, and adds `radius`,
-`administrative_context`, `time_matching`, and `stations`. `radius.shape`
-is `square`, `radius.km` is the center-to-side distance, and
-`radius.side_length_km` is twice that value. Station distances are still
-geodesic distances from the center, so corner stations can exceed `--km`.
-The station block
-records the exact snapshot, IDs, coordinates, distances, and, when selected,
-values and missing status. Daily/window versus hourly comparisons have a
-null time difference; scan comparisons record the nominal time difference.
+A PNG, an `rsplot.result/2` sidecar, `<name>.satellite.nc` and
+`<name>.station.csv` are saved (under `/tmp` by default). The region has
+`kind: station_radius` and a `radius` block: `center_station`, centre
+coordinates, `km` (the centre-to-side distance), `side_length_km` (twice
+that), `shape: square`, and `administrative_context` (cities containing the
+centre, visible cities and subdivisions). The `satellite` layer matches
+`raster`. The `station` layer is `location` without `--station-var` (no
+values, no relations) or the chosen variable with statistics, exceedances,
+`relations.time_matching` and `relations.colocation`, as for `overlay`. The
+station CSV lists the stations in the square with `is_center`,
+`distance_km` (geodesic, so corner stations can exceed `--km`) and the
+east/north offsets `dx_km`/`dy_km` used for selection. Daily/window versus
+hourly comparisons have a null time difference; scan comparisons record the
+nominal time difference.
 
 ## Select multiple regions without configuration
 
@@ -420,9 +468,9 @@ precedence. Far-apart selections share one map with intervening whitespace.
 Combined maps use `联合区域（N个）` as their default name. The JSON adds
 `region.members` with canonical qualified names, administrative levels and
 extents. Existing overall statistics operate on the geometric union, without
-double-counting parent/child overlaps. `member_stats` summarizes each selected
-member using that same statistical grid; for overlay these lists are under
-`raster.member_stats` and `station.member_stats`. A member with no valid data
+double-counting parent/child overlaps. `raster` summarizes each selected
+member in the satellite layer's `by_member`, using that same statistical grid;
+overlay also adds `by_member` to its station layer. A member with no valid data
 remains in the list with zero valid counts and null numeric summaries.
 Members may overlap, so their counts must not be added to recover the union
 count. Grid centers exactly on a member boundary are excluded from that
@@ -446,9 +494,11 @@ Single-region inputs retain their existing output contract.
   Existing product-specific gap-filling and statistical smoothing behavior
   remains unchanged; GEMS statistics remain unfilled and unsmoothed.
 
-The PNG sidecar adds `boundary_policy` with the selection and weighting
-rules, the displayed intersecting-cell count, and the count whose centers
-are outside. For `overlay`, this block is nested under `raster`.
+`raster` records the statistics rules in the satellite layer's `method`
+(`cell_selection`, `cell_weighting`) and the display rules in
+`render.layers.satellite` (`display_selection`, `display_clip`,
+`display_valid_cells`); `overlay` and `radius` record the same fields for
+their satellite layer.
 A small region can display overlapping cells while having no interior grid
 centers: its statistics then report zero valid cells and null summaries.
 This change does not increase the satellite's native resolution or fill
@@ -517,8 +567,10 @@ equally. FNR still averages NO2 and HCHO separately before division. The latest
 date may contain only the granules received so far: a successful read does not
 mean the archive contains a complete day, and results can change as files arrive.
 
-NRTI sidecars identify `sensor: "tropomi"` and `processing: "nrti"` (also in the
-raster layer for overlay). Swath/daily metadata records source files, failed
+In `raster` and `overlay` sidecars, NRTI appears as
+`source.processing: "nrti"`, with the deduplication rule and
+`duplicates_removed` in the satellite layer's `method`. The other commands'
+sidecars identify `sensor: "tropomi"` and `processing: "nrti"`. Swath/daily metadata records source files, failed
 files, processor/product versions, retained observation time range, valid
 pixel counts before and after deduplication, and `n_duplicates_removed`.
 Window results retain daily diagnostics; FNR records `window.daily_no2` and
@@ -573,7 +625,8 @@ rsplot raster 安徽 20260901 --sensor gems -p hcho \
 rsplot raster 安徽 20260901-20260902 --sensor gems -p o3pr \
   --basemap none --output /tmp/gems_o3pr_window.png
 
-# Recent daily regional statistics (JSON only).
+# Recent daily regional statistics (JSON only, plus gems_no2_recent.daily.csv;
+# window comparisons and the trend are in layers[0].temporal_summary).
 rsplot recent 安徽 20260902 --days 2 --source raster --sensor gems -p no2 \
   --output /tmp/gems_no2_recent.json
 
@@ -637,6 +690,11 @@ HCHO uses `CloudRadianceFraction`, and O3P uses `effective_cloud_fraction`.
 negative columns are retained; HCHO gap-filled flag classes are excluded.
 This explicit filter is recorded with each file's version and variable in
 JSON; quality flag meanings must not be transferred between products.
+
+In `raster` and `overlay` sidecars, GEMS scan counts, footprint source, area CRS and
+spatial aggregation are in the satellite layer's `method`, and the scan or
+day in its `time`; the field names in this section describe the other
+commands' sidecars.
 
 GEMS JSON statistics, spatial summaries, and hotspots use the **unfilled,
 unsmoothed** regional grid. Smoothing affects the map only and cannot create

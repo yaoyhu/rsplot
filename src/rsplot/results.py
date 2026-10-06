@@ -11,27 +11,15 @@ from pathlib import Path
 from typing import Any
 
 from rsplot.result_builders import (
-    build_fnr_result,
     build_forecast_result,
-    build_meteo_result,
-    build_overlay_result,
-    build_raster_result,
     build_reconstruct_result,
-    build_region_trend_result,
     build_station_result,
-    build_station_trend_result,
 )
 
 __all__ = [
-    "build_fnr_result",
     "build_forecast_result",
-    "build_meteo_result",
-    "build_overlay_result",
-    "build_raster_result",
     "build_reconstruct_result",
-    "build_region_trend_result",
     "build_station_result",
-    "build_station_trend_result",
     "emit_result",
 ]
 

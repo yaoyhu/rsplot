@@ -66,3 +66,8 @@ ignore = ["E501", "RUF001", "RUF002"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "jsonschema>=4.26.0",
+]

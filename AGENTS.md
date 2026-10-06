@@ -26,6 +26,10 @@ Its datetime argument requires a valid 10-digit `YYYYMMDDHH` in
 `Asia/Shanghai`; reject date-only inputs before configuration/data access.
 Do not auto-select the latest hour or fall back when that hour is missing.
 The shared station reader retains date-only support for other commands.
+Its `rsplot.result/2` sidecar has one `station` layer built by
+`result_builders.station_layer.build_station_layer` (shared with overlay and
+radius) and a station CSV without satellite columns; meteo still uses the
+old `result_builders.station.build_station_result`.
 The `overlay` command's `DATE` selects satellite time exactly as `raster`
 does, including date ranges and `--days`/`--n-min` windows; TROPOMI stays
 daily. Station observations are one explicit China-time hour: require
@@ -33,29 +37,44 @@ daily. Station observations are one explicit China-time hour: require
 Only a GEMS 12-digit scan matches the nearest station hour automatically.
 Never auto-select the latest station hour. Its satellite layer comes from
 `commands.raster.prepare_raster`; do not reintroduce a separate satellite
-preparation path. Every overlay sidecar has `time_matching`; TROPOMI and
-window requests use `reference=period_mean_with_explicit_station_hour` with a
-`satellite_period` (`date_basis` is `filename_start_date_utc` for TROPOMI,
-`asia_shanghai_calendar_day` for GEMS windows) and null time difference.
+preparation path. Its `rsplot.result/2` sidecar has `satellite` and
+`station` layers, `relations.time_matching` (TROPOMI and window requests use
+`period_mean_with_explicit_station_hour` with null difference) and
+`relations.colocation` (stations in valid satellite cells, Spearman with at
+least 3 pairs, always `comparable_units: false`); the station CSV lists every
+station read with `in_region`, `satellite_value` and `colocated`.
 Default station variables are `NO2` for `no2` and `O3_8h_24h` for `o3`,
 `o3pr`, and `hcho`; `--var` overrides them.
 The `meteo` command is the sole ERA5 wind-map entry point. It draws temperature,
 black wind arrows, station observations plus wind, or all three layers. Wind
 magnitude is encoded by arrow length and a reference arrow; wind has no
 colorbar. Its `DATETIME` is China standard time by default and is converted
-internally to the matching ERA5 UTC archive hour. With `--station-var`, an
-8-digit date first resolves to the latest station hour, which is then used for
-all meteorological layers. `--level` retains the repository-wide
-administrative-level meaning.
+internally to the matching ERA5 UTC archive hour. It must be `YYYYMMDDHH` in
+every mode; date-only input is rejected and no latest station hour is ever
+chosen. `--level` retains the repository-wide administrative-level meaning.
+Its `rsplot.result/2` sidecar has `temperature` (grid), `wind` (vector_grid,
+resultant direction and components in `vector_summary`) and `station`
+layers as requested, each with a data file (`<name>.wind.nc` holds `value`
+= speed, `u`, `v`); `relations.time_matching` pairs `wind` and `station` with
+`same_hour`. Wind drawing settings are under `render.layers.wind`.
 The `trend` command plots hourly lines over a trailing or explicit date
 window. Its default mode targets one station ID; `--region` switches TARGET
 to an administrative region and plots grey station lines plus the hourly
 regional station mean. `--focus-station` may be repeated to highlight explicit
 stations, and `--view mean` hides the grey background lines. Missing hours
-remain gaps, and its JSON sidecar records missing/failed files and hourly
-values or compact regional summaries.
-The `recent` command writes JSON only; the other plotting commands write a PNG
-and a same-basename `.json` sidecar.
+remain gaps. Its `rsplot.result/2` sidecar has one `station` series layer
+(single-station mode, `region: null`, station ID in `subject`) or
+`regional_mean` and `station` series layers (region mode); hourly values are
+in `<name>.series.nc` (`value(station, time)`, `time` in UTC hours,
+`time_cst` labels, `regional_mean`, `n_stations`). Focus stations and the
+view are display settings under `render.layers.station`.
+The `recent` command writes JSON only (at `--output`, with `image` and
+`render` null) plus `<name>.daily.csv`; the other plotting commands write a PNG
+and a same-basename `.json` sidecar. Its `rsplot.result/2` layer is a daily
+`series` (`satellite` or `station`) with `temporal_summary` (window means,
+changes, trend). `--source station` still uses each day's latest available
+station hour, recorded as `method.station_hour` and the CSV `hour` column;
+this conflicts with CLI Conventions rule 4 and is to be fixed separately.
 
 ## CLI Conventions (Agent Contract)
 
@@ -94,16 +113,18 @@ introduce new code that violates them.
 
    Station variable names (`AQI`, `PM2.5`, `O3`, `O3_8h_24h`, ...) are used
    everywhere; map any differing file variable names internally.
-6. **JSON records how the result was made.** Every sidecar has `command`,
-   `image`, and `sidecar`; satellite commands always record `sensor` and
-   `processing`; time-dependent commands record `input_timezone`; all record
-   the data root and source files used. Whenever two layers come from
-   different times, record one consistent `time_matching` block. Keep
-   existing JSON field names backward compatible.
-7. **Failures are machine-readable.** On an expected input or data error,
-   exit 1 and write `{"command": ..., "error": {"code": ..., "message":
-   ...}}` to the sidecar path derived from `--output`; never write a PNG for a
-   failed run.
+6. **One sidecar schema: `rsplot.result/2`.** The spec is
+   `docs/result-schema.md`; the machine schema ships as
+   `src/rsplot/schemas/result-2.schema.json`. Every command emits the same
+   envelope (`request`, `region`, `layers`, `relations`, `quality`, `render`,
+   `artifacts`, `error`), with full grids/tables in data files next to the
+   image. This is a clean break from the old per-command JSON: do not keep
+   legacy keys. Additive changes keep `/2`; renames or removals bump it.
+   E2E tests validate every sidecar against the shipped schema.
+7. **Failures are machine-readable.** Raise `rsplot.errors.RsplotError`
+   with a schema error code. On an expected input or data error, exit 1 and
+   write the error envelope (`status: "error"`) to the sidecar path derived
+   from `--output`; remove any PNG or data file already written.
 8. **Display options stay.** `--dpi`, `--cmap`, `--vmin`/`--vmax`,
    `--title`, `--basemap`, `--smooth`, and wind styling only change the
    image. The JSON records the values actually used, and they never change
@@ -139,7 +160,8 @@ refactor.
 - `src/rsplot/plotting/`: Matplotlib/Cartopy renderers, styles, and colormaps.
 - `src/rsplot/fnr.py`: FNR window parsing, window means, FNR computation, and
   regime classification helpers.
-- `src/rsplot/recent.py`: read-only recent-day JSON summaries.
+- `src/rsplot/recent.py`: daily summaries and window/trend comparisons
+  for `recent`.
 - `src/rsplot/results.py`: structured JSON sidecar builders and emitters.
 - `src/rsplot/tiles/tianditu.py`: TianDiTu tile provider for Cartopy.
 - `logs/`, `dist/`, `.venv/`, `.ruff_cache/`: local/generated artifacts.
@@ -250,18 +272,29 @@ tests and changes to existing tests:
 
 The previous non-E2E suites have been removed. Acceptance scenarios and
 subprocess E2E tests live in `tests/e2e/`: `RASTER_SCENARIOS.md` with
-`test_raster.py`, `OVERLAY_SCENARIOS.md` with `test_overlay.py`, and
-CLI-wide scenarios (the enabled command set) in `CLI_SCENARIOS.md` with
-`test_cli.py`. Run the affected suite with:
+`test_raster.py`, `OVERLAY_SCENARIOS.md` with `test_overlay.py`,
+`RADIUS_SCENARIOS.md` with `test_radius.py`, `STATION_SCENARIOS.md` with
+`test_station.py`, `TREND_SCENARIOS.md` with `test_trend.py`,
+`RECENT_SCENARIOS.md` with `test_recent.py`, `FNR_SCENARIOS.md` with
+`test_fnr.py`, `METEO_SCENARIOS.md` with `test_meteo.py`, and CLI-wide
+scenarios (the
+enabled command set) in `CLI_SCENARIOS.md` with `test_cli.py`. Run the
+affected suite with:
 
 ```bash
 uv run python -B -m unittest discover -s tests/e2e -p 'test_cli.py' -v
 uv run python -B -m unittest discover -s tests/e2e -p 'test_raster.py' -v
 uv run python -B -m unittest discover -s tests/e2e -p 'test_overlay.py' -v
+uv run python -B -m unittest discover -s tests/e2e -p 'test_radius.py' -v
+uv run python -B -m unittest discover -s tests/e2e -p 'test_station.py' -v
+uv run python -B -m unittest discover -s tests/e2e -p 'test_trend.py' -v
+uv run python -B -m unittest discover -s tests/e2e -p 'test_recent.py' -v
+uv run python -B -m unittest discover -s tests/e2e -p 'test_fnr.py' -v
+uv run python -B -m unittest discover -s tests/e2e -p 'test_meteo.py' -v
 ```
 
 `overlay` and `radius` reuse `prepare_raster`, so changes to it must pass
-both the raster and overlay suites.
+the raster, overlay and radius suites.
 
 These tests use temporary NetCDF/GeoJSON/TOML files and real PNG/JSON output.
 They do not require configured satellite data or network basemaps. Test lint,
@@ -304,7 +337,11 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
   figures after saving.
 - For FNR, preserve the scientific masking rules: mean NO2 and HCHO are
   computed separately over the window, FNR is divided afterward, and smoothing
-  must not create new valid FNR pixels.
+  must not create new valid FNR pixels. Its `rsplot.result/2` sidecar has
+  `no2`, `hcho` (built with `build_satellite_layer`, `coverage_checks=False`)
+  and `fnr` grid layers, each with a `<name>.<layer>.nc`; `fnr` carries
+  regime counts in `categories`, masking rules and `mask_counts` in `method`,
+  and per-unit dominant regimes as `by_admin[].category`.
 
 ## Files And Paths To Avoid Modifying
 
@@ -326,10 +363,15 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
 - Region resolution loads and caches GeoJSON through `functools.lru_cache`;
   tests that change `RSPLOT_GEOJSON_DIR` may need cache clearing or separate
   processes.
-- `emit_result()` writes `{image_path with .json suffix}`. Ensure output
-  directories exist before emitting sidecars if adding new commands.
-- `recent` writes its JSON path directly via `write_recent_result()` and sets
-  `"image": null` in the payload.
+- Every enabled command writes through `result_builders.envelope.write_sidecar`
+  and `data_files`; data files are `<image stem>.<layer>.nc|.csv` next to the
+  image. `results.emit_result()` and `result_builders.station.
+  build_station_result` remain only for the disabled `forecast` and
+  `reconstruct` commands.
+- `prepare_raster` returns the `rsplot.result/2` satellite inputs in
+  `RasterRun.satellite`; the old raster JSON block is gone. `raster`,
+  `overlay` and `radius` run through `commands.sidecar.run_with_sidecar`,
+  which writes the error sidecar and removes partial outputs.
 - Many CLI commands use `/tmp/...` default outputs when `--output` is omitted.
   Prefer explicit `--output` paths in examples, tests, and agent workflows.
 - ERA5 files are indexed in UTC. `meteo` input and station hours are fixed to
@@ -399,10 +441,11 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
   TROPOMI statistical smoothing may change values but must restore the
   pre-smoothing valid mask in single-day and window modes; smoothing must
   never create valid cells or change coverage.
-- `raster` and `overlay` sidecars (and the disabled `forecast` and
-  `reconstruct` builders) add `boundary_policy` (under `raster` for
-  `overlay`). Keep statistics valid when only exterior-center cells overlap:
-  zero selected cells, null summaries.
+- Satellite layers record statistics selection in `method`
+  (`cell_selection`, `cell_weighting`) and display selection in
+  `render.layers.satellite` (`display_selection`, `display_clip`,
+  `display_valid_cells`). Keep statistics valid when only exterior-center
+  cells overlap: zero selected cells, null summaries.
 
 ## GEMS Footprint Remapping
 
@@ -468,6 +511,10 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
   markers for missing values. Do not add a center ring or lower-right legend.
   Keep satellite and station units/colorbars separate. Daily/window versus hourly time
   differences are null; titles identify both time bases.
-- Radius JSON retains raster provenance and adds radius, administrative
-  context, time matching, and station rows. Empty center-selected grids
+- Radius writes `rsplot.result/2`: region `kind: station_radius` with a
+  `radius` block (centre, km, side length, administrative context), the
+  `raster` satellite layer, and a `station` layer that is `location` without
+  `--station-var` or the variable with time matching and colocation as in
+  `overlay` (it reuses `overlay.resolve_station_hour`). The station CSV adds
+  `is_center`, `distance_km`, `dx_km`, `dy_km`. Empty center-selected grids
   retain zero counts and null summaries even when intersecting cells display.

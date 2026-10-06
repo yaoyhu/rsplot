@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING
+import os
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
-import typer
 
 from rsplot.commands.common import (
     load_fallback_city_boundaries,
@@ -16,13 +17,50 @@ from rsplot.commands.common import (
     warn_missing_tianditu_key,
 )
 from rsplot.config import AppConfig
-from rsplot.temporal import DEFAULT_INPUT_TIMEZONE
+from rsplot.errors import RsplotError
 
 if TYPE_CHECKING:
     from rich.console import Console
 
+# Keyword argument -> CLI spellings, for recording where values came from.
+METEO_OPTIONS = {
+    "temp_level": ("--temp-level",),
+    "wind_level": ("--wind-level",),
+    "station_var": ("--station-var",),
+    "level": ("--level", "-l"),
+    "data_dir": ("--data-dir", "-d"),
+    "station_data_dir": ("--station-data-dir",),
+    "output": ("--output", "-o"),
+    "dpi": ("--dpi",),
+    "basemap": ("--basemap", "-b"),
+    "cmap": ("--cmap",),
+    "vmin": ("--vmin",),
+    "vmax": ("--vmax",),
+    "wind_stride": ("--wind-stride",),
+    "wind_scale": ("--wind-scale",),
+    "wind_width": ("--wind-width",),
+    "title": ("--title",),
+}
 
-def run_meteo(
+
+def run_meteo(**kwargs: Any) -> None:
+    """Map ERA5 temperature, wind and an optional station hour."""
+    from rsplot.commands.sidecar import run_with_sidecar
+
+    run_with_sidecar(
+        command="meteo",
+        kwargs=kwargs,
+        options=METEO_OPTIONS,
+        positionals={
+            "region": kwargs["region"],
+            "datetime": kwargs["datetime_str"],
+        },
+        emit=lambda created: _emit_meteo(created, **kwargs),
+    )
+
+
+def _emit_meteo(
+    created: list[Path],
     *,
     region: str,
     datetime_str: str,
@@ -44,12 +82,13 @@ def run_meteo(
     title: str | None,
     console: Console,
 ) -> None:
-    """Execute meteorological plotting and optional station overlay."""
+    """Read ERA5 (and stations) for one China-time hour and write results."""
     from rsplot.config import (
         STATION_VAR_LABELS,
         STATION_VAR_META,
         get_exceedance_threshold,
     )
+    from rsplot.data_files import data_path, write_grid_netcdf, write_table_csv
     from rsplot.geo.boundaries import resolve_region
     from rsplot.geo.processing import buffered_extent
     from rsplot.plotting.meteo import plot_meteo
@@ -57,52 +96,104 @@ def run_meteo(
     from rsplot.plotting.wind import wind_stride_for_shape
     from rsplot.readers.era5 import (
         mask_era5_field_to_region,
+        normalize_temperature_level,
         read_era5_temperature,
     )
     from rsplot.readers.era5_wind import (
         mask_wind_to_region,
+        normalize_wind_level,
         read_era5_wind,
     )
-    from rsplot.readers.guokong import mask_stations_to_region, read_stations
-    from rsplot.results import build_meteo_result, emit_result
-
-    if station_var is not None and wind_level is None:
-        console.print(
-            "[red]--station-var 必须与 --wind-level 一起使用。[/red]"
-        )
-        raise typer.Exit(1)
-    if temp_level is None and wind_level is None:
-        console.print(
-            "[red]请至少指定 --temp-level 或 --wind-level 中的一个。[/red]"
-        )
-        raise typer.Exit(1)
-    if station_var is not None and station_var not in STATION_VAR_META:
-        available = ", ".join(STATION_VAR_META)
-        console.print(
-            f"[red]未知站点变量 '{station_var}'[/red]。可用: {available}"
-        )
-        raise typer.Exit(1)
-    if temp_level is None and any(
-        value is not None for value in (cmap, vmin, vmax)
-    ):
-        console.print(
-            "[red]--cmap/--vmin/--vmax 只用于温度底图；"
-            "当前命令没有指定 --temp-level。[/red]"
-        )
-        raise typer.Exit(1)
-    error = _wind_option_error(
-        stride=wind_stride,
-        scale=wind_scale,
-        width=wind_width,
+    from rsplot.readers.guokong import (
+        mask_stations_to_region,
+        read_stations,
+        resolve_station_file,
     )
-    if error is not None:
-        console.print(f"[red]{error}[/red]")
-        raise typer.Exit(1)
+    from rsplot.result_builders.envelope import (
+        option_given,
+        request_block,
+        resolved,
+        sidecar_path,
+        success_envelope,
+        write_sidecar,
+    )
+    from rsplot.result_builders.station import build_station_display
+    from rsplot.result_builders.station_layer import (
+        TABLE_COLUMNS,
+        StationInputs,
+        build_station_layer,
+    )
+    from rsplot.temporal import adapt_hourly_time
+
+    # Station observations and ERA5 share one explicit China-time hour; a
+    # date-only input would have to pick a "latest" hour, which is forbidden.
+    try:
+        hour = adapt_hourly_time(datetime_str, label="meteo 时次")
+    except ValueError as error:
+        raise RsplotError(
+            "invalid_time",
+            "meteo 时次必须是北京时间 YYYYMMDDHH，不会自动选择最新小时。"
+            f" ({error})",
+        ) from error
+    if station_var is not None and wind_level is None:
+        raise RsplotError(
+            "invalid_argument",
+            "--station-var 必须与 --wind-level 一起使用。",
+            option="--station-var",
+        )
+    if temp_level is None and wind_level is None:
+        raise RsplotError(
+            "invalid_argument",
+            "请至少指定 --temp-level 或 --wind-level 中的一个。",
+        )
+    if station_var is not None and station_var not in STATION_VAR_META:
+        raise RsplotError(
+            "invalid_argument",
+            f"未知站点变量 '{station_var}'。可用: "
+            + ", ".join(STATION_VAR_META),
+            option="--station-var",
+        )
+    if temp_level is None:
+        for option, value in (
+            ("--cmap", cmap),
+            ("--vmin", vmin),
+            ("--vmax", vmax),
+        ):
+            if value is not None:
+                raise RsplotError(
+                    "invalid_argument",
+                    "--cmap/--vmin/--vmax 只用于温度底图；"
+                    "当前命令没有指定 --temp-level。",
+                    option=option,
+                )
+    for option, check, value in (
+        ("--temp-level", normalize_temperature_level, temp_level),
+        ("--wind-level", normalize_wind_level, wind_level),
+    ):
+        if value is not None:
+            try:
+                check(value)
+            except ValueError as error:
+                raise RsplotError(
+                    "invalid_argument", str(error), option=option
+                ) from error
+    error_text, error_option = _wind_option_error(
+        stride=wind_stride, scale=wind_scale, width=wind_width
+    )
+    if error_text is not None:
+        raise RsplotError("invalid_argument", error_text, option=error_option)
 
     cfg = AppConfig.load()
     setup_fonts(cfg.font_dir)
     console.print(f"[bold]解析区域:[/bold] {region}")
-    info = resolve_region(region, cfg, level_override=level)
+    try:
+        info = resolve_region(region, cfg, level_override=level)
+    except RsplotError:
+        raise
+    except ValueError as error:
+        raise RsplotError(
+            "region_not_found", str(error), details={"region": region}
+        ) from error
     console.print(f"  → [green]{info.name}[/green] (级别: {info.level})")
     read_extent = buffered_extent(info.extent, 0.5)
     use_dpi = dpi if dpi is not None else cfg.dpi
@@ -111,8 +202,7 @@ def run_meteo(
         validate_positive(use_dpi, "--dpi")
         validate_color_range(vmin, vmax)
     except ValueError as error:
-        console.print(f"[red]{error}[/red]")
-        raise typer.Exit(1) from error
+        raise RsplotError("invalid_argument", str(error)) from error
     warn_missing_tianditu_key(
         basemap=use_basemap,
         default_basemap=info.params.basemap,
@@ -120,30 +210,19 @@ def run_meteo(
         console=console,
     )
 
-    station = None
+    read = station = None
     station_threshold = None
     station_unit = ""
     station_colorbar_label = ""
-    resolved_datetime = datetime_str
+    use_station_dir = None
     if station_var is not None:
         use_station_dir = station_data_dir or cfg.get_data_dir("guokong")
         console.print(f"\n[bold]读取站点数据:[/bold] {use_station_dir}")
         console.print(f"  时间: {datetime_str}, 变量: {station_var}")
-        try:
-            station, resolved_datetime = read_stations(
-                use_station_dir,
-                datetime_str,
-                station_var,
-                extent=read_extent,
-            )
-            station = mask_stations_to_region(station, info.geometry)
-        except (FileNotFoundError, ValueError) as error:
-            console.print(f"[red]{error}[/red]")
-            raise typer.Exit(1) from error
-        if resolved_datetime != datetime_str:
-            console.print(
-                f"  → 自动选择最新时次: [cyan]{resolved_datetime}[/cyan]"
-            )
+        read, _ = read_stations(
+            use_station_dir, datetime_str, station_var, extent=read_extent
+        )
+        station = mask_stations_to_region(read, info.geometry)
         console.print(
             f"  → [green]{station.n_valid}[/green] 有效站点 "
             f"(共 {station.n_stations} 站)"
@@ -154,48 +233,36 @@ def run_meteo(
         station_colorbar_label = (
             f"{display_var} ({station_unit})" if station_unit else display_var
         )
-        if station_threshold is not None:
-            finite = station.values[np.isfinite(station.values)]
-            n_exceed = int(np.sum(finite > station_threshold))
-            console.print(
-                f"  → 超标阈值: {station_threshold}, "
-                f"超标站点: [red]{n_exceed}[/red]"
-            )
 
-    use_data_dir = data_dir or cfg.get_data_dir("era5")
+    use_data_dir = str(data_dir or cfg.get_data_dir("era5"))
     console.print(f"\n[bold]读取 ERA5:[/bold] {use_data_dir}")
-    console.print(f"  输入时次: {resolved_datetime} (中国时间)")
-    if temp_level is not None:
-        console.print(f"  温度图层: {temp_level}")
-    if wind_level is not None:
-        console.print(f"  风场图层: {wind_level}")
-
-    field = None
-    wind = None
+    console.print(f"  输入时次: {datetime_str} (中国时间)")
+    field = wind = None
     try:
         if temp_level is not None:
-            field = read_era5_temperature(
-                use_data_dir,
-                resolved_datetime,
-                temp_level,
-                read_extent,
+            field = mask_era5_field_to_region(
+                read_era5_temperature(
+                    use_data_dir, datetime_str, temp_level, read_extent
+                ),
+                info.geometry,
             )
-            field = mask_era5_field_to_region(field, info.geometry)
-            if field.n_valid == 0:
-                raise ValueError("目标区域内没有有效 ERA5 温度网格。")
         if wind_level is not None:
-            wind = read_era5_wind(
-                use_data_dir,
-                resolved_datetime,
-                wind_level,
-                read_extent,
+            wind = mask_wind_to_region(
+                read_era5_wind(
+                    use_data_dir, datetime_str, wind_level, read_extent
+                ),
+                info.geometry,
             )
-            wind = mask_wind_to_region(wind, info.geometry)
-        if wind is not None and wind.n_valid == 0:
-            raise ValueError("目标区域内没有有效 ERA5 风矢量。")
-    except (FileNotFoundError, ValueError) as error:
-        console.print(f"[red]{error}[/red]")
-        raise typer.Exit(1) from error
+    except (FileNotFoundError, RsplotError):
+        raise
+    except ValueError as error:
+        raise RsplotError("read_failed", str(error)) from error
+    if field is not None and field.n_valid == 0:
+        raise RsplotError(
+            "no_valid_data", "目标区域内没有有效 ERA5 温度网格。"
+        )
+    if wind is not None and wind.n_valid == 0:
+        raise RsplotError("no_valid_data", "目标区域内没有有效 ERA5 风矢量。")
 
     use_wind_stride = None
     if wind is not None:
@@ -204,40 +271,20 @@ def run_meteo(
             if wind_stride is not None
             else wind_stride_for_shape(wind.speed.shape, info.level)
         )
-
     use_cmap = cmap or "RdYlBu_r"
-    use_vmin = None
-    use_vmax = None
+    use_vmin = use_vmax = None
     if field is not None:
-        try:
-            use_vmin, use_vmax = _temperature_range(
-                field.values,
-                vmin=vmin,
-                vmax=vmax,
-            )
-        except ValueError as error:
-            console.print(f"[red]{error}[/red]")
-            raise typer.Exit(1) from error
-
+        use_vmin, use_vmax = _temperature_range(
+            field.values, vmin=vmin, vmax=vmax
+        )
     datetime_utc = (
         field.datetime_utc if field is not None else wind.datetime_utc
     )
     console.print(f"  → ERA5 UTC 时次: [cyan]{datetime_utc}[/cyan]")
-    if field is not None:
-        console.print(
-            f"  → 温度有效网格: [green]{field.n_valid}[/green], "
-            f"色阶: {use_vmin:.2f} ~ {use_vmax:.2f} °C"
-        )
-    if wind is not None:
-        console.print(
-            f"  → 风场层次: {wind.level}, "
-            f"有效网格: [green]{wind.n_valid}[/green], "
-            f"抽稀步长: {use_wind_stride}"
-        )
 
     use_title = title or _default_title(
         region=info.name,
-        datetime_str=resolved_datetime,
+        datetime_str=datetime_str,
         temp_level=field.level if field is not None else None,
         station_var=station_var,
         wind_level=wind.level if wind is not None else None,
@@ -249,10 +296,211 @@ def run_meteo(
             wind_level=wind.level if wind is not None else None,
         )
         output = (
-            f"/tmp/rsplot_meteo_{info.name}_{layer_suffix}_"
-            f"{resolved_datetime}.png"
+            f"/tmp/rsplot_meteo_{info.name}_{layer_suffix}_{datetime_str}.png"
         )
+    image = str(Path(output).resolve())
+    sidecar = sidecar_path(image)
+
+    from shapely import contains_xy
+
+    time = {
+        "aggregation": "hourly",
+        "at": datetime_str,
+        "timezone": "Asia/Shanghai",
+        "basis": "era5_hour",
+        "archive_time_utc": hour.data_time.strftime("%Y%m%d%H"),
+    }
+    layers: list[dict[str, Any]] = []
+    flags: list[dict[str, Any]] = []
+    data_entries: list[dict[str, Any]] = []
+    render_layers: dict[str, Any] = {}
+    if field is not None:
+        counted = contains_xy(info.geometry.buffer(1e-9), field.lon, field.lat)
+        path = data_path(image, "temperature", ".nc")
+        created.append(path)
+        entry = write_grid_netcdf(
+            path,
+            field.lon,
+            field.lat,
+            field.values,
+            counted,
+            extent=info.extent,
+            layer="temperature",
+            attrs={
+                "quantity": f"temperature_{field.level}",
+                "unit": "degC",
+                "scale": 1.0,
+                "time_aggregation": "hourly",
+            },
+        )
+        data_entries.append(entry)
+        layer, layer_flags = _era5_grid_layer(
+            layer_id="temperature",
+            kind="grid",
+            quantity={
+                "name": f"temperature_{field.level}",
+                "unit": "degC",
+                "scale": 1,
+                "label": f"{_level_label(field.level)} temperature (°C)",
+            },
+            time=time,
+            data_root=use_data_dir,
+            files=[field.source_file],
+            method={
+                "level": field.level,
+                "conversion": "kelvin_minus_273.15",
+                "cell_selection": "center_inside_region",
+                "cell_weighting": "equal",
+            },
+            values=field.values,
+            lon=field.lon,
+            lat=field.lat,
+            counted=counted,
+            region=info,
+            data=entry["path"],
+        )
+        layers.append(layer)
+        flags.extend(layer_flags)
+        render_layers["temperature"] = {
+            "cmap": use_cmap,
+            "vmin": use_vmin,
+            "vmax": use_vmax,
+            "range_method": (
+                "manual"
+                if vmin is not None and vmax is not None
+                else "region_p02_p98"
+            ),
+        }
+    if wind is not None:
+        counted = contains_xy(info.geometry.buffer(1e-9), wind.lon, wind.lat)
+        path = data_path(image, "wind", ".nc")
+        created.append(path)
+        entry = write_grid_netcdf(
+            path,
+            wind.lon,
+            wind.lat,
+            wind.speed,
+            counted,
+            extent=info.extent,
+            layer="wind",
+            attrs={
+                "quantity": f"wind_{wind.level}",
+                "unit": "m/s",
+                "scale": 1.0,
+                "time_aggregation": "hourly",
+            },
+            extra={"u": wind.u, "v": wind.v},
+            content="vector_grid",
+        )
+        data_entries.append(entry)
+        layer, layer_flags = _era5_grid_layer(
+            layer_id="wind",
+            kind="vector_grid",
+            quantity={
+                "name": f"wind_{wind.level}",
+                "unit": "m/s",
+                "scale": 1,
+                "label": f"{_level_label(wind.level)} wind speed (m/s)",
+            },
+            time=time,
+            data_root=use_data_dir,
+            files=list(wind.source_files),
+            method={
+                "level": wind.level,
+                "speed": "hypot(u, v)",
+                "cell_selection": "center_inside_region",
+                "cell_weighting": "equal",
+            },
+            values=wind.speed,
+            lon=wind.lon,
+            lat=wind.lat,
+            counted=counted,
+            region=info,
+            data=entry["path"],
+            unit="vectors",
+        )
+        layer["vector_summary"] = _vector_summary(wind)
+        layers.append(layer)
+        flags.extend(layer_flags)
+        step = max(1, use_wind_stride or 1)
+        render_layers["wind"] = {
+            "color": "black",
+            "colorbar": False,
+            "stride": step,
+            "scale": wind_scale,
+            "width": wind_width,
+            "arrows_plotted": int(
+                np.isfinite(wind.speed[::step, ::step]).sum()
+            ),
+            "magnitude_encoding": "arrow_length_with_reference_arrow",
+        }
+
+    relations: dict[str, Any] = {}
+    if read is not None and station is not None:
+        assert station_var is not None and use_station_dir is not None
+        in_region = contains_xy(info.geometry.buffer(1e-9), read.lon, read.lat)
+        limit_key, limit_time = STATION_VAR_META[station_var][1:]
+        station_path = data_path(image, "station", ".csv")
+        admin_gdf = (
+            info.sub_boundary_gdf
+            if info.sub_boundary_gdf is not None and len(info.sub_boundary_gdf)
+            else load_fallback_city_boundaries(info, cfg.require_geojson_dir())
+        )
+        station_layer, station_flags, rows = build_station_layer(
+            StationInputs(
+                read=read,
+                in_region=in_region,
+                var=station_var,
+                unit=station_unit,
+                threshold=station_threshold,
+                standard=(
+                    f"AQ_LIMITS_2026 {limit_key} {limit_time}"
+                    if station_threshold is not None
+                    else None
+                ),
+                hour=datetime_str,
+                data_root=str(use_station_dir),
+                source_file=resolve_station_file(
+                    use_station_dir, datetime_str
+                ).name,
+            ),
+            info,
+            admin_gdf=admin_gdf,
+            satellite_values=None,
+            data=str(station_path),
+        )
+        created.append(station_path)
+        data_entries.append(
+            write_table_csv(
+                station_path,
+                rows,
+                [
+                    column
+                    for column in TABLE_COLUMNS
+                    if column not in ("satellite_value", "colocated")
+                ],
+                content="station_table",
+                layer="station",
+            )
+        )
+        layers.append(station_layer)
+        flags.extend(station_flags)
+        relations["time_matching"] = {
+            "layers": ["wind", "station"],
+            "reference": "same_hour",
+            "difference_minutes": 0,
+            "manual_override": False,
+        }
+        render_layers["station"] = {
+            **(
+                build_station_display(station)
+                or {"range_method": "data_p5_p95"}
+            ),
+            "colorbar_label": station_colorbar_label,
+        }
+
     console.print("\n[bold]绘图中...[/bold]")
+    created.append(Path(image))
     plot_meteo(
         info,
         field=field,
@@ -270,38 +518,188 @@ def run_meteo(
         basemap=use_basemap,
         tianditu_key=cfg.tianditu_key,
         title=use_title,
-        output=output,
+        output=image,
     )
-    result = build_meteo_result(
-        region=info,
-        variable="temperature" if field is not None else "wind",
-        input_datetime=resolved_datetime,
-        input_timezone=DEFAULT_INPUT_TIMEZONE,
-        datetime_utc=datetime_utc,
-        output=output,
-        requested_datetime=datetime_str,
-        field=field,
-        field_cmap=use_cmap if field is not None else None,
-        field_vmin=use_vmin,
-        field_vmax=use_vmax,
-        wind=wind,
-        wind_stride=use_wind_stride,
-        station=station,
-        station_datetime=resolved_datetime if station is not None else None,
-        station_threshold=station_threshold,
-        station_unit=station_unit,
-        cities_gdf=(
-            load_fallback_city_boundaries(
-                info,
-                cfg.require_geojson_dir(),
-            )
-            if station is not None
+
+    def source_of(name: str, value: Any, default: str) -> dict[str, Any]:
+        if option_given(*METEO_OPTIONS[name]):
+            return resolved(value, "cli")
+        return resolved(value, default)
+
+    effective_basemap = (
+        use_basemap if use_basemap is not None else info.params.basemap
+    )
+    request = {
+        "region": resolved(region, "cli"),
+        "datetime": resolved(datetime_str, "cli"),
+        "temp_level": (
+            resolved(field.level, "cli") if field is not None else None
+        ),
+        "wind_level": (
+            resolved(wind.level, "cli") if wind is not None else None
+        ),
+        "station_var": (
+            resolved(station_var, "cli") if station_var is not None else None
+        ),
+        "level": source_of("level", info.level, "built_in"),
+        "data_dir": source_of("data_dir", use_data_dir, "config"),
+        "station_data_dir": (
+            source_of("station_data_dir", str(use_station_dir), "config")
+            if use_station_dir is not None
             else None
         ),
+        "output": source_of("output", output, "built_in"),
+        "dpi": source_of("dpi", use_dpi, "built_in"),
+        "basemap": source_of(
+            "basemap",
+            "satellite" if effective_basemap else "none",
+            "level_default",
+        ),
+        "cmap": source_of("cmap", use_cmap, "built_in")
+        if field is not None
+        else None,
+        "wind_stride": source_of("wind_stride", use_wind_stride, "built_in")
+        if wind is not None
+        else None,
+        "wind_scale": source_of("wind_scale", wind_scale, "built_in")
+        if wind is not None
+        else None,
+        "wind_width": source_of("wind_width", wind_width, "built_in")
+        if wind is not None
+        else None,
+        "title": source_of("title", use_title, "built_in"),
+    }
+    payload = success_envelope(
+        command="meteo",
+        request=request_block(request),
+        region=info,
+        layers=layers,
+        relations=relations,
+        flags=flags,
+        render={
+            "image": image,
+            "dpi": int(use_dpi),
+            "basemap": "satellite" if effective_basemap else "none",
+            "title": use_title,
+            "layers": render_layers,
+        },
+        artifacts={"image": image, "sidecar": sidecar, "data": data_entries},
     )
-    sidecar = emit_result(result, output)
-    console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
-    console.print(f"[bold green]✓ JSON:[/bold green] {sidecar}")
+    created.append(Path(sidecar))
+    write_sidecar(payload, sidecar)
+    console.print(f"\n[bold green]✓ 已保存:[/bold green] {image}")
+
+
+def _era5_grid_layer(
+    *,
+    layer_id: str,
+    kind: str,
+    quantity: dict[str, Any],
+    time: dict[str, Any],
+    data_root: str,
+    files: list[str],
+    method: dict[str, Any],
+    values: np.ndarray,
+    lon: np.ndarray,
+    lat: np.ndarray,
+    counted: np.ndarray,
+    region: Any,
+    data: str,
+    unit: str = "cells",
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """An ERA5 field as a grid layer with its coverage flags."""
+    from rsplot.result_builders.common import (
+        grid_per_admin_stats,
+        top_hotspots,
+    )
+    from rsplot.result_builders.envelope import (
+        capped,
+        coverage_block,
+        coverage_flags,
+        stats_block,
+        subdivision_level,
+    )
+
+    valid = np.isfinite(values) & counted
+    coverage = coverage_block(int(valid.sum()), int(counted.sum()), unit)
+    sub_gdf = region.sub_boundary_gdf
+    has_subdivisions = sub_gdf is not None and len(sub_gdf) > 0
+    by_admin = []
+    if has_subdivisions:
+        level_name = subdivision_level(region)
+        by_admin = [
+            {
+                "name": row["name"],
+                "level": level_name,
+                "n": int(row["n_pixels"]),
+                "mean": row["mean"],
+                "min": row["min"],
+                "max": row["max"],
+            }
+            for row in grid_per_admin_stats(lon, lat, values, sub_gdf)
+        ]
+    hotspots = top_hotspots(
+        lon, lat, values, sub_gdf if has_subdivisions else None, n=10
+    )
+    layer = {
+        "id": layer_id,
+        "kind": kind,
+        "quantity": quantity,
+        "time": time,
+        "source": {
+            "sensor": "era5",
+            "processing": None,
+            "data_root": data_root,
+            "files": sorted(
+                os.path.relpath(path, data_root) for path in files
+            ),
+            "files_total": len(files),
+            "files_manifest": None,
+            "failed_files": {},
+        },
+        "method": method,
+        "coverage": coverage,
+        "stats": stats_block(values[counted]),
+        "by_admin": by_admin,
+        "extremes": capped(
+            [
+                {
+                    "lon": item["lon"],
+                    "lat": item["lat"],
+                    "value": item["value"],
+                    "admin": item["city"],
+                }
+                for item in hotspots
+            ],
+            coverage["valid"],
+            "value_desc",
+        ),
+        "data": data,
+    }
+    return layer, coverage_flags(layer_id, coverage)
+
+
+def _vector_summary(wind: Any) -> dict[str, Any]:
+    from rsplot.result_builders.envelope import stats_block
+    from rsplot.stats import round_finite
+
+    mean_u = float(np.nanmean(wind.u))
+    mean_v = float(np.nanmean(wind.v))
+    direction_to = (np.degrees(np.arctan2(mean_u, mean_v)) + 360.0) % 360.0
+    index = np.unravel_index(int(np.nanargmax(wind.speed)), wind.speed.shape)
+    return {
+        "mean_u": round_finite(mean_u),
+        "mean_v": round_finite(mean_v),
+        "direction_to_deg": round_finite(direction_to, 1),
+        "wind_from_deg": round_finite((direction_to + 180.0) % 360.0, 1),
+        "u_stats": stats_block(wind.u),
+        "v_stats": stats_block(wind.v),
+        "max_speed_location": {
+            "lon": round(float(wind.lon[index]), 3),
+            "lat": round(float(wind.lat[index]), 3),
+            "speed": round_finite(wind.speed[index]),
+        },
+    }
 
 
 def _temperature_range(
@@ -312,14 +710,20 @@ def _temperature_range(
 ) -> tuple[float, float]:
     finite = values[np.isfinite(values)]
     if len(finite) == 0:
-        raise ValueError("目标区域内没有可用于温度色阶的有效值。")
+        raise RsplotError(
+            "no_valid_data", "目标区域内没有可用于温度色阶的有效值。"
+        )
     use_vmin = float(np.percentile(finite, 2)) if vmin is None else vmin
     use_vmax = float(np.percentile(finite, 98)) if vmax is None else vmax
     if use_vmax <= use_vmin:
         if vmin is None and vmax is None:
             midpoint = float(np.mean(finite))
             return midpoint - 0.5, midpoint + 0.5
-        raise ValueError("--vmax 必须大于 --vmin 或自动计算的色阶下限。")
+        raise RsplotError(
+            "invalid_argument",
+            "--vmax 必须大于 --vmin 或自动计算的色阶下限。",
+            option="--vmax",
+        )
     return use_vmin, use_vmax
 
 
@@ -328,14 +732,14 @@ def _wind_option_error(
     stride: int | None,
     scale: float | None,
     width: float,
-) -> str | None:
+) -> tuple[str | None, str | None]:
     if stride is not None and (not math.isfinite(stride) or stride < 1):
-        return "--wind-stride 必须大于等于 1。"
+        return "--wind-stride 必须大于等于 1。", "--wind-stride"
     if scale is not None and (not math.isfinite(scale) or scale <= 0):
-        return "--wind-scale 必须大于 0。"
+        return "--wind-scale 必须大于 0。", "--wind-scale"
     if not math.isfinite(width) or width <= 0:
-        return "--wind-width 必须大于 0。"
-    return None
+        return "--wind-width 必须大于 0。", "--wind-width"
+    return None, None
 
 
 def _default_title(

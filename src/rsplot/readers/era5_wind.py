@@ -54,7 +54,7 @@ def read_era5_wind(
     station_timezone: str = "Asia/Shanghai",
 ) -> WindFieldData:
     """Read one ERA5 wind field matching a station observation hour."""
-    normalized_level = _normalize_level(level)
+    normalized_level = normalize_wind_level(level)
     dt_utc = _to_utc(station_datetime, station_timezone)
     u_path, v_path, u_name, v_name = _component_paths(
         Path(data_dir), dt_utc, normalized_level
@@ -118,7 +118,8 @@ def _display_unit(unit: str) -> str:
     return unit or "m/s"
 
 
-def _normalize_level(level: str) -> str:
+def normalize_wind_level(level: str) -> str:
+    """Normalize and validate a supported ERA5 wind level."""
     value = level.strip().lower().removesuffix("hpa")
     if value in ("10", "10m"):
         return "10m"

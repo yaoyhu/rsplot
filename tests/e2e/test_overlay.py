@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,8 +10,19 @@ from pathlib import Path
 import numpy as np
 from overlay_support import OverlayWorkspace
 from PIL import Image
+from raster_support import schema_errors
 
-SUPPORT_KEYS = ("valid_region_pixels", "total_region_pixels", "coverage_pct")
+SUPPORT_KEYS = ("valid", "total", "fraction")
+
+
+def layer(payload: dict, layer_id: str) -> dict:
+    return next(item for item in payload["layers"] if item["id"] == layer_id)
+
+
+def flags(payload: dict) -> dict[str, str]:
+    return {
+        item["code"]: item["severity"] for item in payload["quality"]["flags"]
+    }
 
 
 class OverlayE2E(unittest.TestCase):
@@ -28,18 +40,41 @@ class OverlayE2E(unittest.TestCase):
             rgb = np.asarray(image.convert("RGB"), dtype=int)
             self.assertGreater(np.count_nonzero(np.ptp(rgb, axis=2) > 30), 500)
         payload = self.workspace.payload()
+        self.assertEqual(schema_errors(payload), [])
+        self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["command"], "overlay")
-        self.assertEqual(payload["image"], str(self.workspace.output))
-        self.assertEqual(payload["sidecar"], str(self.workspace.sidecar))
+        self.assertEqual(
+            [item["id"] for item in payload["layers"]],
+            ["satellite", "station"],
+        )
+        self.assertEqual(
+            payload["artifacts"]["image"], str(self.workspace.output)
+        )
+        self.assertEqual(
+            payload["artifacts"]["sidecar"], str(self.workspace.sidecar)
+        )
         return payload
 
-    def assert_rejected(self, result, message):
+    def assert_rejected(self, result, message, code, option=None):
         self.assertNotEqual(
             result.returncode, 0, result.stdout + result.stderr
         )
         self.assertIn(message, result.stdout + result.stderr)
         self.assertFalse(self.workspace.output.exists())
-        self.assertFalse(self.workspace.sidecar.exists())
+        self.assertEqual(
+            sorted(p.name for p in self.workspace.output.parent.iterdir()),
+            [self.workspace.sidecar.name],
+        )
+        payload = self.workspace.payload()
+        self.assertEqual(schema_errors(payload), [])
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["error"]["code"], code)
+        self.assertEqual(payload["error"].get("option"), option)
+
+    def station_rows(self, payload):
+        path = layer(payload, "station")["data"]
+        with open(path, encoding="utf-8", newline="") as handle:
+            return list(csv.DictReader(handle))
 
     def test_user_overlays_one_tropomi_day_with_stations(self):
         """Given orbits and stations, when overlaying, then both layers agree."""
@@ -49,12 +84,15 @@ class OverlayE2E(unittest.TestCase):
         payload = self.assert_plot(
             self.workspace.overlay("20260101", "--smooth", "0")
         )
-        self.assertEqual(payload["date"], "20260101")
-        self.assertEqual(payload["datetime"], "2026010113")
-        self.assertEqual(payload["raster"]["swath"]["n_files"], 2)
-        self.assertEqual(payload["raster"]["stats"]["mean"], 3)
-        self.assertEqual(payload["station"]["n_stations"], 2)
-        self.assertEqual(payload["station"]["stats"]["mean"], 60)
+        satellite = layer(payload, "satellite")
+        station = layer(payload, "station")
+        self.assertEqual(satellite["time"]["start"], "20260101")
+        self.assertEqual(satellite["time"]["aggregation"], "daily")
+        self.assertEqual(satellite["source"]["files_total"], 2)
+        self.assertEqual(satellite["stats"]["mean"], 3)
+        self.assertEqual(station["time"]["at"], "2026010113")
+        self.assertEqual(station["coverage"]["total"], 2)
+        self.assertEqual(station["stats"]["mean"], 60)
 
     def test_user_keeps_observed_satellite_support_while_smoothing(self):
         """Given one observed cell, when smoothing, then support is unchanged."""
@@ -67,8 +105,11 @@ class OverlayE2E(unittest.TestCase):
             self.workspace.overlay("20260101", "--smooth", "1.5")
         )
         self.assertEqual(
-            [plain["raster"]["stats"][key] for key in SUPPORT_KEYS],
-            [smoothed["raster"]["stats"][key] for key in SUPPORT_KEYS],
+            [layer(plain, "satellite")["coverage"][k] for k in SUPPORT_KEYS],
+            [
+                layer(smoothed, "satellite")["coverage"][k]
+                for k in SUPPORT_KEYS
+            ],
         )
 
     def test_user_gets_surface_no2_for_no2_columns(self):
@@ -76,7 +117,7 @@ class OverlayE2E(unittest.TestCase):
         self.workspace.write_swath("20260101", 4)
         self.workspace.write_stations("2026010113")
         payload = self.assert_plot(self.workspace.overlay("20260101"))
-        self.assertEqual(payload["station"]["variable"], "NO2")
+        self.assertEqual(layer(payload, "station")["quantity"]["name"], "NO2")
 
     def test_user_gets_mda8_ozone_for_total_ozone(self):
         """Given total ozone, when omitting --var, then stations show MDA8."""
@@ -85,7 +126,9 @@ class OverlayE2E(unittest.TestCase):
         payload = self.assert_plot(
             self.workspace.overlay("20260101", "--product", "o3")
         )
-        self.assertEqual(payload["station"]["variable"], "O3_8h_24h")
+        self.assertEqual(
+            layer(payload, "station")["quantity"]["name"], "O3_8h_24h"
+        )
 
     def test_user_gets_mda8_ozone_for_profile_ozone(self):
         """Given profile ozone, when omitting --var, then stations show MDA8."""
@@ -94,7 +137,9 @@ class OverlayE2E(unittest.TestCase):
         payload = self.assert_plot(
             self.workspace.overlay("20260101", "--product", "o3pr")
         )
-        self.assertEqual(payload["station"]["variable"], "O3_8h_24h")
+        self.assertEqual(
+            layer(payload, "station")["quantity"]["name"], "O3_8h_24h"
+        )
 
     def test_user_gets_mda8_ozone_for_tropomi_hcho(self):
         """Given TROPOMI HCHO, when omitting --var, then stations show MDA8."""
@@ -103,7 +148,9 @@ class OverlayE2E(unittest.TestCase):
         payload = self.assert_plot(
             self.workspace.overlay("20260101", "--product", "hcho")
         )
-        self.assertEqual(payload["station"]["variable"], "O3_8h_24h")
+        self.assertEqual(
+            layer(payload, "station")["quantity"]["name"], "O3_8h_24h"
+        )
 
     def test_user_gets_mda8_ozone_for_gems_hcho(self):
         """Given a GEMS HCHO scan, when omitting --var, then use MDA8."""
@@ -119,7 +166,9 @@ class OverlayE2E(unittest.TestCase):
                 station=None,
             )
         )
-        self.assertEqual(payload["station"]["variable"], "O3_8h_24h")
+        self.assertEqual(
+            layer(payload, "station")["quantity"]["name"], "O3_8h_24h"
+        )
 
     def test_user_selects_a_station_variable_explicitly(self):
         """Given total ozone, when supplying --var O3, then stations show O3."""
@@ -130,13 +179,26 @@ class OverlayE2E(unittest.TestCase):
                 "20260101", "--product", "o3", "--var", "O3"
             )
         )
-        self.assertEqual(payload["station"]["variable"], "O3")
+        self.assertEqual(layer(payload, "station")["quantity"]["name"], "O3")
+
+    def test_user_learns_the_station_variable_is_unknown(self):
+        """Given an unknown variable, when overlaying, then reject --var."""
+        self.workspace.write_swath("20260101", 4)
+        self.workspace.write_stations("2026010113")
+        self.assert_rejected(
+            self.workspace.overlay("20260101", "--var", "XYZ"),
+            "XYZ",
+            "invalid_argument",
+            "--var",
+        )
 
     def test_user_rejects_hourly_tropomi_dates(self):
         """Given TROPOMI, when DATE has an hour, then require a date."""
         self.workspace.write_swath("20260101", 4)
         self.workspace.write_stations("2026010113")
-        self.assert_rejected(self.workspace.overlay("2026010113"), "YYYYMMDD")
+        self.assert_rejected(
+            self.workspace.overlay("2026010113"), "YYYYMMDD", "invalid_time"
+        )
 
     def test_user_names_the_station_hour_for_a_tropomi_day(self):
         """Given a TROPOMI day, when omitting the station hour, then reject."""
@@ -144,6 +206,8 @@ class OverlayE2E(unittest.TestCase):
         self.workspace.write_stations("2026010113")
         self.assert_rejected(
             self.workspace.overlay("20260101", station=None),
+            "--station-datetime",
+            "invalid_argument",
             "--station-datetime",
         )
 
@@ -154,13 +218,17 @@ class OverlayE2E(unittest.TestCase):
         self.assert_rejected(
             self.workspace.overlay("20260101", station="20260101"),
             "YYYYMMDDHH",
+            "invalid_time",
+            "--station-datetime",
         )
 
     def test_user_never_gets_an_automatically_chosen_station_hour(self):
         """Given another hour on disk, when the named hour is missing, reject."""
         self.workspace.write_swath("20260101", 4)
         self.workspace.write_stations("2026010123")
-        self.assert_rejected(self.workspace.overlay("20260101"), "2026010113")
+        self.assert_rejected(
+            self.workspace.overlay("20260101"), "2026010113", "data_not_found"
+        )
 
     def test_user_overlays_a_tropomi_window_mean(self):
         """Given two days, when overlaying a window, then days count equally."""
@@ -178,10 +246,11 @@ class OverlayE2E(unittest.TestCase):
                 station="2026010213",
             )
         )
-        self.assertEqual(payload["raster"]["stats"]["mean"], 6)
-        self.assertEqual(payload["raster"]["window"]["n_days_found"], 2)
-        self.assertEqual(payload["date"], "20260102")
-        self.assertEqual(payload["datetime"], "2026010213")
+        satellite = layer(payload, "satellite")
+        self.assertEqual(satellite["stats"]["mean"], 6)
+        self.assertEqual(satellite["time"]["days"]["found"], 2)
+        self.assertEqual(satellite["time"]["end"], "20260102")
+        self.assertEqual(layer(payload, "station")["time"]["at"], "2026010213")
 
     def test_user_rejects_competing_window_selectors(self):
         """Given a range, when also supplying --days, then reject ambiguity."""
@@ -189,6 +258,8 @@ class OverlayE2E(unittest.TestCase):
         self.workspace.write_stations("2026010113")
         self.assert_rejected(
             self.workspace.overlay("20260101-20260102", "--days", "2"),
+            "--days",
+            "invalid_argument",
             "--days",
         )
 
@@ -201,9 +272,30 @@ class OverlayE2E(unittest.TestCase):
                 "202601011200", "--sensor", "gems", station=None
             )
         )
-        self.assertEqual(payload["datetime"], "2026010112")
-        self.assertEqual(payload["time_matching"]["difference_minutes"], 0)
-        self.assertFalse(payload["time_matching"]["manual_override"])
+        self.assertEqual(layer(payload, "station")["time"]["at"], "2026010112")
+        self.assertEqual(
+            payload["relations"]["time_matching"],
+            {
+                "layers": ["satellite", "station"],
+                "reference": "nominal_scan_time",
+                "difference_minutes": 0,
+                "manual_override": False,
+            },
+        )
+
+    def test_user_learns_a_gems_scan_hour_was_overridden(self):
+        """Given a noon scan, when naming 13:00, then flag the override."""
+        self.workspace.write_gems_scan("202601010400", 2)
+        self.workspace.write_stations("2026010113")
+        payload = self.assert_plot(
+            self.workspace.overlay(
+                "202601011200", "--sensor", "gems", station="2026010113"
+            )
+        )
+        matching = payload["relations"]["time_matching"]
+        self.assertEqual(matching["difference_minutes"], 60)
+        self.assertTrue(matching["manual_override"])
+        self.assertEqual(flags(payload)["manual_time_override"], "info")
 
     def test_user_names_the_station_hour_for_a_gems_day(self):
         """Given a GEMS daily mean, when omitting the hour, then reject."""
@@ -213,6 +305,8 @@ class OverlayE2E(unittest.TestCase):
             self.workspace.overlay(
                 "20260101", "--sensor", "gems", station=None
             ),
+            "--station-datetime",
+            "invalid_argument",
             "--station-datetime",
         )
 
@@ -232,8 +326,8 @@ class OverlayE2E(unittest.TestCase):
                 station="2026010212",
             )
         )
-        self.assertEqual(payload["raster"]["stats"]["mean"], 7)
-        self.assertEqual(payload["datetime"], "2026010212")
+        self.assertEqual(layer(payload, "satellite")["stats"]["mean"], 7)
+        self.assertEqual(layer(payload, "station")["time"]["at"], "2026010212")
 
     def test_user_sees_how_a_tropomi_day_meets_its_station_hour(self):
         """Given a TROPOMI day, when overlaying, then record the pairing."""
@@ -241,19 +335,12 @@ class OverlayE2E(unittest.TestCase):
         self.workspace.write_stations("2026010113")
         payload = self.assert_plot(self.workspace.overlay("20260101"))
         self.assertEqual(
-            payload["time_matching"],
+            payload["relations"]["time_matching"],
             {
-                "satellite_period": {
-                    "start": "20260101",
-                    "end": "20260101",
-                    "aggregation": "daily",
-                    "date_basis": "filename_start_date_utc",
-                },
-                "station_datetime": "2026010113",
-                "timezone": "Asia/Shanghai",
+                "layers": ["satellite", "station"],
+                "reference": "period_mean_with_explicit_station_hour",
                 "difference_minutes": None,
                 "manual_override": True,
-                "reference": "period_mean_with_explicit_station_hour",
             },
         )
 
@@ -265,14 +352,15 @@ class OverlayE2E(unittest.TestCase):
         payload = self.assert_plot(
             self.workspace.overlay("20260101-20260102", station="2026010213")
         )
+        time = layer(payload, "satellite")["time"]
         self.assertEqual(
-            payload["time_matching"]["satellite_period"],
-            {
-                "start": "20260101",
-                "end": "20260102",
-                "aggregation": "window_mean",
-                "date_basis": "filename_start_date_utc",
-            },
+            [time["aggregation"], time["start"], time["end"], time["basis"]],
+            [
+                "window_mean",
+                "20260101",
+                "20260102",
+                "filename_start_date_utc",
+            ],
         )
 
     def test_user_sees_how_a_gems_window_meets_its_station_hour(self):
@@ -290,19 +378,15 @@ class OverlayE2E(unittest.TestCase):
                 station="2026010212",
             )
         )
-        self.assertEqual(
-            payload["time_matching"]["satellite_period"],
-            {
-                "start": "20260101",
-                "end": "20260102",
-                "aggregation": "window_mean",
-                "date_basis": "asia_shanghai_calendar_day",
-            },
+        time = layer(payload, "satellite")["time"]
+        self.assertEqual(time["aggregation"], "window_mean")
+        self.assertEqual(time["basis"], "asia_shanghai_calendar_day")
+        self.assertIsNone(
+            payload["relations"]["time_matching"]["difference_minutes"]
         )
-        self.assertIsNone(payload["time_matching"]["difference_minutes"])
 
-    def test_user_keeps_the_gems_daily_mean_pairing_record(self):
-        """Given a GEMS daily mean, when overlaying, then keep its record."""
+    def test_user_sees_how_a_gems_daily_mean_meets_its_station_hour(self):
+        """Given a GEMS daily mean, when overlaying, then record the pairing."""
         self.workspace.write_gems_scan("202601010400", 2)
         self.workspace.write_stations("2026010112")
         payload = self.assert_plot(
@@ -311,17 +395,79 @@ class OverlayE2E(unittest.TestCase):
             )
         )
         self.assertEqual(
-            payload["time_matching"],
+            payload["relations"]["time_matching"],
             {
-                "satellite_date": "20260101",
-                "satellite_aggregation": "daily_mean",
-                "station_datetime": "2026010112",
-                "timezone": "Asia/Shanghai",
+                "layers": ["satellite", "station"],
+                "reference": "daily_mean_with_explicit_station_hour",
                 "difference_minutes": None,
                 "manual_override": True,
-                "reference": "daily_mean_with_explicit_station_hour",
             },
         )
+
+    def test_user_reads_the_station_table(self):
+        """Given three stations read, when overlaying, then list all three."""
+        self.workspace.write_swath("20260101", 4)
+        self.workspace.write_stations("2026010113")
+        rows = self.station_rows(
+            self.assert_plot(self.workspace.overlay("20260101"))
+        )
+        self.assertEqual(
+            [(row["id"], row["value"], row["in_region"]) for row in rows],
+            [
+                ("S001A", "40", "1"),
+                ("S002A", "80", "1"),
+                ("S003A", "999", "0"),
+            ],
+        )
+
+    def test_user_sees_satellite_values_at_stations(self):
+        """Given uniform satellite 4, when overlaying, then pair stations."""
+        self.workspace.write_swath("20260101", 4)
+        self.workspace.write_stations("2026010113")
+        payload = self.assert_plot(
+            self.workspace.overlay("20260101", "--smooth", "0")
+        )
+        colocation = payload["relations"]["colocation"]
+        self.assertEqual(colocation["pairs"], 2)
+        self.assertIsNone(colocation["spearman"])
+        self.assertFalse(colocation["comparable_units"])
+        self.assertEqual(
+            [
+                (row["satellite_value"], row["colocated"])
+                for row in self.station_rows(payload)
+            ],
+            [("4", "1"), ("4", "1"), ("", "0")],
+        )
+
+    def test_user_counts_exceedances_only_inside_the_region(self):
+        """Given 999 outside the region, when overlaying, then count none."""
+        self.workspace.write_swath("20260101", 4)
+        self.workspace.write_stations("2026010113")
+        payload = self.assert_plot(self.workspace.overlay("20260101"))
+        exceedance = layer(payload, "station")["exceedance"]
+        self.assertEqual(
+            [exceedance["threshold"], exceedance["count"]],
+            [
+                200,
+                0,
+            ],
+        )
+
+    def test_user_is_told_what_the_comparison_means(self):
+        """Given a day and an hour, when overlaying, then explain both."""
+        self.workspace.write_swath("20260101", 4)
+        self.workspace.write_stations("2026010113")
+        payload = self.assert_plot(self.workspace.overlay("20260101"))
+        self.assertEqual(flags(payload)["column_vs_surface"], "info")
+        self.assertEqual(flags(payload)["daily_vs_hourly"], "info")
+
+    def test_user_is_warned_about_few_stations(self):
+        """Given two valid stations, when overlaying, then grade limited."""
+        self.workspace.write_swath("20260101", 4)
+        self.workspace.write_stations("2026010113")
+        payload = self.assert_plot(self.workspace.overlay("20260101"))
+        self.assertEqual(flags(payload)["few_stations"], "warning")
+        self.assertEqual(payload["quality"]["grade"], "limited")
 
 
 if __name__ == "__main__":

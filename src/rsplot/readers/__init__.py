@@ -46,6 +46,9 @@ class ProductInfo:
     data_key: str | None = None
     quantity: str | None = None
     processing: str | None = None
+    # Machine-readable unit: stored value * unit_scale = value in unit.
+    unit: str = ""
+    unit_scale: float = 1.0
 
     def create_reader(self) -> BaseReader:
         """Construct the configured reader without changing legacy callers."""
@@ -66,6 +69,9 @@ PRODUCT_REGISTRY: dict[str, ProductInfo] = {
         vmin=0.0,
         vmax=20.0,
         min_range=5.0,
+        quantity="tropospheric_no2_column",
+        unit="molec/cm2",
+        unit_scale=1e15,
     ),
     "o3": ProductInfo(
         reader_cls=TropomiO3Reader,
@@ -74,6 +80,8 @@ PRODUCT_REGISTRY: dict[str, ProductInfo] = {
         vmin=None,
         vmax=None,
         min_range=30.0,
+        quantity="total_ozone_column",
+        unit="DU",
     ),
     "o3pr": ProductInfo(
         reader_cls=TropomiO3PRReader,
@@ -82,6 +90,8 @@ PRODUCT_REGISTRY: dict[str, ProductInfo] = {
         vmin=None,
         vmax=None,
         min_range=5.0,
+        quantity="tropospheric_ozone_column",
+        unit="DU",
         level_defaults={
             # O3__PR is a coarse 30x30 km profile product. These defaults
             # keep map pixels close to the native sampling while still using
@@ -100,6 +110,9 @@ PRODUCT_REGISTRY: dict[str, ProductInfo] = {
         vmin=None,  # unit not yet confirmed — let auto-range pick
         vmax=None,
         min_range=5.0,
+        quantity="tropospheric_hcho_column",
+        unit="molec/cm2",
+        unit_scale=1e15,
     ),
 }
 

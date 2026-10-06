@@ -315,7 +315,7 @@ def meteo(
     ),
     datetime_str: str = typer.Argument(
         ...,
-        help="中国时间 YYYYMMDDHH；使用 --station-var 时也可输入 YYYYMMDD",
+        help="中国时间 YYYYMMDDHH；不接受仅日期，不自动选择最新小时",
     ),
     temp_level: str | None = typer.Option(
         None,

@@ -79,6 +79,23 @@ def station_distances(
     return distances
 
 
+def station_offsets_km(
+    lon: float,
+    lat: float,
+    station_lon: np.ndarray,
+    station_lat: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """East and north offsets from the centre, in km, along the geodesic."""
+    azimuth, _, meters = GEOD.inv(
+        np.full(station_lon.shape, lon),
+        np.full(station_lat.shape, lat),
+        station_lon,
+        station_lat,
+    )
+    angle = np.radians(azimuth)
+    return meters * np.sin(angle) / 1000, meters * np.cos(angle) / 1000
+
+
 def station_square_mask(
     lon: float,
     lat: float,
@@ -87,14 +104,8 @@ def station_square_mask(
     station_lat: np.ndarray,
 ) -> np.ndarray:
     """Select the square including its edges, rather than a radial disk."""
-    azimuth, _, meters = GEOD.inv(
-        np.full(station_lon.shape, lon),
-        np.full(station_lat.shape, lat),
-        station_lon,
-        station_lat,
-    )
-    angle = np.radians(azimuth)
-    x, y = meters * np.sin(angle), meters * np.cos(angle)
+    x_km, y_km = station_offsets_km(lon, lat, station_lon, station_lat)
+    x, y = x_km * 1000, y_km * 1000
     return (
         np.isfinite(x)
         & np.isfinite(y)

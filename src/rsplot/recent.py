@@ -8,10 +8,8 @@ its daily numbers match the plotting commands' data path.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -130,7 +128,7 @@ def summarize_recent_raster(
                     "n_pixels": int(swath.n_pixels),
                     "n_files": int(swath.n_files),
                     "n_broken": int(swath.n_broken),
-                    **(swath.metadata if prod_info.processing else {}),
+                    **swath.metadata,
                 }
             stats = _grid_stats(
                 prepared.lon,
@@ -228,94 +226,13 @@ def summarize_recent_station(
     return out
 
 
-def build_recent_result(
-    *,
-    region: RegionInfo,
-    source: str,
-    dates: list[str],
-    daily: list[RecentDaily],
-    params: dict[str, Any],
-    output: str,
-    product: str | None = None,
-    variable: str | None = None,
-    unit: str | None = None,
-    sensor: str | None = None,
-    processing: str | None = None,
-    quantity: str | None = None,
-) -> dict[str, Any]:
-    """Build the JSON payload for a recent run."""
-    daily_rows = [_daily_to_json(row) for row in daily]
-    failed = {row.date: row.error for row in daily if not row.ok and row.error}
-    found = [row for row in daily if row.ok]
-
-    result: dict[str, Any] = {
-        "command": "recent",
-        "image": None,
-        "sidecar": output,
-        "source": source,
-        "region": {
-            "name": region.name,
-            "level": region.level,
-            "extent": [round(x, 3) for x in region.extent],
-        },
-        "period": {
-            "start": dates[0],
-            "end": dates[-1],
-            "days_requested": len(dates),
-        },
-        "params": params,
-        "availability": {
-            "days_found": len(found),
-            "days_failed": len(failed),
-            "failed_dates": failed,
-        },
-        "daily": daily_rows,
+def temporal_summary(daily: list[RecentDaily]) -> dict[str, Any]:
+    """Window means, window-to-window changes and the linear daily trend."""
+    return {
         "windows": _window_summaries(daily),
         "changes": _change_summaries(daily),
         "trend": _trend_summary(daily),
-        "warnings": _warnings(daily),
     }
-    if source == "raster" and processing == "nrti":
-        result["sensor"] = "tropomi"
-        result["processing"] = "nrti"
-    if source == "raster" and sensor == "gems":
-        result["sensor"] = sensor
-        result["quantity"] = quantity
-        result["statistics_basis"] = "unfilled_unsmoothed_grid"
-        result["input_timezone"] = "Asia/Shanghai"
-        result["params"] = {
-            key: value
-            for key, value in params.items()
-            if key != "qa_threshold"
-        }
-    if product is not None:
-        result["product"] = product
-    if variable is not None:
-        result["variable"] = variable
-    if unit:
-        result["unit"] = unit
-    return result
-
-
-def write_recent_result(result: dict[str, Any], output: str) -> str:
-    """Write a recent JSON result and return the path."""
-    path = Path(output)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(result, f, ensure_ascii=False, indent=2)
-    return str(path)
-
-
-def _daily_to_json(row: RecentDaily) -> dict[str, Any]:
-    data: dict[str, Any] = {
-        "date": row.date,
-        "ok": row.ok,
-        "stats": row.stats,
-        "meta": row.meta,
-    }
-    if row.error:
-        data["error"] = row.error
-    return data
 
 
 def _window_summaries(daily: list[RecentDaily]) -> dict[str, dict[str, Any]]:
@@ -386,19 +303,6 @@ def _trend_summary(daily: list[RecentDaily]) -> dict[str, Any]:
         "slope_per_day": round(slope, 4),
         "direction": _direction(slope),
     }
-
-
-def _warnings(daily: list[RecentDaily]) -> list[str]:
-    if not daily:
-        return []
-    valid_days = sum(1 for row in daily if row.ok)
-    rate = valid_days / len(daily)
-    warnings: list[str] = []
-    if valid_days == 0:
-        warnings.append("请求窗口内无有效日期。")
-    elif rate < 0.5:
-        warnings.append("有效日期少于请求天数的一半，变化判断可信度较低。")
-    return warnings
 
 
 def _summarize_rows(rows: list[RecentDaily]) -> dict[str, Any]:

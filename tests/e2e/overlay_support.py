@@ -25,20 +25,20 @@ class OverlayWorkspace(RasterWorkspace):
         self.stations = root / "stations"
         self.stations.mkdir()
 
-    def write_stations(self, hour: str) -> Path:
+    def write_stations(self, hour: str, stations=STATIONS) -> Path:
         path = self.stations / f"{hour}.nc"
         with Dataset(path, "w") as dataset:
-            dataset.createDimension("station", len(STATIONS))
+            dataset.createDimension("station", len(stations))
             ids = dataset.createVariable("id", str, ("station",))
-            for index, (station_id, *_rest) in enumerate(STATIONS):
+            for index, (station_id, *_rest) in enumerate(stations):
                 ids[index] = station_id
             dataset.createVariable("lon", "f8", ("station",))[:] = [
-                row[1] for row in STATIONS
+                row[1] for row in stations
             ]
             dataset.createVariable("lat", "f8", ("station",))[:] = [
-                row[2] for row in STATIONS
+                row[2] for row in stations
             ]
-            values = np.array([row[3] for row in STATIONS])
+            values = np.array([row[3] for row in stations])
             for name in STATION_VARIABLES:
                 dataset.createVariable(name, "f8", ("station",))[:] = values
         return path

@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
-import typer
 
 from rsplot.commands.common import (
     load_fallback_city_boundaries,
@@ -15,12 +15,41 @@ from rsplot.commands.common import (
     warn_missing_tianditu_key,
 )
 from rsplot.config import AppConfig
+from rsplot.errors import RsplotError
 
 if TYPE_CHECKING:
     from rich.console import Console
 
+# Keyword argument -> CLI spellings, for recording where values came from.
+STATION_OPTIONS = {
+    "var": ("--var", "-v"),
+    "level": ("--level", "-l"),
+    "data_dir": ("--data-dir", "-d"),
+    "output": ("--output", "-o"),
+    "dpi": ("--dpi",),
+    "basemap": ("--basemap", "-b"),
+    "title": ("--title",),
+}
 
-def run_station(
+
+def run_station(**kwargs: Any) -> None:
+    """Map one station hour for a region."""
+    from rsplot.commands.sidecar import run_with_sidecar
+
+    run_with_sidecar(
+        command="station",
+        kwargs=kwargs,
+        options=STATION_OPTIONS,
+        positionals={
+            "region": kwargs["region"],
+            "datetime": kwargs["datetime_str"],
+        },
+        emit=lambda created: _emit_station(created, **kwargs),
+    )
+
+
+def _emit_station(
+    created: list[Path],
     *,
     region: str,
     datetime_str: str,
@@ -33,7 +62,7 @@ def run_station(
     title: str | None,
     console: Console,
 ) -> None:
-    """Execute station plotting without owning the Typer signature."""
+    """Read one station hour, plot it, and write the sidecar."""
     # Validate before configuration, boundary lookup, or any source reads.
     # The shared reader still supports date-only selection for other commands.
     try:
@@ -45,43 +74,69 @@ def run_station(
             raise ValueError("Expected ten ASCII digits")
         datetime.strptime(datetime_str, "%Y%m%d%H")
     except ValueError as error:
-        console.print(
-            "[red]station 时间必须是有效的北京时间 YYYYMMDDHH"
+        raise RsplotError(
+            "invalid_time",
+            "station 时间必须是有效的北京时间 YYYYMMDDHH"
             "（10 位数字，小时 00–23），如 2026041415；"
-            "不支持仅日期 YYYYMMDD，也不会自动选择最新小时。[/red]"
-        )
-        raise typer.Exit(1) from error
+            "不支持仅日期 YYYYMMDD，也不会自动选择最新小时。",
+        ) from error
 
     from rsplot.config import (
         STATION_VAR_LABELS,
         STATION_VAR_META,
         get_exceedance_threshold,
     )
+    from rsplot.data_files import data_path, write_table_csv
     from rsplot.geo.boundaries import resolve_region
     from rsplot.geo.processing import buffered_extent
     from rsplot.plotting.station import plot_station
     from rsplot.plotting.styles import setup_fonts
-    from rsplot.readers.guokong import mask_stations_to_region, read_stations
-    from rsplot.results import build_station_result, emit_result
+    from rsplot.readers.guokong import (
+        mask_stations_to_region,
+        read_stations,
+        resolve_station_file,
+    )
+    from rsplot.result_builders.envelope import (
+        option_given,
+        request_block,
+        resolved,
+        sidecar_path,
+        success_envelope,
+        write_sidecar,
+    )
+    from rsplot.result_builders.station import build_station_display
+    from rsplot.result_builders.station_layer import (
+        TABLE_COLUMNS,
+        StationInputs,
+        build_station_layer,
+    )
 
     cfg = AppConfig.load()
     setup_fonts(cfg.font_dir)
 
     if var not in STATION_VAR_META:
-        available = ", ".join(STATION_VAR_META)
-        console.print(f"[red]未知变量 '{var}'[/red]。可用: {available}")
-        raise typer.Exit(1)
+        raise RsplotError(
+            "invalid_argument",
+            f"未知变量 '{var}'。可用: {', '.join(STATION_VAR_META)}",
+            option="--var",
+        )
 
     console.print(f"[bold]解析区域:[/bold] {region}")
-    info = resolve_region(region, cfg, level_override=level)
+    try:
+        info = resolve_region(region, cfg, level_override=level)
+    except RsplotError:
+        raise
+    except ValueError as error:
+        raise RsplotError(
+            "region_not_found", str(error), details={"region": region}
+        ) from error
     console.print(f"  → [green]{info.name}[/green] (级别: {info.level})")
     use_dpi = dpi if dpi is not None else cfg.dpi
     try:
         use_basemap = parse_basemap(basemap)
         validate_positive(use_dpi, "--dpi")
-    except ValueError as e:
-        console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1) from e
+    except ValueError as error:
+        raise RsplotError("invalid_argument", str(error)) from error
     warn_missing_tianditu_key(
         basemap=use_basemap,
         default_basemap=info.params.basemap,
@@ -92,14 +147,13 @@ def run_station(
     use_data_dir = data_dir or cfg.get_data_dir("guokong")
     console.print(f"\n[bold]读取站点数据:[/bold] {use_data_dir}")
     console.print(f"  时间: {datetime_str}, 变量: {var}")
-    read_extent = buffered_extent(info.extent, 0.5)
-    data, resolved_dt = read_stations(
+    read, resolved_dt = read_stations(
         use_data_dir,
         datetime_str,
         var,
-        extent=read_extent,
+        extent=buffered_extent(info.extent, 0.5),
     )
-    data = mask_stations_to_region(data, info.geometry)
+    data = mask_stations_to_region(read, info.geometry)
     console.print(
         f"  → [green]{data.n_valid}[/green] 有效站点 (共 {data.n_stations} 站)"
     )
@@ -113,17 +167,66 @@ def run_station(
             f"  → 超标阈值: {threshold}, 超标站点: [red]{n_exceed}[/red]"
         )
 
-    unit = STATION_VAR_META[var][0]
+    unit, limit_key, limit_time = STATION_VAR_META[var]
     display_var = STATION_VAR_LABELS.get(var, var)
     colorbar_label = f"{display_var} ({unit})" if unit else display_var
     use_title = title
     if use_title is None and display_var != var:
         use_title = f"{display_var} - {info.name}"
+    if use_title is None:
+        # The renderer's default, recorded so the sidecar states it.
+        use_title = f"{var} - {info.name}"
 
     if output is None:
         output = f"/tmp/rsplot_station_{info.name}_{var}_{resolved_dt}.png"
+    image = str(Path(output).resolve())
+    sidecar = sidecar_path(image)
+
+    from shapely import contains_xy
+
+    in_region = contains_xy(info.geometry.buffer(1e-9), read.lon, read.lat)
+    admin_gdf = (
+        info.sub_boundary_gdf
+        if info.sub_boundary_gdf is not None and len(info.sub_boundary_gdf)
+        else load_fallback_city_boundaries(info, cfg.require_geojson_dir())
+    )
+    station_path = data_path(image, "station", ".csv")
+    layer, flags, rows = build_station_layer(
+        StationInputs(
+            read=read,
+            in_region=in_region,
+            var=var,
+            unit=unit,
+            threshold=threshold,
+            standard=(
+                f"AQ_LIMITS_2026 {limit_key} {limit_time}"
+                if threshold is not None
+                else None
+            ),
+            hour=resolved_dt,
+            data_root=str(use_data_dir),
+            source_file=resolve_station_file(use_data_dir, resolved_dt).name,
+        ),
+        info,
+        admin_gdf=admin_gdf,
+        satellite_values=None,
+        data=str(station_path),
+    )
+    created.append(station_path)
+    station_entry = write_table_csv(
+        station_path,
+        rows,
+        [
+            column
+            for column in TABLE_COLUMNS
+            if column not in ("satellite_value", "colocated")
+        ],
+        content="station_table",
+        layer="station",
+    )
 
     console.print("\n[bold]绘图中...[/bold]")
+    created.append(Path(image))
     plot_station(
         data,
         info,
@@ -132,21 +235,61 @@ def run_station(
         basemap=use_basemap,
         tianditu_key=cfg.tianditu_key,
         title=use_title,
-        output=output,
+        output=image,
         colorbar_label=colorbar_label,
     )
-    console.print(f"\n[bold green]✓ 已保存:[/bold green] {output}")
 
-    result = build_station_result(
-        region=info,
-        data=data,
-        datetime_str=resolved_dt,
-        threshold=threshold,
-        unit=unit,
-        cities_gdf=load_fallback_city_boundaries(
-            info,
-            cfg.require_geojson_dir(),
-        ),
-        output=output,
+    def source(name: str, value: Any, default: str) -> dict[str, Any]:
+        if option_given(*STATION_OPTIONS[name]):
+            return resolved(value, "cli")
+        return resolved(value, default)
+
+    effective_basemap = (
+        use_basemap if use_basemap is not None else info.params.basemap
     )
-    emit_result(result, output)
+    payload = success_envelope(
+        command="station",
+        request=request_block(
+            {
+                "region": resolved(region, "cli"),
+                "datetime": resolved(datetime_str, "cli"),
+                "var": source("var", var, "built_in"),
+                "level": source("level", info.level, "built_in"),
+                "data_dir": source("data_dir", str(use_data_dir), "config"),
+                "output": source("output", output, "built_in"),
+                "dpi": source("dpi", use_dpi, "built_in"),
+                "basemap": source(
+                    "basemap",
+                    "satellite" if effective_basemap else "none",
+                    "level_default",
+                ),
+                "title": source("title", use_title, "built_in"),
+            }
+        ),
+        region=info,
+        layers=[layer],
+        flags=flags,
+        render={
+            "image": image,
+            "dpi": int(use_dpi),
+            "basemap": "satellite" if effective_basemap else "none",
+            "title": use_title,
+            "layers": {
+                "station": {
+                    **(
+                        build_station_display(data)
+                        or {"range_method": "data_p5_p95"}
+                    ),
+                    "colorbar_label": colorbar_label,
+                }
+            },
+        },
+        artifacts={
+            "image": image,
+            "sidecar": sidecar,
+            "data": [station_entry],
+        },
+    )
+    created.append(Path(sidecar))
+    write_sidecar(payload, sidecar)
+    console.print(f"\n[bold green]✓ 已保存:[/bold green] {image}")

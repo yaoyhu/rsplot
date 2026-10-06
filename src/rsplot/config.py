@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from rsplot.errors import RsplotError
+
 if sys.version_info >= (3, 11):
     import tomllib
 else:
@@ -237,23 +239,27 @@ class AppConfig:
             ", ".join(sorted(k for k, v in self.data_dirs.items() if v))
             or "none"
         )
-        raise ValueError(
+        raise RsplotError(
+            "data_not_configured",
             f"No data directory configured for product '{product}'. "
             f"Set [paths.data_dirs].{key} in {CONFIG_PATH}, set "
             f"RSPLOT_DATA_DIR_{key.upper()}, point {CONFIG_ENV_VAR} to a "
             "TOML config file, or pass the command-specific data directory "
             f"option. Known products: {', '.join(KNOWN_DATA_PRODUCTS)}. "
-            f"Configured products: {configured}."
+            f"Configured products: {configured}.",
+            details={"config_key": key},
         )
 
     def require_geojson_dir(self) -> str:
         """Return the boundary GeoJSON directory, or raise with guidance."""
         if self.geojson_dir:
             return self.geojson_dir
-        raise ValueError(
+        raise RsplotError(
+            "data_not_configured",
             "GeoJSON boundary directory is not configured. Set "
             f"[paths].geojson_dir in {CONFIG_PATH}, set RSPLOT_GEOJSON_DIR, "
-            f"or point {CONFIG_ENV_VAR} to a TOML config file."
+            f"or point {CONFIG_ENV_VAR} to a TOML config file.",
+            details={"config_key": "geojson_dir"},
         )
 
     def _apply_toml(self, data: dict[str, Any]) -> None:

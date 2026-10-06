@@ -75,7 +75,9 @@ class RasterWorkspace:
         self.env = {
             key: value
             for key, value in os.environ.items()
-            if not key.startswith("RSPLOT_") and key != "TIANDITU_API_KEY"
+            if not key.startswith("RSPLOT_")
+            # FORCE_COLOR overrides NO_COLOR and would colour help output.
+            and key not in ("TIANDITU_API_KEY", "FORCE_COLOR")
         }
         self.env.update(
             RSPLOT_CONFIG=str(config),
@@ -266,3 +268,17 @@ class RasterWorkspace:
 
     def payload(self) -> dict:
         return json.loads(self.sidecar.read_text(encoding="utf-8"))
+
+
+def schema_errors(payload: dict) -> list[str]:
+    """Validate a sidecar against the schema shipped inside the package."""
+    from jsonschema import Draft202012Validator
+
+    import rsplot
+
+    path = Path(rsplot.__file__).parent / "schemas" / "result-2.schema.json"
+    validator = Draft202012Validator(json.loads(path.read_text("utf-8")))
+    return [
+        f"{list(error.path)}: {error.message}"
+        for error in validator.iter_errors(payload)
+    ]
