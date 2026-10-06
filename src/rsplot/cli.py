@@ -70,7 +70,6 @@ def raster(
     product: str = typer.Option(
         "o3",
         "--product",
-        "-p",
         help="产品类型: no2 / o3 / o3pr / hcho",
     ),
     days: int | None = typer.Option(
@@ -93,13 +92,11 @@ def raster(
     level: str | None = typer.Option(
         None,
         "--level",
-        "-l",
         help="强制指定级别: country / key_region / province / city / county",
     ),
     output: str | None = typer.Option(
         None,
         "--output",
-        "-o",
         help="输出 PNG 路径，同时写同名 JSON；省略时自动保存至 /tmp。",
     ),
     dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
@@ -111,7 +108,6 @@ def raster(
     basemap: str | None = typer.Option(
         None,
         "--basemap",
-        "-b",
         help="底图控制: satellite / none (覆盖级别默认)",
     ),
     vmin: float | None = typer.Option(None, "--vmin", help="Colorbar 最小值"),
@@ -138,9 +134,9 @@ def raster(
     再按有效天等权平均，不填补空洞。因此 --days 1 与省略 --days 不等价。
 
     示例:
-        rsplot raster 北京    20260108 --dpi 300 --output yrd.png        # 单日
-        rsplot raster 安徽    20260131 -p hcho --days 30                 # 月均（推荐 HCHO）
-        rsplot raster 长三角  20260101-20260131 -p no2                   # 显式区间
+        rsplot raster 北京    20260108 --dpi 300 --output yrd.png  # 单日
+        rsplot raster 安徽    20260131 --product hcho --days 30  # 月均（推荐 HCHO）
+        rsplot raster 长三角  20260101-20260131 --product no2  # 显式区间
     """
     from rsplot.commands.raster import run_raster
 
@@ -191,7 +187,6 @@ def radius(
     product: str = typer.Option(
         "o3",
         "--product",
-        "-p",
         help="产品类型: no2 / o3 / o3pr / hcho",
     ),
     days: int | None = typer.Option(
@@ -226,7 +221,6 @@ def radius(
     output: str | None = typer.Option(
         None,
         "--output",
-        "-o",
         help="输出 PNG 路径，默认保存到 /tmp 并生成同名 JSON。",
     ),
     dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
@@ -238,7 +232,6 @@ def radius(
     basemap: str | None = typer.Option(
         "none",
         "--basemap",
-        "-b",
         help="底图控制: satellite / none (覆盖级别默认)",
     ),
     vmin: float | None = typer.Option(None, "--vmin", help="Colorbar 最小值"),
@@ -315,20 +308,17 @@ def meteo(
     level: str | None = typer.Option(
         None,
         "--level",
-        "-l",
         help="强制指定行政区级别: country/key_region/province/city/county",
     ),
     output: str | None = typer.Option(
         None,
         "--output",
-        "-o",
         help="输出 PNG 路径；同时写同名 JSON",
     ),
     dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
     basemap: str | None = typer.Option(
         None,
         "--basemap",
-        "-b",
         help="底图控制: satellite / none",
     ),
     cmap: str | None = typer.Option(
@@ -411,26 +401,22 @@ def station(
     var: str = typer.Option(
         "O3_8h_24h",
         "--var",
-        "-v",
         help="变量名: AQI, PM2.5, PM2.5_24h, PM10, PM10_24h, SO2, SO2_24h, NO2, NO2_24h, O3, O3_24h, O3_8h, O3_8h_24h, CO, CO_24h",
     ),
     level: str | None = typer.Option(
         None,
         "--level",
-        "-l",
         help="强制指定级别: country / key_region / province / city / county",
     ),
     output: str | None = typer.Option(
         None,
         "--output",
-        "-o",
         help="输出文件路径",
     ),
     dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
     basemap: str | None = typer.Option(
         None,
         "--basemap",
-        "-b",
         help="底图控制: satellite / none",
     ),
     title: str | None = typer.Option(None, "--title", help="自定义标题"),
@@ -442,7 +428,7 @@ def station(
     示例:
         rsplot station 安徽 2026041415
         rsplot station 中国 2026041415 --var PM2.5_24h
-        rsplot station YRD 2026041415 --var NO2 -o logs/yrd_no2.png
+        rsplot station YRD 2026041415 --var NO2 --output logs/yrd_no2.png
     """
     from rsplot.commands.station import run_station
 
@@ -477,7 +463,6 @@ def trend(
     var: str = typer.Option(
         "O3_8h_24h",
         "--var",
-        "-v",
         help="变量名: AQI, PM2.5, PM10, NO2, O3, SO2, CO, O3_8h, O3_8h_24h",
     ),
     region: bool = typer.Option(
@@ -506,13 +491,11 @@ def trend(
     level: str | None = typer.Option(
         None,
         "--level",
-        "-l",
         help="区域模式强制级别: country / key_region / province / city / county",
     ),
     output: str | None = typer.Option(
         None,
         "--output",
-        "-o",
         help="PNG 输出文件路径",
     ),
     dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
@@ -572,7 +555,6 @@ def overlay(
     product: str = typer.Option(
         "o3",
         "--product",
-        "-p",
         help="卫星产品类型: no2 / o3 / o3pr / hcho",
     ),
     days: int | None = typer.Option(
@@ -601,20 +583,17 @@ def overlay(
     var: str | None = typer.Option(
         None,
         "--var",
-        "-v",
         help="站点变量名；省略时 no2→NO2，o3 / o3pr / hcho→O3_8h_24h",
     ),
     # --- overrides ---
     level: str | None = typer.Option(
         None,
         "--level",
-        "-l",
         help="强制指定级别: country / key_region / province / city / county",
     ),
     output: str | None = typer.Option(
         None,
         "--output",
-        "-o",
         help="输出文件路径，不指定则弹窗显示。",
     ),
     dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
@@ -626,7 +605,6 @@ def overlay(
     basemap: str | None = typer.Option(
         None,
         "--basemap",
-        "-b",
         help="底图控制: satellite / none (覆盖级别默认)",
     ),
     vmin: float | None = typer.Option(
@@ -657,10 +635,10 @@ def overlay(
     DATE 只决定卫星时间；站点始终是一个北京时间整点，从不做时间平均。
 
     示例:
-        rsplot overlay YRD  20260208 -p no2 --station-datetime 2026020813
-        rsplot overlay 安徽 20260414 -p o3 --days 7 \\
+        rsplot overlay YRD  20260208 --product no2 --station-datetime 2026020813
+        rsplot overlay 安徽 20260414 --product o3 --days 7 \\
             --station-datetime 2026041414
-        rsplot overlay 合肥 202604141200 --sensor gems -p no2
+        rsplot overlay 合肥 202604141200 --sensor gems --product no2
     """
     from rsplot.commands.overlay import run_overlay
 
@@ -719,25 +697,21 @@ def recent(
     product: str = typer.Option(
         "o3",
         "--product",
-        "-p",
         help="source=raster 时的产品: no2 / o3 / o3pr / hcho",
     ),
     var: str = typer.Option(
         "AQI",
         "--var",
-        "-v",
         help="source=station 时的变量名: AQI, PM2.5, PM10, NO2, O3, SO2, CO...",
     ),
     level: str | None = typer.Option(
         None,
         "--level",
-        "-l",
         help="强制指定级别: country / key_region / province / city / county",
     ),
     output: str | None = typer.Option(
         None,
         "--output",
-        "-o",
         help="输出 JSON 路径",
     ),
     res: float | None = typer.Option(
@@ -759,7 +733,7 @@ def recent(
     """输出最近 N 天数据 JSON，用于周/月/年变化对比。
 
     示例:
-        rsplot recent 合肥 20260428 --days 30 -p hcho -o recent.json
+        rsplot recent 合肥 20260428 --days 30 --product hcho --output recent.json
         rsplot recent 安徽 20260428 --days 7 --source station --var O3
     """
     from rsplot.commands.recent import run_recent
@@ -828,13 +802,11 @@ def fnr(
     level: str | None = typer.Option(
         None,
         "--level",
-        "-l",
         help="强制指定级别: country / key_region / province / city / county",
     ),
     output: str | None = typer.Option(
         None,
         "--output",
-        "-o",
         help="输出文件路径",
     ),
     dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
@@ -842,7 +814,6 @@ def fnr(
     basemap: str | None = typer.Option(
         None,
         "--basemap",
-        "-b",
         help="底图控制: satellite / none",
     ),
     smooth: float | None = typer.Option(

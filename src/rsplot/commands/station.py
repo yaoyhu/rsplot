@@ -22,11 +22,11 @@ if TYPE_CHECKING:
 
 # Keyword argument -> CLI spellings, for recording where values came from.
 STATION_OPTIONS = {
-    "var": ("--var", "-v"),
-    "level": ("--level", "-l"),
-    "output": ("--output", "-o"),
+    "var": ("--var",),
+    "level": ("--level",),
+    "output": ("--output",),
     "dpi": ("--dpi",),
-    "basemap": ("--basemap", "-b"),
+    "basemap": ("--basemap",),
     "title": ("--title",),
 }
 

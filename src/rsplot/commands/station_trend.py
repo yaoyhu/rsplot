@@ -21,13 +21,13 @@ if TYPE_CHECKING:
 # Keyword argument -> CLI spellings, for recording where values came from.
 TREND_OPTIONS = {
     "days": ("--days",),
-    "var": ("--var", "-v"),
+    "var": ("--var",),
     "region_mode": ("--region",),
     "view": ("--view",),
     "focus_station_ids": ("--focus-station",),
     "threshold": ("--threshold",),
-    "level": ("--level", "-l"),
-    "output": ("--output", "-o"),
+    "level": ("--level",),
+    "output": ("--output",),
     "dpi": ("--dpi",),
     "title": ("--title",),
 }

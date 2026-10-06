@@ -134,7 +134,9 @@ class RasterE2E(unittest.TestCase):
         """Given HCHO columns, when plotting HCHO, then units and mean agree."""
         self.workspace.write_swath("20260101", 6, product="hcho")
         layer = satellite(
-            self.assert_plot(self.workspace.raster("20260101", "-p", "hcho"))
+            self.assert_plot(
+                self.workspace.raster("20260101", "--product", "hcho")
+            )
         )
         self.assertEqual(layer["stats"]["mean"], 6)
         self.assertEqual(
@@ -151,7 +153,9 @@ class RasterE2E(unittest.TestCase):
         """Given total ozone, when plotting O3, then mean is 300 DU."""
         self.workspace.write_swath("20260101", 300, product="o3")
         layer = satellite(
-            self.assert_plot(self.workspace.raster("20260101", "-p", "o3"))
+            self.assert_plot(
+                self.workspace.raster("20260101", "--product", "o3")
+            )
         )
         self.assertEqual(layer["stats"]["mean"], 300)
         self.assertEqual(layer["quantity"]["unit"], "DU")
@@ -161,7 +165,9 @@ class RasterE2E(unittest.TestCase):
         """Given profile ozone, when plotting O3PR, then mean is 30 DU."""
         self.workspace.write_swath("20260101", 30, product="o3pr")
         layer = satellite(
-            self.assert_plot(self.workspace.raster("20260101", "-p", "o3pr"))
+            self.assert_plot(
+                self.workspace.raster("20260101", "--product", "o3pr")
+            )
         )
         self.assertEqual(layer["stats"]["mean"], 30)
         self.assertEqual(layer["quantity"]["unit"], "DU")

@@ -8,6 +8,8 @@ Data paths come from configuration only (CLI rule 1). The fixture config
 lists every data folder under `[paths.data_dirs]`. Typer rejects an unknown
 option with exit status 2 before rsplot runs, so no sidecar is written.
 
+Options have long names only (CLI rule 2).
+
 | Scenario | Given | When | Then |
 | --- | --- | --- | --- |
 | user sees only enabled commands | CLI is installed | Request top-level help | Help lists raster, radius, overlay, station, trend, meteo, recent and fnr, and does not list forecast or reconstruct |
@@ -26,3 +28,12 @@ option with exit status 2 before rsplot runs, so no sidecar is written.
 | user cannot point meteo at an ERA5 folder | Configured paths | Run `meteo ... --data-dir /x` | Exit 2, "No such option", no output |
 | user cannot point meteo at a station folder | Configured paths | Run `meteo ... --station-data-dir /x` | Exit 2, "No such option", no output |
 | user learns a data folder is not configured | Config without `no2` | Map NO2 with `raster` | Exit 1; error sidecar `data_not_configured`, naming `[paths.data_dirs].no2` and no CLI option |
+| user sees only long options for raster | CLI is installed | Request `raster --help` | No single-letter option such as `-p`, `-o` |
+| user sees only long options for overlay | CLI is installed | Request `overlay --help` | No single-letter option |
+| user sees only long options for radius | CLI is installed | Request `radius --help` | No single-letter option |
+| user sees only long options for station | CLI is installed | Request `station --help` | No single-letter option |
+| user sees only long options for trend | CLI is installed | Request `trend --help` | No single-letter option |
+| user sees only long options for recent | CLI is installed | Request `recent --help` | No single-letter option |
+| user sees only long options for fnr | CLI is installed | Request `fnr --help` | No single-letter option |
+| user sees only long options for meteo | CLI is installed | Request `meteo --help` | No single-letter option |
+| user cannot use a former alias | CLI is installed | Run `raster ... -o map.png` | Exit 2, "No such option", no output |

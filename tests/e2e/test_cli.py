@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -51,6 +52,50 @@ class CliE2E(unittest.TestCase):
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
         self.assertIn("No such option", result.stdout + result.stderr)
         self.assertFalse(self.workspace.output.parent.exists())
+
+    def short_options(self, command: str) -> list[str]:
+        """Single-letter option names listed in a command's help."""
+        result = self.workspace.invoke(command, "--help")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return re.findall(r"(?<=\s)-[A-Za-z](?=\s)", result.stdout)
+
+    def test_user_sees_only_long_options_for_raster(self):
+        """Given raster help, when reading options, then none is a letter."""
+        self.assertEqual(self.short_options("raster"), [])
+
+    def test_user_sees_only_long_options_for_overlay(self):
+        """Given overlay help, when reading options, then none is a letter."""
+        self.assertEqual(self.short_options("overlay"), [])
+
+    def test_user_sees_only_long_options_for_radius(self):
+        """Given radius help, when reading options, then none is a letter."""
+        self.assertEqual(self.short_options("radius"), [])
+
+    def test_user_sees_only_long_options_for_station(self):
+        """Given station help, when reading options, then none is a letter."""
+        self.assertEqual(self.short_options("station"), [])
+
+    def test_user_sees_only_long_options_for_trend(self):
+        """Given trend help, when reading options, then none is a letter."""
+        self.assertEqual(self.short_options("trend"), [])
+
+    def test_user_sees_only_long_options_for_recent(self):
+        """Given recent help, when reading options, then none is a letter."""
+        self.assertEqual(self.short_options("recent"), [])
+
+    def test_user_sees_only_long_options_for_fnr(self):
+        """Given fnr help, when reading options, then none is a letter."""
+        self.assertEqual(self.short_options("fnr"), [])
+
+    def test_user_sees_only_long_options_for_meteo(self):
+        """Given meteo help, when reading options, then none is a letter."""
+        self.assertEqual(self.short_options("meteo"), [])
+
+    def test_user_cannot_use_a_former_alias(self):
+        """Given raster, when passing -o, then reject it as unknown."""
+        self.assert_no_such_option(
+            "raster", "FixtureCity", "20260101", "-o", "map.png"
+        )
 
     def test_user_cannot_point_raster_at_a_data_folder(self):
         """Given config paths, when passing --data-dir, then reject it."""

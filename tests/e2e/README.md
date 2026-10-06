@@ -256,3 +256,9 @@ now lists every data folder. The unconfigured-product scenario then showed
 that the user's `~/.config/rsplot/config.toml` was merged into every test
 run (the test read the real NO2 archive); the launcher now gives each
 process a private `HOME`.
+
+Rule 2 (long option names only): 9 scenarios (one help check per command,
+one rejected former alias) failed against the unchanged application. The 29
+aliases were removed from `cli.py` and from each command's option table.
+The help check also caught `-p`/`-o` in the usage examples printed by
+`raster`, `overlay`, `station` and `recent` help; those now use long names.

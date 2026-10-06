@@ -124,74 +124,74 @@ The examples below assume data paths are configured and readable.
 rsplot --help
 
 # Plot a single-day TROPOMI raster.
-rsplot raster 合肥 20260115 -p no2 -o ./logs/hcho/raster_city_jiujiang_hcho.png
+rsplot raster 合肥 20260115 --product no2 --output ./logs/hcho/raster_city_jiujiang_hcho.png
 
 # Plot a 30-day TROPOMI window mean.
-rsplot raster 安徽 20260131 -p hcho --days 30 -o hcho_anhui_202601.png
+rsplot raster 安徽 20260131 --product hcho --days 30 --output hcho_anhui_202601.png
 
 # Plot a TROPOMI ozone-profile tropospheric column raster.
-rsplot raster 安徽 20260227 -p o3pr -o o3pr_anhui_20260227.png
+rsplot raster 安徽 20260227 --product o3pr --output o3pr_anhui_20260227.png
 
 # Plot an explicit TROPOMI date range.
-rsplot raster 长三角 20260101-20260131 -p no2 -o no2_yrd_202601.png
+rsplot raster 长三角 20260101-20260131 --product no2 --output no2_yrd_202601.png
 
 # Plot ERA5 2 m temperature. Input hours are China standard time; rsplot
 # converts them to the matching UTC archive day and hour automatically.
 # meteo needs an exact China-time hour (YYYYMMDDHH) in every mode. Each
 # layer writes a data file, e.g. meteo_nanjing_t2m.temperature.nc.
-rsplot meteo 南京 2026051115 --temp-level 2m -o meteo_nanjing_t2m.png
+rsplot meteo 南京 2026051115 --temp-level 2m --output meteo_nanjing_t2m.png
 
 # Plot black 850 hPa wind arrows; length represents speed and no wind
 # colorbar is drawn. The reference arrow gives the speed scale.
-rsplot meteo 南京 2026051115 --wind-level 850 -o meteo_nanjing_wind850.png
+rsplot meteo 南京 2026051115 --wind-level 850 --output meteo_nanjing_wind850.png
 
 # Overlay black wind arrows on a temperature background. Only the temperature
 # colorbar is drawn.
 rsplot meteo 南京 2026051115 --temp-level 850 \
-  --wind-level 850 -o meteo_nanjing_t850_wind850.png
+  --wind-level 850 --output meteo_nanjing_t850_wind850.png
 
 # Overlay station observations with black wind arrows.
 rsplot meteo 南京 2026051115 --station-var O3 \
-  --wind-level 850 -o meteo_nanjing_o3_wind850.png
+  --wind-level 850 --output meteo_nanjing_o3_wind850.png
 
 # Temperature, stations, and wind can be combined. The two colorbars describe
 # temperature and station concentration; wind magnitude is encoded by length.
 rsplot meteo 南京 2026051115 --temp-level 850 --station-var O3 \
-  --wind-level 850 -o meteo_nanjing_t850_o3_wind850.png
+  --wind-level 850 --output meteo_nanjing_t850_o3_wind850.png
 
 # Plot national monitoring station observations at an explicit China-time hour.
-rsplot station 合肥 2026041415 --var O3 -o station_hefei_o3.png
+rsplot station 合肥 2026041415 --var O3 --output station_hefei_o3.png
 
 # Plot one station's hourly observations over the latest seven days.
-rsplot trend 3347A 20260520 --days 7 --var O3 -o trend_3347A_o3_7d.png
+rsplot trend 3347A 20260520 --days 7 --var O3 --output trend_3347A_o3_7d.png
 
 # A single day and an explicit date range are also supported.
-rsplot trend 3347A 20260520 --days 1 --var O3 -o trend_3347A_o3_day.png
-rsplot trend 3347A 20260501-20260507 --var PM2.5 -o trend_3347A_pm25.png
+rsplot trend 3347A 20260520 --days 1 --var O3 --output trend_3347A_o3_day.png
+rsplot trend 3347A 20260501-20260507 --var PM2.5 --output trend_3347A_pm25.png
 
 # Plot all regional stations as grey lines plus the hourly station mean.
-rsplot trend 重庆 20260520 --days 7 --var O3 --region -o trend_chongqing_o3.png
+rsplot trend 重庆 20260520 --days 7 --var O3 --region --output trend_chongqing_o3.png
 
 # Plot only the regional mean and highlight one or more explicit stations.
 rsplot trend 重庆 20260520 --days 7 --var O3 --region --view mean \
-  --focus-station 3347A --threshold 200 -o trend_chongqing_focus.png
+  --focus-station 3347A --threshold 200 --output trend_chongqing_focus.png
 # Each trend also writes <name>.series.nc: value(station, time) with
 # time_cst labels, plus regional_mean and n_stations in region mode.
 
 # Overlay satellite raster data and station observations.
-rsplot overlay 合肥 20260414 -p no2 --station-datetime 2026041413 \
-  -o overlay_hefei_no2.png
+rsplot overlay 合肥 20260414 --product no2 --station-datetime 2026041413 \
+  --output overlay_hefei_no2.png
 
 # Plot an FNR regime map with the default 7-day window. The sidecar has
 # no2, hcho and fnr layers (regime counts in the fnr layer's categories),
 # with fnr_hefei.no2.nc, fnr_hefei.hcho.nc and fnr_hefei.fnr.nc.
-rsplot fnr 合肥 20260114 -o fnr_hefei.png
+rsplot fnr 合肥 20260114 --output fnr_hefei.png
 
 # Plot an FNR regime map with an explicit date range.
-rsplot fnr 长三角 20260101-20260130 -o fnr_yrd_202601.png
+rsplot fnr 长三角 20260101-20260130 --output fnr_yrd_202601.png
 
 # Override FNR regime thresholds for agent-driven sensitivity tests.
-rsplot fnr 合肥 20260114 --voc-threshold 0.8 --nox-threshold 1.8 --display-max 5 -o fnr_hefei_sensitivity.png
+rsplot fnr 合肥 20260114 --voc-threshold 0.8 --nox-threshold 1.8 --display-max 5 --output fnr_hefei_sensitivity.png
 ```
 
 When `-o/--output` is provided, `rsplot` writes the image to that path and also
@@ -204,7 +204,7 @@ Every command writes the agent-oriented sidecar specified in
 JSON Schema `src/rsplot/schemas/result-2.schema.json`.
 
 ```bash
-rsplot raster 合肥 20260919 -p no2 --days 7 -o out/hefei_no2_week.png
+rsplot raster 合肥 20260919 --product no2 --days 7 --output out/hefei_no2_week.png
 # out/hefei_no2_week.png            image
 # out/hefei_no2_week.json           sidecar (schema rsplot.result/2)
 # out/hefei_no2_week.satellite.nc   statistical grid: value, counted, valid_days
@@ -301,8 +301,8 @@ back to another file.
 
 ```bash
 # TROPOMI 7-day NO2 mean with 13:00 China-time station observations.
-rsplot overlay 合肥 20260919 -p no2 --days 7 \
-  --station-datetime 2026091913 -o overlay_hefei_no2_week.png
+rsplot overlay 合肥 20260919 --product no2 --days 7 \
+  --station-datetime 2026091913 --output overlay_hefei_no2_week.png
 ```
 
 Without `--var`, `no2` pairs with station `NO2`, and `o3`, `o3pr` and `hcho`
@@ -441,15 +441,15 @@ e.g. `中山市/东区街道`. Other commands retain their single-region input.
 # One map covering three selected townships.
 uv run rsplot raster \
   "中山市/东区街道,中山市/南区街道,中山市/石岐街道" 20260907 \
-  --sensor gems -p o3pr --cf 1 --res 0.075 --smooth 0 \
-  --basemap none -o ./logs/zhongshan/three_streets_raster.png
+  --sensor gems --product o3pr --cf 1 --res 0.075 --smooth 0 \
+  --basemap none --output ./logs/zhongshan/three_streets_raster.png
 
 # The same daily satellite field with observations at 19:00 China time.
 uv run rsplot overlay \
   "中山市/东区街道,中山市/南区街道,中山市/石岐街道" 20260907 \
-  --sensor gems -p o3pr --station-datetime 2026090719 \
+  --sensor gems --product o3pr --station-datetime 2026090719 \
   --cf 1 --res 0.075 --smooth 0 --basemap none \
-  -o ./logs/zhongshan/three_streets_overlay.png
+  --output ./logs/zhongshan/three_streets_overlay.png
 ```
 
 These examples use your configured product/station data paths; no named
@@ -614,20 +614,20 @@ containing one archive version.
 
 ```bash
 # Exact scan, daily mean, and multi-day mean.
-rsplot raster 安徽 202609011145 --sensor gems -p no2 \
+rsplot raster 安徽 202609011145 --sensor gems --product no2 \
   --basemap none --output /tmp/gems_no2_scan.png
-rsplot raster 安徽 20260901 --sensor gems -p hcho \
+rsplot raster 安徽 20260901 --sensor gems --product hcho \
   --basemap none --output /tmp/gems_hcho_daily.png
-rsplot raster 安徽 20260901-20260902 --sensor gems -p o3pr \
+rsplot raster 安徽 20260901-20260902 --sensor gems --product o3pr \
   --basemap none --output /tmp/gems_o3pr_window.png
 
 # Recent daily regional statistics (JSON only, plus gems_no2_recent.daily.csv;
 # window comparisons and the trend are in layers[0].temporal_summary).
-rsplot recent 安徽 20260902 --days 2 --source raster --sensor gems -p no2 \
+rsplot recent 安徽 20260902 --days 2 --source raster --sensor gems --product no2 \
   --output /tmp/gems_no2_recent.json
 
 # 11:45 China-time scan with observations at the nearest hour, 12:00.
-rsplot overlay 安徽 202609011145 --sensor gems -p no2 \
+rsplot overlay 安徽 202609011145 --sensor gems --product no2 \
   --basemap none --output /tmp/gems_no2_overlay.png
 # Use --station-datetime YYYYMMDDHH for an intentional time override.
 ```
@@ -655,9 +655,9 @@ TROPOMI keeps its existing resolution behavior.
 For example, compare Zhongshan O3PR at two target spacings without smoothing:
 
 ```bash
-rsplot raster 中山市 20260907 --sensor gems -p o3pr --cf 1 \
+rsplot raster 中山市 20260907 --sensor gems --product o3pr --cf 1 \
   --res 0.05 --smooth 0 --basemap none --output /tmp/gems_o3pr_res005.png
-rsplot raster 中山市 20260907 --sensor gems -p o3pr --cf 1 \
+rsplot raster 中山市 20260907 --sensor gems --product o3pr --cf 1 \
   --res 0.01 --smooth 0 --basemap none --output /tmp/gems_o3pr_res001.png
 ```
 
