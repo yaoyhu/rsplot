@@ -48,7 +48,7 @@ STATION_COLUMNS = [
     "date",
     "ok",
     "value",
-    "hour",
+    "hours",
     "n_valid",
     "n_stations",
     "n_exceed",
@@ -91,9 +91,14 @@ def _emit_recent(
     console: Console,
 ) -> None:
     from rsplot.config import STATION_VAR_META
-    from rsplot.data_files import data_path, write_table_csv
+    from rsplot.data_files import (
+        data_path,
+        write_source_manifest,
+        write_table_csv,
+    )
     from rsplot.geo.boundaries import resolve_region
     from rsplot.recent import (
+        daily_limit,
         parse_recent_dates,
         summarize_recent_raster,
         summarize_recent_station,
@@ -185,6 +190,7 @@ def _emit_recent(
     )
 
     sidecar = sidecar_path(str(Path(output).resolve()))
+    extra_data: list[dict[str, Any]] = []
 
     def source_of(name: str, value: Any, default: str) -> dict[str, Any]:
         if option_given(*RECENT_OPTIONS[name]):
@@ -289,7 +295,7 @@ def _emit_recent(
         use_data_dir = cfg.get_data_dir("guokong")
         unit = STATION_VAR_META[var][0]
         console.print(f"\n[bold]统计站点:[/bold] {use_data_dir} (变量: {var})")
-        daily = summarize_recent_station(
+        daily, hourly = summarize_recent_station(
             region=info,
             data_dir=use_data_dir,
             dates=dates,
@@ -304,23 +310,39 @@ def _emit_recent(
             "label": f"{var} ({unit})" if unit else var,
         }
         time_zone = "Asia/Shanghai"
-        basis = "station_hour"
+        basis = "asia_shanghai_calendar_day"
+        files = sorted(
+            Path(path).name for path in (hourly.source_files if hourly else [])
+        )
+        failed = {
+            f"{stamp}.nc": reason
+            for stamp, reason in sorted(
+                (hourly.failed_files if hourly else {}).items()
+            )
+        }
+        manifest = None
+        if len(files) > FILES_LIMIT:
+            manifest_path = data_path(sidecar, "sources", ".csv")
+            created.append(manifest_path)
+            manifest_entry = write_source_manifest(
+                manifest_path, files, failed
+            )
+            extra_data.append(manifest_entry)
+            manifest = manifest_entry["path"]
         source_block = {
             "sensor": "station",
             "processing": None,
             "data_root": str(use_data_dir),
-            "files": sorted(
-                f"{row.meta['datetime']}.nc" for row in daily if row.ok
-            ),
-            "files_total": sum(row.ok for row in daily),
-            "files_manifest": None,
-            "failed_files": {
-                row.date: row.error or "" for row in daily if not row.ok
-            },
+            "files": files[:FILES_LIMIT],
+            "files_total": len(files),
+            "files_manifest": manifest,
+            "failed_files": failed,
         }
         method = {
-            "daily_value": "mean_of_in_region_stations",
-            "station_hour": "latest_available_per_day",
+            "daily_value": "mean_of_station_daily_values",
+            "station_daily_value": "mean_of_available_hours",
+            "hours_per_day": 24,
+            "daily_limit": daily_limit(var),
             "region_selection": "point_inside_region",
         }
         rows = [_station_row(row) for row in daily]
@@ -407,7 +429,11 @@ def _emit_recent(
         layers=[layer],
         flags=flags,
         render=None,
-        artifacts={"image": None, "sidecar": sidecar, "data": [table_entry]},
+        artifacts={
+            "image": None,
+            "sidecar": sidecar,
+            "data": [table_entry, *extra_data],
+        },
     )
     created.append(Path(sidecar))
     write_sidecar(payload, sidecar)
@@ -437,7 +463,7 @@ def _station_row(row: RecentDaily) -> dict[str, Any]:
         "date": row.date,
         "ok": int(row.ok),
         "value": float(row.value) if row.value is not None else np.nan,
-        "hour": row.meta.get("datetime", ""),
+        "hours": row.meta.get("hours", ""),
         "n_valid": row.meta.get("n_valid", ""),
         "n_stations": row.meta.get("n_stations", ""),
         "n_exceed": row.meta.get("n_exceed", ""),

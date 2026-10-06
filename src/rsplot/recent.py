@@ -16,7 +16,7 @@ import numpy as np
 from rich.console import Console
 from rich.progress import track
 
-from rsplot.config import get_exceedance_threshold
+from rsplot.config import AQ_LIMITS_2026, STATION_VAR_META
 from rsplot.geo.gridding import grid_coverage_in_region
 from rsplot.geo.processing import (
     buffered_extent,
@@ -25,8 +25,8 @@ from rsplot.geo.processing import (
 )
 from rsplot.readers import ProductInfo
 from rsplot.readers.guokong import (
-    mask_stations_to_region,
-    read_stations,
+    RegionStationSeries,
+    read_region_station_series,
 )
 from rsplot.stats import basic_stats
 
@@ -163,6 +163,14 @@ def summarize_recent_raster(
     return out
 
 
+def daily_limit(var_name: str) -> float | None:
+    """Return the daily standard limit for a station variable, if any."""
+    _, limit_key, _ = STATION_VAR_META[var_name]
+    if limit_key is None:
+        return None
+    return AQ_LIMITS_2026[limit_key].get("daily")
+
+
 def summarize_recent_station(
     *,
     region: RegionInfo,
@@ -170,60 +178,81 @@ def summarize_recent_station(
     dates: list[str],
     var_name: str,
     console: Console | None = None,
-) -> list[RecentDaily]:
-    """Read daily latest-hour station files and summarize each day."""
+) -> tuple[list[RecentDaily], RegionStationSeries | None]:
+    """Summarize each day from all of its available hourly station files.
+
+    A station's daily value is the mean of its valid hours that day; the
+    regional value is the mean over stations with at least one valid hour.
+    Days without any readable hourly file are reported as missing.
+    """
     if console is None:
         console = Console()
 
-    read_extent = buffered_extent(region.extent, 0.5)
-    threshold = get_exceedance_threshold(var_name)
-    out: list[RecentDaily] = []
+    console.print(f"[cyan]读取 {var_name} 站点逐时数据 (每日 24 个时次)...")
+    try:
+        series = read_region_station_series(
+            data_dir, dates, var_name, region.geometry
+        )
+    except (FileNotFoundError, ValueError) as error:
+        reason = str(error).splitlines()[0]
+        failed = [
+            RecentDaily(
+                date=d, ok=False, value=None, stats={}, meta={}, error=reason
+            )
+            for d in dates
+        ]
+        return failed, None
 
-    for d in track(
-        dates, description=f"[cyan]统计 {var_name} 站点最近数据..."
-    ):
-        try:
-            data, resolved_dt = read_stations(
-                data_dir, d, var_name, extent=read_extent
-            )
-            data = mask_stations_to_region(data, region.geometry)
-            vals = data.values[np.isfinite(data.values)]
-            stats = _array_stats(vals)
-            if not stats:
-                raise ValueError(f"{d} 区域内无有效站点")
-            meta: dict[str, Any] = {
-                "datetime": resolved_dt,
-                "n_stations": int(data.n_stations),
-                "n_valid": int(data.n_valid),
-            }
-            if threshold is not None:
-                meta["threshold"] = threshold
-                meta["n_exceed"] = int((vals > threshold).sum())
-                meta["exceed_rate_pct"] = round(
-                    100 * meta["n_exceed"] / len(vals), 1
-                )
-            out.append(
-                RecentDaily(
-                    date=d,
-                    ok=True,
-                    value=stats.get("mean"),
-                    stats=stats,
-                    meta=meta,
-                )
-            )
-        except (FileNotFoundError, ValueError, KeyError) as e:
+    limit = daily_limit(var_name)
+    unread = set(series.missing_files) | set(series.failed_files)
+    out: list[RecentDaily] = []
+    for index, d in enumerate(dates):
+        stamps = series.timestamps[index * 24 : (index + 1) * 24]
+        hours = sum(stamp not in unread for stamp in stamps)
+        block = series.values[:, index * 24 : (index + 1) * 24]
+        counts = np.isfinite(block).sum(axis=1)
+        sums = np.where(np.isfinite(block), block, 0.0).sum(axis=1)
+        station_means = np.full(series.n_stations, np.nan)
+        np.divide(sums, counts, out=station_means, where=counts > 0)
+        vals = station_means[np.isfinite(station_means)]
+        meta: dict[str, Any] = {
+            "hours": hours,
+            "n_stations": series.n_stations,
+            "n_valid": len(vals),
+        }
+        error = (
+            f"{d} 无可读取的站点文件"
+            if hours == 0
+            else f"{d} 区域内无有效站点"
+            if len(vals) == 0
+            else None
+        )
+        if error is not None:
             out.append(
                 RecentDaily(
                     date=d,
                     ok=False,
                     value=None,
                     stats={},
-                    meta={},
-                    error=str(e).splitlines()[0],
+                    meta=meta,
+                    error=error,
                 )
             )
-
-    return out
+            continue
+        stats = _array_stats(vals)
+        if limit is not None:
+            meta["threshold"] = limit
+            meta["n_exceed"] = int((vals > limit).sum())
+        out.append(
+            RecentDaily(
+                date=d,
+                ok=True,
+                value=stats.get("mean"),
+                stats=stats,
+                meta=meta,
+            )
+        )
+    return out, series
 
 
 def temporal_summary(daily: list[RecentDaily]) -> dict[str, Any]:

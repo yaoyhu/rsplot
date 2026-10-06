@@ -272,3 +272,11 @@ rejections failed (a single date silently used a 7-day default; a range
 silently ignored `--days`; recent defaulted to `o3`/`AQI`). The five
 product-to-station-variable default scenarios were replaced by a required
 `--station-var`, the removed `--var`, and an explicit GEMS HCHO pairing.
+
+Rule 4 (`recent --source station` daily values): the station fixtures now
+write 13:00 and 14:00 files. Against the unchanged application 4 of the 6
+new station scenarios failed (it used each day's latest hour, recorded no
+hour count, and counted exceedances against the hourly NO2 limit 200); the
+missing-day and no-files scenarios already held and now guard the rewrite.
+Each day is now the mean of all available hours; exceedances use the daily
+limit.

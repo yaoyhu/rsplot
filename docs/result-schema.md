@@ -153,7 +153,7 @@ source list is too long for JSON.
 | `vector_grid` | NetCDF4 | Same layout as `statistical_grid` with `value` = speed plus `u` and `v`. |
 | `station_table` | CSV | Overlay: every station read around the region with `id`, `lon`, `lat`, `admin`, `admin_level`, `value`, `valid`, `exceeds`, `in_region`, `satellite_value`, `colocated`. Radius: the stations in the square with the same columns plus `is_center`, `distance_km`, `dx_km`, `dy_km`; without `--station-var` only `id`, `lon`, `lat`, `admin`, `in_region` and the radius columns. |
 | `hourly_series` | NetCDF4 | `station_id`, `lon`, `lat` per station; `time` (CF hours since 1970-01-01 UTC) and `time_cst` (`YYYYMMDDHH` China time); `value(station, time)` with NaN gaps; region trends add `regional_mean(time)` and `n_stations(time)`. |
-| `daily_table` | CSV | `recent`: one row per requested day with `date`, `ok`, `value`, and `error`; satellite adds `n_valid`, `coverage_fraction`, `pixels`; station adds `hour`, `n_valid`, `n_stations`, `n_exceed`. |
+| `daily_table` | CSV | `recent`: one row per requested day with `date`, `ok`, `value`, and `error`; satellite adds `n_valid`, `coverage_fraction`, `pixels`; station adds `hours` (hourly files read that day), `n_valid`, `n_stations`, `n_exceed` (stations above `method.daily_limit`). |
 | `source_manifest` | CSV | Every input file with status and failure reason. |
 
 **Size.** The JSON itself stays small (typically under 64 KB) because it never

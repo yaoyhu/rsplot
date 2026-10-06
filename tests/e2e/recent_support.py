@@ -15,16 +15,21 @@ class RecentWorkspace(OverlayWorkspace):
         self.output = root / "output" / "recent.json"
         self.sidecar = self.output
 
-    def write_station_day(self, date: str, offset: float) -> None:
-        """At 13:00, S001A = 40 + offset and S002A = 80 + offset inside."""
-        self.write_stations(
-            f"{date}13",
-            (
-                ("S001A", 117.3, 31.3, 40.0 + offset),
-                ("S002A", 117.7, 31.7, 80.0 + offset),
-                ("S003A", 118.5, 31.5, 999.0),
-            ),
-        )
+    def write_station_day(
+        self, date: str, offset: float, hours=(13, 14)
+    ) -> None:
+        """Inside: S001A 40 + offset at 13:00 and 60 + offset at 14:00;
+        S002A 40 higher. S003A (999) is outside the region."""
+        for hour in hours:
+            step = 20.0 * (hour - 13)
+            self.write_stations(
+                f"{date}{hour:02d}",
+                (
+                    ("S001A", 117.3, 31.3, 40.0 + offset + step),
+                    ("S002A", 117.7, 31.7, 80.0 + offset + step),
+                    ("S003A", 118.5, 31.5, 999.0),
+                ),
+            )
 
     def recent(self, end: str, *options: str, source: str = "raster"):
         return self.invoke(

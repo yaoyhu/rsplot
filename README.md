@@ -295,7 +295,8 @@ TROPOMI selector.
 
 Station observations are always one concrete China-time hour, never a
 temporal mean. rsplot never picks the latest available hour and never falls
-back to another file.
+back to another file. (`recent --source station` is the exception: each day
+is the mean of all available hours, with the hour count in its CSV.)
 
 | Satellite request | Station hour |
 | --- | --- |

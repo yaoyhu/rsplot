@@ -73,9 +73,12 @@ The `recent` command writes JSON only (at `--output`, with `image` and
 `render` null) plus `<name>.daily.csv`; the other plotting commands write a PNG
 and a same-basename `.json` sidecar. Its `rsplot.result/2` layer is a daily
 `series` (`satellite` or `station`) with `temporal_summary` (window means,
-changes, trend). `--source station` still uses each day's latest available
-station hour, recorded as `method.station_hour` and the CSV `hour` column;
-this conflicts with CLI Conventions rule 4 and is to be fixed separately.
+changes, trend). `--source station` summarizes each China-time day from all
+of its available hourly files (`recent.summarize_recent_station` via
+`read_region_station_series`): a station's day is the mean of its valid
+hours, the regional day the mean over those stations. The CSV `hours` column
+counts the hourly files read; `method.daily_limit` is the variable's daily
+standard (NO2 80), never the hourly one, or null when there is none.
 
 ## CLI Conventions (Agent Contract)
 
@@ -98,7 +101,9 @@ introduce new code that violates them.
    back to another hour. Satellite dates and windows follow `raster`
    (`YYYYMMDD`, `YYYYMMDD-YYYYMMDD`, `--days`, `--n-min`, GEMS
    `YYYYMMDDHHMM`); TROPOMI stays daily. Station observations are always one
-   concrete hour, never a temporal mean.
+   concrete hour, never a temporal mean. The one exception is `recent
+   --source station`, whose daily value is explicitly the mean of all
+   available hours of that day.
 5. **Variable naming.** `--var` selects what the command is about.
    `--station-var` selects the station variable drawn alongside another
    layer. Each command documents what happens without `--station-var`:

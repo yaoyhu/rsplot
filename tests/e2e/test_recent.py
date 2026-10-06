@@ -134,7 +134,7 @@ class RecentE2E(unittest.TestCase):
         self.assertEqual(series(payload)["source"]["files_total"], 3)
 
     def test_user_summarizes_recent_station_days(self):
-        """Given three station days, when summarizing, then mean is 70."""
+        """Given two hours a day, when summarizing, then mean is 80."""
         self.station_days()
         payload = self.assert_summary(
             self.workspace.station_recent("20260103")
@@ -148,21 +148,67 @@ class RecentE2E(unittest.TestCase):
             ],
             ["station", "NO2", "ug/m3"],
         )
-        self.assertEqual(layer["stats"]["mean"], 70)
+        self.assertEqual(layer["stats"]["mean"], 80)
         self.assertEqual(
-            layer["method"]["station_hour"], "latest_available_per_day"
+            layer["method"]["station_daily_value"], "mean_of_available_hours"
         )
 
-    def test_user_sees_which_hour_each_station_day_used(self):
-        """Given 13:00 files, when summarizing, then record the hours."""
+    def test_user_reads_each_station_day(self):
+        """Given two hours a day, when summarizing, then days are means."""
         self.station_days()
         rows = self.table(
             self.assert_summary(self.workspace.station_recent("20260103"))
         )
         self.assertEqual(
-            [row["hour"] for row in rows],
-            ["2026010113", "2026010213", "2026010313"],
+            [(row["value"], row["hours"]) for row in rows],
+            [("70", "2"), ("80", "2"), ("90", "2")],
         )
+
+    def test_user_summarizes_a_day_with_missing_hours(self):
+        """Given only 13:00 on Jan 3, when summarizing, then use that hour."""
+        self.workspace.write_station_day("20260101", 0)
+        self.workspace.write_station_day("20260102", 10)
+        self.workspace.write_station_day("20260103", 20, hours=(13,))
+        rows = self.table(
+            self.assert_summary(self.workspace.station_recent("20260103"))
+        )
+        self.assertEqual(
+            [(row["value"], row["hours"]) for row in rows],
+            [("70", "2"), ("80", "2"), ("80", "1")],
+        )
+
+    def test_user_is_warned_about_a_day_without_station_files(self):
+        """Given no Jan 2 files, when summarizing, then that day is missing."""
+        self.workspace.write_station_day("20260101", 0)
+        self.workspace.write_station_day("20260103", 20)
+        payload = self.assert_summary(
+            self.workspace.station_recent("20260103")
+        )
+        self.assertEqual(series(payload)["coverage"]["valid"], 2)
+        self.assertEqual(flags(payload)["missing_days"], "warning")
+        self.assertEqual(
+            [row["ok"] for row in self.table(payload)], ["1", "0", "1"]
+        )
+
+    def test_user_counts_daily_exceedances_against_the_daily_limit(self):
+        """Given daily means 50-110, when summarizing, then one per day."""
+        self.station_days()
+        payload = self.assert_summary(
+            self.workspace.station_recent("20260103")
+        )
+        self.assertEqual(series(payload)["method"]["daily_limit"], 80)
+        self.assertEqual(
+            [row["n_exceed"] for row in self.table(payload)],
+            ["1", "1", "1"],
+        )
+
+    def test_user_is_told_no_station_files_exist(self):
+        """Given no station files, when summarizing, then grade it."""
+        payload = self.assert_summary(
+            self.workspace.station_recent("20260103")
+        )
+        self.assertEqual(series(payload)["coverage"]["valid"], 0)
+        self.assertEqual(flags(payload)["no_valid_data"], "critical")
 
     def test_user_is_told_nothing_was_found(self):
         """Given no swaths, when summarizing, then grade unreliable."""
