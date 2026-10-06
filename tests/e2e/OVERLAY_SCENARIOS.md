@@ -11,8 +11,9 @@ Every sidecar, successful or not, must validate against the shipped schema
 `station`. A rejected request exits nonzero, writes no PNG or data file, and
 writes only an error sidecar with the stated `error.code`.
 
-TROPOMI requests use DATE `20260101` and `--station-datetime 2026010113`
-unless a scenario says otherwise. Station fixtures place two stations inside
+TROPOMI requests use DATE `20260101`, `--station-datetime 2026010113` and
+`--station-var NO2` unless a scenario says otherwise; there is no
+product-to-station-variable default. Station fixtures place two stations inside
 `FixtureCity` (NO2 40 and 80) and one station in the adjacent `EastCity`
 (NO2 999) that must be excluded from statistics.
 
@@ -20,13 +21,11 @@ unless a scenario says otherwise. Station fixtures place two stations inside
 | --- | --- | --- | --- |
 | user overlays one TROPOMI day with stations | Two NO2 orbits on Jan 1 contain 2 and 4; the Jan 1 13:00 station file has two in-region stations | Overlay Jan 1 with station hour 2026010113 | A colored PNG; satellite daily Jan 1 mean 3 from 2 files; station hour 2026010113 with mean 60 from 2 stations |
 | user keeps observed satellite support while smoothing | One observed NO2 cell in a region too large for gap filling to cover | Overlay with --smooth 0 and --smooth 1.5 | Satellite valid cells, total cells and coverage fraction are identical |
-| user gets surface NO2 for NO2 columns | TROPOMI NO2 and a station file | Overlay NO2 without --var | Station quantity is NO2 |
-| user gets MDA8 ozone for total ozone | TROPOMI O3 and a station file | Overlay O3 without --var | Station quantity is O3_8h_24h |
-| user gets MDA8 ozone for profile ozone | TROPOMI O3PR and a station file | Overlay O3PR without --var | Station quantity is O3_8h_24h |
-| user gets MDA8 ozone for TROPOMI HCHO | TROPOMI HCHO and a station file | Overlay HCHO without --var | Station quantity is O3_8h_24h, not AQI |
-| user gets MDA8 ozone for GEMS HCHO | A GEMS HCHO scan and the matched station hour | Overlay the scan without --var | Station quantity is O3_8h_24h |
-| user selects a station variable explicitly | TROPOMI O3 and a station file | Overlay O3 with --var O3 | Station quantity is O3 |
-| user learns the station variable is unknown | TROPOMI data and a station file | Overlay with --var XYZ | Rejected with `invalid_argument` on option --var |
+| user must name the station variable | TROPOMI NO2 and a station file | Overlay without --station-var | Exit 2 reporting the missing --station-var; no output |
+| user cannot use the old station option | TROPOMI NO2 and a station file | Overlay with --var NO2 | Exit 2, "No such option"; no output |
+| user overlays a GEMS HCHO scan with MDA8 ozone | A GEMS HCHO scan and the matched station hour | Overlay the scan with --station-var O3_8h_24h | Station quantity is O3_8h_24h |
+| user selects a station variable explicitly | TROPOMI O3 and a station file | Overlay O3 with --station-var O3 | Station quantity is O3 |
+| user learns the station variable is unknown | TROPOMI data and a station file | Overlay with --station-var XYZ | Rejected with `invalid_argument` on option --station-var |
 | user rejects hourly TROPOMI dates | TROPOMI data and a station file | Supply DATE 2026010113 | Rejected with `invalid_time`, naming YYYYMMDD |
 | user names the station hour for a TROPOMI day | TROPOMI data and a station file | Overlay Jan 1 without --station-datetime | Rejected with `invalid_argument` on option --station-datetime |
 | user rejects a date-only station hour | TROPOMI data and a station file | Supply --station-datetime 20260101 | Rejected with `invalid_time` on option --station-datetime, naming YYYYMMDDHH |

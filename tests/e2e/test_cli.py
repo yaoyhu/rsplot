@@ -97,6 +97,165 @@ class CliE2E(unittest.TestCase):
             "raster", "FixtureCity", "20260101", "-o", "map.png"
         )
 
+    def assert_missing_option(self, option: str, *arguments: str) -> None:
+        output = str(self.workspace.output)
+        result = self.workspace.invoke(
+            *(output if item == "OUT" else item for item in arguments)
+        )
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn("Missing option", result.stdout + result.stderr)
+        self.assertIn(option, result.stdout + result.stderr)
+        self.assertFalse(self.workspace.output.parent.exists())
+
+    def test_user_must_give_raster_an_output(self):
+        """Given raster, when omitting --output, then exit 2 naming it."""
+        self.assert_missing_option(
+            "--output", "raster", "FixtureCity", "20260101", "--product", "no2"
+        )
+
+    def test_user_must_give_raster_a_product(self):
+        """Given raster, when omitting --product, then exit 2 naming it."""
+        self.assert_missing_option(
+            "--product", "raster", "FixtureCity", "20260101", "--output", "OUT"
+        )
+
+    def test_user_must_give_overlay_an_output(self):
+        """Given overlay, when omitting --output, then exit 2 naming it."""
+        self.assert_missing_option(
+            "--output",
+            "overlay",
+            "FixtureCity",
+            "20260101",
+            "--product",
+            "no2",
+            "--station-var",
+            "NO2",
+            "--station-datetime",
+            "2026010113",
+        )
+
+    def test_user_must_give_overlay_a_product(self):
+        """Given overlay, when omitting --product, then exit 2 naming it."""
+        self.assert_missing_option(
+            "--product",
+            "overlay",
+            "FixtureCity",
+            "20260101",
+            "--station-var",
+            "NO2",
+            "--station-datetime",
+            "2026010113",
+            "--output",
+            "OUT",
+        )
+
+    def test_user_must_give_radius_an_output(self):
+        """Given radius, when omitting --output, then exit 2 naming it."""
+        self.assert_missing_option(
+            "--output",
+            "radius",
+            "S001A",
+            "20260101",
+            "--km",
+            "10",
+            "--product",
+            "no2",
+        )
+
+    def test_user_must_give_radius_a_product(self):
+        """Given radius, when omitting --product, then exit 2 naming it."""
+        self.assert_missing_option(
+            "--product",
+            "radius",
+            "S001A",
+            "20260101",
+            "--km",
+            "10",
+            "--output",
+            "OUT",
+        )
+
+    def test_user_must_give_station_an_output(self):
+        """Given station, when omitting --output, then exit 2 naming it."""
+        self.assert_missing_option(
+            "--output", "station", "FixtureCity", "2026010113", "--var", "NO2"
+        )
+
+    def test_user_must_give_station_a_variable(self):
+        """Given station, when omitting --var, then exit 2 naming it."""
+        self.assert_missing_option(
+            "--var", "station", "FixtureCity", "2026010113", "--output", "OUT"
+        )
+
+    def test_user_must_give_trend_an_output(self):
+        """Given trend, when omitting --output, then exit 2 naming it."""
+        self.assert_missing_option(
+            "--output",
+            "trend",
+            "S001A",
+            "20260101",
+            "--days",
+            "1",
+            "--var",
+            "NO2",
+        )
+
+    def test_user_must_give_trend_a_variable(self):
+        """Given trend, when omitting --var, then exit 2 naming it."""
+        self.assert_missing_option(
+            "--var",
+            "trend",
+            "S001A",
+            "20260101",
+            "--days",
+            "1",
+            "--output",
+            "OUT",
+        )
+
+    def test_user_must_give_recent_an_output(self):
+        """Given recent, when omitting --output, then exit 2 naming it."""
+        self.assert_missing_option(
+            "--output",
+            "recent",
+            "FixtureCity",
+            "20260101",
+            "--days",
+            "3",
+            "--product",
+            "no2",
+        )
+
+    def test_user_must_give_recent_a_day_count(self):
+        """Given recent, when omitting --days, then exit 2 naming it."""
+        self.assert_missing_option(
+            "--days",
+            "recent",
+            "FixtureCity",
+            "20260101",
+            "--product",
+            "no2",
+            "--output",
+            "OUT",
+        )
+
+    def test_user_must_give_fnr_an_output(self):
+        """Given fnr, when omitting --output, then exit 2 naming it."""
+        self.assert_missing_option(
+            "--output", "fnr", "FixtureCity", "20260101", "--days", "3"
+        )
+
+    def test_user_must_give_meteo_an_output(self):
+        """Given meteo, when omitting --output, then exit 2 naming it."""
+        self.assert_missing_option(
+            "--output",
+            "meteo",
+            "FixtureCity",
+            "2026010113",
+            "--temp-level",
+            "2m",
+        )
+
     def test_user_cannot_point_raster_at_a_data_folder(self):
         """Given config paths, when passing --data-dir, then reject it."""
         self.assert_no_such_option(

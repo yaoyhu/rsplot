@@ -179,23 +179,27 @@ rsplot trend 重庆 20260520 --days 7 --var O3 --region --view mean \
 # time_cst labels, plus regional_mean and n_stations in region mode.
 
 # Overlay satellite raster data and station observations.
-rsplot overlay 合肥 20260414 --product no2 --station-datetime 2026041413 \
-  --output overlay_hefei_no2.png
+rsplot overlay 合肥 20260414 --product no2 --station-var NO2 \
+  --station-datetime 2026041413 --output overlay_hefei_no2.png
 
-# Plot an FNR regime map with the default 7-day window. The sidecar has
+# Plot an FNR regime map over the 7 days ending on a date. The sidecar has
 # no2, hcho and fnr layers (regime counts in the fnr layer's categories),
 # with fnr_hefei.no2.nc, fnr_hefei.hcho.nc and fnr_hefei.fnr.nc.
-rsplot fnr 合肥 20260114 --output fnr_hefei.png
+rsplot fnr 合肥 20260114 --days 7 --output fnr_hefei.png
 
 # Plot an FNR regime map with an explicit date range.
 rsplot fnr 长三角 20260101-20260130 --output fnr_yrd_202601.png
 
 # Override FNR regime thresholds for agent-driven sensitivity tests.
-rsplot fnr 合肥 20260114 --voc-threshold 0.8 --nox-threshold 1.8 --display-max 5 --output fnr_hefei_sensitivity.png
+rsplot fnr 合肥 20260114 --days 7 --voc-threshold 0.8 --nox-threshold 1.8 \
+  --display-max 5 --output fnr_hefei_sensitivity.png
 ```
 
-When `-o/--output` is provided, `rsplot` writes the image to that path and also
-writes a JSON sidecar with the same base name.
+`--output` is required. `rsplot` writes the image to that path and a JSON
+sidecar with the same base name. Nothing that selects data is implied:
+`--product` (satellite maps), `--var` (`station`, `trend`), `--station-var`
+(`overlay`) and the window length (`--days` with a single end date for
+`trend`, `fnr` and `recent`, or a `YYYYMMDD-YYYYMMDD` range) must be given.
 
 ### Result sidecars (`rsplot.result/2`)
 
@@ -301,12 +305,12 @@ back to another file.
 
 ```bash
 # TROPOMI 7-day NO2 mean with 13:00 China-time station observations.
-rsplot overlay 合肥 20260919 --product no2 --days 7 \
+rsplot overlay 合肥 20260919 --product no2 --days 7 --station-var NO2 \
   --station-datetime 2026091913 --output overlay_hefei_no2_week.png
 ```
 
-Without `--var`, `no2` pairs with station `NO2`, and `o3`, `o3pr` and `hcho`
-pair with `O3_8h_24h` (MDA8 O3). `--var` selects any other station variable.
+`--station-var` is required and names the station variable explicitly;
+there is no product-to-station-variable default.
 Satellite columns and station concentrations keep independent colorbars and
 units; the map shows spatial juxtaposition, not a column-to-surface
 conversion.
@@ -447,7 +451,8 @@ uv run rsplot raster \
 # The same daily satellite field with observations at 19:00 China time.
 uv run rsplot overlay \
   "中山市/东区街道,中山市/南区街道,中山市/石岐街道" 20260907 \
-  --sensor gems --product o3pr --station-datetime 2026090719 \
+  --sensor gems --product o3pr --station-var O3_8h_24h \
+  --station-datetime 2026090719 \
   --cf 1 --res 0.075 --smooth 0 --basemap none \
   --output ./logs/zhongshan/three_streets_overlay.png
 ```
@@ -538,7 +543,7 @@ rsplot raster 安徽 20260918 --product no2 --processing nrti \
   --basemap none --output /tmp/anhui_no2_nrti.png
 
 rsplot overlay 安徽 20260918 --product no2 --processing nrti \
-  --station-datetime 2026091812 --basemap none --output /tmp/anhui_no2_nrti_overlay.png
+  --station-var NO2 --station-datetime 2026091812 --basemap none --output /tmp/anhui_no2_nrti_overlay.png
 
 rsplot radius 1379A 20260918 --km 20 --product no2 --processing nrti \
   --station-var NO2 --station-datetime 2026091812 \
@@ -628,7 +633,7 @@ rsplot recent 安徽 20260902 --days 2 --source raster --sensor gems --product n
 
 # 11:45 China-time scan with observations at the nearest hour, 12:00.
 rsplot overlay 安徽 202609011145 --sensor gems --product no2 \
-  --basemap none --output /tmp/gems_no2_overlay.png
+  --station-var NO2 --basemap none --output /tmp/gems_no2_overlay.png
 # Use --station-datetime YYYYMMDDHH for an intentional time override.
 ```
 

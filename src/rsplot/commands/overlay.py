@@ -19,14 +19,6 @@ if TYPE_CHECKING:
     from rich.console import Console
 
 
-# Default station variable for each satellite product.
-PRODUCT_STATION_PAIR = {
-    "no2": "NO2",
-    "o3": "O3_8h_24h",
-    "o3pr": "O3_8h_24h",
-    "hcho": "O3_8h_24h",
-}
-
 # Keyword argument -> CLI spellings, for recording where values came from.
 OVERLAY_OPTIONS = {
     "sensor": ("--sensor",),
@@ -35,7 +27,7 @@ OVERLAY_OPTIONS = {
     "days": ("--days",),
     "n_min": ("--n-min",),
     "station_datetime": ("--station-datetime",),
-    "var": ("--var",),
+    "station_var": ("--station-var",),
     "level": ("--level",),
     "output": ("--output",),
     "dpi": ("--dpi",),
@@ -137,9 +129,9 @@ def _emit_overlay(
     days: int | None = None,
     n_min: int | None = None,
     station_datetime: str | None = None,
-    var: str | None,
+    station_var: str,
     level: str | None,
-    output: str | None,
+    output: str,
     dpi: int | None,
     res: float | None,
     basemap: str | None,
@@ -187,14 +179,12 @@ def _emit_overlay(
         date_arg, sensor, days, n_min, station_datetime
     )
 
-    var_given = var is not None
-    if var is None:
-        var = PRODUCT_STATION_PAIR[product.lower()]
-    if var not in STATION_VAR_META:
+    if station_var not in STATION_VAR_META:
         raise RsplotError(
             "invalid_argument",
-            f"未知站点变量 '{var}'。可用: {', '.join(STATION_VAR_META)}",
-            option="--var",
+            f"未知站点变量 '{station_var}'。"
+            f"可用: {', '.join(STATION_VAR_META)}",
+            option="--station-var",
         )
 
     try:
@@ -208,11 +198,11 @@ def _emit_overlay(
 
     use_station_dir = cfg.get_data_dir("guokong")
     console.print(f"\n[bold]读取站点数据:[/bold] {use_station_dir}")
-    console.print(f"  时间: {station_hour} 北京时间, 变量: {var}")
+    console.print(f"  时间: {station_hour} 北京时间, 变量: {station_var}")
     read, _ = read_stations(
         use_station_dir,
         station_hour,
-        var,
+        station_var,
         extent=buffered_extent(info.extent, 0.5),
     )
     from shapely import contains_xy
@@ -222,29 +212,22 @@ def _emit_overlay(
     console.print(
         f"  → [green]{n_valid}[/green] 有效站点 (共 {int(in_region.sum())} 站)"
     )
-    threshold = get_exceedance_threshold(var)
-    unit, limit_key, limit_time = STATION_VAR_META[var]
+    threshold = get_exceedance_threshold(station_var)
+    unit, limit_key, limit_time = STATION_VAR_META[station_var]
 
     source = "GEMS" if sensor == "gems" else "TROPOMI"
     if processing == "nrti":
         source += " NRTI"
     if window_mode:
         period = f"{dates[0]}~{dates[-1]} mean"
-        period_name = f"{dates[0]}_{dates[-1]}"
     else:
         period = date_arg
-        period_name = date_arg
         if sensor == "gems":
             period += " CST scan" if len(date_arg) == 12 else " CST daily mean"
-    if output is None:
-        output = (
-            f"/tmp/rsplot_overlay_{source.lower().replace(' ', '_')}_"
-            f"{info.name}_{product}_{period_name}_{station_hour}.png"
-        )
     if title is None:
         title = (
             f"{source} {product.upper()} {period} + "
-            f"Station {var} {station_hour} CST - {info.name}"
+            f"Station {station_var} {station_hour} CST - {info.name}"
         )
 
     run = prepare_raster(
@@ -297,7 +280,7 @@ def _emit_overlay(
     station_inputs = StationInputs(
         read=read,
         in_region=in_region,
-        var=var,
+        var=station_var,
         unit=unit,
         threshold=threshold,
         standard=(
@@ -351,7 +334,7 @@ def _emit_overlay(
         region_stations,
         info,
         station_threshold=threshold,
-        station_label=f"{var} ({unit})" if unit else var,
+        station_label=f"{station_var} ({unit})" if unit else station_var,
         **plot_options,
     )
 
@@ -366,11 +349,7 @@ def _emit_overlay(
     request.pop("data_dir", None)
     request["raster_dir"] = resolved(satellite_inputs.data_root, "config")
     request["station_dir"] = resolved(str(use_station_dir), "config")
-    request["station_var"] = (
-        resolved(var, "cli")
-        if var_given
-        else resolved(var, "product_default", "station pairing")
-    )
+    request["station_var"] = resolved(station_var, "cli")
     request["station_datetime"] = (
         resolved(station_hour, "cli")
         if station_datetime is not None

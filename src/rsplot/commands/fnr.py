@@ -9,6 +9,7 @@ import numpy as np
 
 from rsplot.commands.common import (
     parse_basemap,
+    parse_explicit_window,
     print_failed_dates,
     resolve_satellite,
     validate_non_negative,
@@ -62,14 +63,14 @@ def _emit_fnr(
     *,
     region: str,
     date_arg: str,
-    days: int,
+    days: int | None,
     n_min: int | None,
     no2_min: float,
     voc_threshold: float,
     nox_threshold: float,
     display_max: float,
     level: str | None,
-    output: str | None,
+    output: str,
     dpi: int | None,
     res: float | None,
     basemap: str | None,
@@ -111,7 +112,6 @@ def _emit_fnr(
         SatelliteInputs,
         build_satellite_layer,
     )
-    from rsplot.temporal import parse_date_window
 
     cfg = AppConfig.load()
     no2_info, _ = resolve_satellite(
@@ -123,14 +123,7 @@ def _emit_fnr(
     processing = no2_info.processing
     setup_fonts(cfg.font_dir)
 
-    if days < 1:
-        raise RsplotError(
-            "invalid_argument", "--days 必须 >= 1。", option="--days"
-        )
-    try:
-        dates = parse_date_window(date_arg, default_days=days)
-    except ValueError as error:
-        raise RsplotError("invalid_time", str(error)) from error
+    dates = parse_explicit_window(date_arg, days)
 
     window_n = len(dates)
     if n_min is not None and n_min < 1:
@@ -275,11 +268,6 @@ def _emit_fnr(
         f"[blue]NOx-limited {percentages['nox_limited']}%[/blue]"
     )
 
-    if output is None:
-        prefix = "nrti_" if processing else ""
-        output = (
-            f"/tmp/rsplot_fnr_{prefix}{info.name}_{dates[0]}_{dates[-1]}.png"
-        )
     if title is None and processing == "nrti":
         title = f"TROPOMI NRTI FNR - {info.name}"
     # The renderer's default title, recorded so the sidecar states it.
@@ -570,7 +558,7 @@ def _emit_fnr(
     request = {
         "region": resolved(region, "cli"),
         "date": resolved(date_arg, "cli"),
-        "days": source_of("days", days, "built_in"),
+        "days": resolved(days, "cli") if days is not None else None,
         "n_min": source_of("n_min", use_n_min, "built_in"),
         "no2_min": source_of("no2_min", no2_min, "built_in"),
         "voc_threshold": source_of(

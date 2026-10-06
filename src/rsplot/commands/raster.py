@@ -229,7 +229,7 @@ def prepare_raster(
     days: int | None,
     n_min: int | None,
     level: str | None,
-    output: str | None,
+    output: str,
     dpi: int | None,
     res: float | None,
     basemap: str | None,
@@ -579,8 +579,6 @@ def prepare_raster(
 
     if processing == "nrti":
         period = f"{dates[0]}_{dates[-1]}" if window_mode else date_arg
-        if output is None:
-            output = f"/tmp/rsplot_nrti_{product}_{info.name}_{period}.png"
         if title is None:
             label = " mean" if window_mode else ""
             title = (
@@ -588,14 +586,6 @@ def prepare_raster(
                 f"({period}{label})"
             )
 
-    if output is None and sensor == "gems":
-        suffix = f"{dates[0]}_{dates[-1]}" if window_mode else date_arg
-        output = f"/tmp/rsplot_gems_{product}_{info.name}_{suffix}.png"
-    if output is None:
-        if window_mode:
-            output = f"/tmp/rsplot_{info.name}_{dates[0]}_{dates[-1]}.png"
-        else:
-            output = f"/tmp/rsplot_{info.name}_{dates[0]}.png"
     if title is None and sensor == "gems":
         period = (
             f"{dates[0]}~{dates[-1]} mean"

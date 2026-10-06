@@ -14,13 +14,19 @@ class FnrWorkspace(RasterWorkspace):
             self.write_swath(date, no2, product="no2")
             self.write_swath(date, hcho, product="hcho")
 
-    def fnr(self, end: str, *options: str, region: str = "FixtureCity"):
+    def fnr(
+        self,
+        end: str,
+        *options: str,
+        region: str = "FixtureCity",
+        days: str | None = "3",
+    ):
+        window = () if days is None else ("--days", days)
         return self.invoke(
             "fnr",
             region,
             end,
-            "--days",
-            "3",
+            *window,
             "--res",
             "0.25",
             "--smooth",

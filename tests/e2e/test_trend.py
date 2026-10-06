@@ -229,6 +229,37 @@ class TrendE2E(unittest.TestCase):
             "--view",
         )
 
+    def test_user_names_the_window_for_a_single_date(self):
+        """Given one end date, when omitting --days, then reject it."""
+        self.workspace.write_hours("20260101")
+        self.assert_rejected(
+            self.workspace.trend("S001A", "20260101", days=None),
+            "--days",
+            "invalid_argument",
+            "--days",
+        )
+
+    def test_user_plots_an_explicit_date_range(self):
+        """Given a date range, when omitting --days, then plot the range."""
+        self.workspace.write_hours("20260101")
+        payload = self.assert_plot(
+            self.workspace.trend("S001A", "20260101-20260101", days=None)
+        )
+        self.assertEqual(
+            [payload["layers"][0]["time"][k] for k in ("start", "end")],
+            ["20260101", "20260101"],
+        )
+
+    def test_user_cannot_combine_a_date_range_with_days(self):
+        """Given a date range, when adding --days, then reject it."""
+        self.workspace.write_hours("20260101")
+        self.assert_rejected(
+            self.workspace.trend("S001A", "20260101-20260101"),
+            "--days",
+            "invalid_argument",
+            "--days",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

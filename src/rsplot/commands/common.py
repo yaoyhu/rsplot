@@ -41,6 +41,38 @@ def parse_basemap(value: str | None) -> bool | None:
     raise ValueError("--basemap 仅支持 satellite / none。")
 
 
+def parse_explicit_window(date_arg: str, days: int | None) -> list[str]:
+    """Return the dates of a window whose length is stated explicitly.
+
+    The window is either a ``YYYYMMDD-YYYYMMDD`` range or an end date
+    ``YYYYMMDD`` with ``--days``; a single date alone is rejected.
+    """
+    from rsplot.temporal import parse_date_window
+
+    if days is not None and days < 1:
+        raise RsplotError(
+            "invalid_argument", "--days 必须 >= 1。", option="--days"
+        )
+    if "-" in date_arg and days is not None:
+        raise RsplotError(
+            "invalid_argument",
+            "日期区间不能与 --days 同时使用；"
+            "请选择 YYYYMMDD-YYYYMMDD 或结束日期 YYYYMMDD 配合 --days N。",
+            option="--days",
+        )
+    if "-" not in date_arg and days is None:
+        raise RsplotError(
+            "invalid_argument",
+            "单日 DATE 需要 --days N 指定窗口长度，"
+            "或使用日期区间 YYYYMMDD-YYYYMMDD。",
+            option="--days",
+        )
+    try:
+        return parse_date_window(date_arg, default_days=days or 0)
+    except ValueError as error:
+        raise RsplotError("invalid_time", str(error)) from error
+
+
 def validate_positive(value: float, option: str) -> None:
     """Require a finite value greater than zero."""
     if not math.isfinite(value) or value <= 0:

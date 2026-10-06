@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from rsplot.commands.common import validate_positive
+from rsplot.commands.common import parse_explicit_window, validate_positive
 from rsplot.config import AppConfig
 from rsplot.errors import RsplotError
 
@@ -54,14 +54,14 @@ def _emit_trend(
     *,
     target: str,
     date_arg: str,
-    days: int,
+    days: int | None,
     var: str,
     region_mode: bool,
     view: str,
     focus_station_ids: list[str] | None,
     threshold: float | None,
     level: str | None,
-    output: str | None,
+    output: str,
     dpi: int | None,
     title: str | None,
     console: Console,
@@ -88,12 +88,7 @@ def _emit_trend(
         region_series_layers,
         station_series_layer,
     )
-    from rsplot.temporal import parse_date_window
 
-    if days < 1:
-        raise RsplotError(
-            "invalid_argument", "--days 必须 >= 1", option="--days"
-        )
     if var not in STATION_VAR_META:
         raise RsplotError(
             "invalid_argument",
@@ -132,10 +127,7 @@ def _emit_trend(
             option="--threshold",
         )
 
-    try:
-        dates = parse_date_window(date_arg, default_days=days)
-    except ValueError as error:
-        raise RsplotError("invalid_time", str(error)) from error
+    dates = parse_explicit_window(date_arg, days)
     requested_focus_ids = _normalize_focus_ids(focus_station_ids or [])
 
     cfg = AppConfig.load()
@@ -177,7 +169,6 @@ def _emit_trend(
             data_dir=use_data_dir,
             console=console,
         )
-        name = trend.station_id
         default_title = f"站点 {trend.station_id} · {var}"
     else:
         trend = _read_region_trend(
@@ -190,17 +181,13 @@ def _emit_trend(
             view=use_view,
             console=console,
         )
-        name = info.name
         default_title = f"{info.name} · {var} 站点趋势"
         canonical_focus_ids = _resolve_focus_ids(trend, requested_focus_ids)
         if canonical_focus_ids:
             console.print(f"  → 重点站: {', '.join(canonical_focus_ids)}")
 
-    use_output = output or (
-        f"/tmp/rsplot_trend_{name}_{var}_{dates[0]}_{dates[-1]}.png"
-    )
     use_title = title or default_title
-    image = str(Path(use_output).resolve())
+    image = str(Path(output).resolve())
     sidecar = sidecar_path(image)
 
     root = str(use_data_dir)
@@ -327,7 +314,7 @@ def _emit_trend(
     request = {
         "target": resolved(target, "cli"),
         "date": resolved(date_arg, "cli"),
-        "days": source_of("days", days, "built_in"),
+        "days": resolved(days, "cli") if days is not None else None,
         "var": source_of("var", var, "built_in"),
         "region_mode": source_of("region_mode", region_mode, "built_in"),
         "view": source_of("view", use_view, "built_in"),
@@ -347,7 +334,7 @@ def _emit_trend(
             else None
         ),
         "data_dir": resolved(root, "config"),
-        "output": source_of("output", use_output, "built_in"),
+        "output": source_of("output", output, "built_in"),
         "dpi": source_of("dpi", use_dpi, "built_in"),
         "title": source_of("title", use_title, "built_in"),
     }

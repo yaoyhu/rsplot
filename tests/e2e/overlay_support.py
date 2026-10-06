@@ -48,11 +48,14 @@ class OverlayWorkspace(RasterWorkspace):
         date: str,
         *options: str,
         station: str | None = "2026010113",
+        station_var: str | None = "NO2",
         region: str = "FixtureCity",
     ):
         station_options = (
             () if station is None else ("--station-datetime", station)
         )
+        if station_var is not None:
+            station_options += ("--station-var", station_var)
         return self.invoke(
             "overlay",
             region,

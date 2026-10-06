@@ -8,7 +8,9 @@ Data paths come from configuration only (CLI rule 1). The fixture config
 lists every data folder under `[paths.data_dirs]`. Typer rejects an unknown
 option with exit status 2 before rsplot runs, so no sidecar is written.
 
-Options have long names only (CLI rule 2).
+Options have long names only (CLI rule 2). Nothing that selects data is
+implicit (CLI rule 3): `--output` is required everywhere, `--product` for
+the satellite maps, `--var` for station and trend, and `--days` for recent.
 
 | Scenario | Given | When | Then |
 | --- | --- | --- | --- |
@@ -37,3 +39,17 @@ Options have long names only (CLI rule 2).
 | user sees only long options for fnr | CLI is installed | Request `fnr --help` | No single-letter option |
 | user sees only long options for meteo | CLI is installed | Request `meteo --help` | No single-letter option |
 | user cannot use a former alias | CLI is installed | Run `raster ... -o map.png` | Exit 2, "No such option", no output |
+| user must give raster an output | CLI is installed | Run `raster` without `--output` | Exit 2, "Missing option" naming `--output`, no output |
+| user must give raster a product | CLI is installed | Run `raster` without `--product` | Exit 2, "Missing option" naming `--product`, no output |
+| user must give overlay an output | CLI is installed | Run `overlay` without `--output` | Exit 2, "Missing option" naming `--output`, no output |
+| user must give overlay a product | CLI is installed | Run `overlay` without `--product` | Exit 2, "Missing option" naming `--product`, no output |
+| user must give radius an output | CLI is installed | Run `radius` without `--output` | Exit 2, "Missing option" naming `--output`, no output |
+| user must give radius a product | CLI is installed | Run `radius` without `--product` | Exit 2, "Missing option" naming `--product`, no output |
+| user must give station an output | CLI is installed | Run `station` without `--output` | Exit 2, "Missing option" naming `--output`, no output |
+| user must give station a variable | CLI is installed | Run `station` without `--var` | Exit 2, "Missing option" naming `--var`, no output |
+| user must give trend an output | CLI is installed | Run `trend` without `--output` | Exit 2, "Missing option" naming `--output`, no output |
+| user must give trend a variable | CLI is installed | Run `trend` without `--var` | Exit 2, "Missing option" naming `--var`, no output |
+| user must give recent an output | CLI is installed | Run `recent` without `--output` | Exit 2, "Missing option" naming `--output`, no output |
+| user must give recent a day count | CLI is installed | Run `recent` without `--days` | Exit 2, "Missing option" naming `--days`, no output |
+| user must give fnr an output | CLI is installed | Run `fnr` without `--output` | Exit 2, "Missing option" naming `--output`, no output |
+| user must give meteo an output | CLI is installed | Run `meteo` without `--output` | Exit 2, "Missing option" naming `--output`, no output |

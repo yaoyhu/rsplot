@@ -66,7 +66,7 @@ def _emit_meteo(
     wind_level: str | None,
     station_var: str | None,
     level: str | None,
-    output: str | None,
+    output: str,
     dpi: int | None,
     basemap: str | None,
     cmap: str | None,
@@ -285,15 +285,6 @@ def _emit_meteo(
         station_var=station_var,
         wind_level=wind.level if wind is not None else None,
     )
-    if output is None:
-        layer_suffix = _output_layer_suffix(
-            temp_level=field.level if field is not None else None,
-            station_var=station_var,
-            wind_level=wind.level if wind is not None else None,
-        )
-        output = (
-            f"/tmp/rsplot_meteo_{info.name}_{layer_suffix}_{datetime_str}.png"
-        )
     image = str(Path(output).resolve())
     sidecar = sidecar_path(image)
 
@@ -754,27 +745,6 @@ def _default_title(
     if wind_level is not None:
         layers.append(f"{_level_label(wind_level)} 风场")
     return f"{' + '.join(layers)} - {region} - {datetime_str}"
-
-
-def _output_layer_suffix(
-    *,
-    temp_level: str | None,
-    station_var: str | None,
-    wind_level: str | None,
-) -> str:
-    if temp_level is not None:
-        suffix = f"temperature_{temp_level}"
-    elif station_var is not None:
-        suffix = f"station_{station_var}"
-    else:
-        suffix = f"wind_{wind_level}"
-    if station_var is not None and temp_level is not None:
-        suffix += f"_station_{station_var}"
-    if wind_level is not None and (
-        temp_level is not None or station_var is not None
-    ):
-        suffix += f"_wind{wind_level}"
-    return suffix
 
 
 def _level_label(level: str) -> str:

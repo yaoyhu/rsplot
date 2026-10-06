@@ -43,8 +43,8 @@ preparation path. Its `rsplot.result/2` sidecar has `satellite` and
 `relations.colocation` (stations in valid satellite cells, Spearman with at
 least 3 pairs, always `comparable_units: false`); the station CSV lists every
 station read with `in_region`, `satellite_value` and `colocated`.
-Default station variables are `NO2` for `no2` and `O3_8h_24h` for `o3`,
-`o3pr`, and `hcho`; `--var` overrides them.
+The station variable is the required `--station-var`; there is no
+product-to-station-variable default.
 The `meteo` command is the sole ERA5 wind-map entry point. It draws temperature,
 black wind arrows, station observations plus wind, or all three layers. Wind
 magnitude is encoded by arrow length and a reference arrow; wind has no
@@ -57,8 +57,9 @@ resultant direction and components in `vector_summary`) and `station`
 layers as requested, each with a data file (`<name>.wind.nc` holds `value`
 = speed, `u`, `v`); `relations.time_matching` pairs `wind` and `station` with
 `same_hour`. Wind drawing settings are under `render.layers.wind`.
-The `trend` command plots hourly lines over a trailing or explicit date
-window. Its default mode targets one station ID; `--region` switches TARGET
+The `trend` command plots hourly lines over an explicit window: an end
+date with `--days`, or a `YYYYMMDD-YYYYMMDD` range (never both; `fnr`
+uses the same rule through `commands.common.parse_explicit_window`). Its default mode targets one station ID; `--region` switches TARGET
 to an administrative region and plots grey station lines plus the hourly
 regional station mean. `--focus-station` may be repeated to highlight explicit
 stations, and `--view mean` hides the grey background lines. Missing hours
@@ -372,8 +373,9 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
   `RasterRun.satellite`; the old raster JSON block is gone. `raster`,
   `overlay` and `radius` run through `commands.sidecar.run_with_sidecar`,
   which writes the error sidecar and removes partial outputs.
-- Many CLI commands use `/tmp/...` default outputs when `--output` is omitted.
-  Prefer explicit `--output` paths in examples, tests, and agent workflows.
+- `--output` is required by every enabled command; there are no default
+  output paths. Typer rejects a missing required option with exit 2 before
+  rsplot runs, so no sidecar is written for it.
 - ERA5 files are indexed in UTC. `meteo` input and station hours are fixed to
   `Asia/Shanghai`, and rsplot converts that hour to the matching ERA5 UTC
   archive time.

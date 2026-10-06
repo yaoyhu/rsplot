@@ -112,48 +112,26 @@ class OverlayE2E(unittest.TestCase):
             ],
         )
 
-    def test_user_gets_surface_no2_for_no2_columns(self):
-        """Given NO2 columns, when omitting --var, then stations show NO2."""
+    def test_user_must_name_the_station_variable(self):
+        """Given stations, when omitting --station-var, then exit 2."""
         self.workspace.write_swath("20260101", 4)
         self.workspace.write_stations("2026010113")
-        payload = self.assert_plot(self.workspace.overlay("20260101"))
-        self.assertEqual(layer(payload, "station")["quantity"]["name"], "NO2")
+        result = self.workspace.overlay("20260101", station_var=None)
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn("--station-var", result.stdout + result.stderr)
+        self.assertFalse(self.workspace.output.parent.exists())
 
-    def test_user_gets_mda8_ozone_for_total_ozone(self):
-        """Given total ozone, when omitting --var, then stations show MDA8."""
-        self.workspace.write_swath("20260101", 300, product="o3")
+    def test_user_cannot_use_the_old_station_option(self):
+        """Given stations, when passing --var, then reject the option."""
+        self.workspace.write_swath("20260101", 4)
         self.workspace.write_stations("2026010113")
-        payload = self.assert_plot(
-            self.workspace.overlay("20260101", "--product", "o3")
-        )
-        self.assertEqual(
-            layer(payload, "station")["quantity"]["name"], "O3_8h_24h"
-        )
+        result = self.workspace.overlay("20260101", "--var", "NO2")
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn("No such option", result.stdout + result.stderr)
+        self.assertFalse(self.workspace.output.parent.exists())
 
-    def test_user_gets_mda8_ozone_for_profile_ozone(self):
-        """Given profile ozone, when omitting --var, then stations show MDA8."""
-        self.workspace.write_swath("20260101", 30, product="o3pr")
-        self.workspace.write_stations("2026010113")
-        payload = self.assert_plot(
-            self.workspace.overlay("20260101", "--product", "o3pr")
-        )
-        self.assertEqual(
-            layer(payload, "station")["quantity"]["name"], "O3_8h_24h"
-        )
-
-    def test_user_gets_mda8_ozone_for_tropomi_hcho(self):
-        """Given TROPOMI HCHO, when omitting --var, then stations show MDA8."""
-        self.workspace.write_swath("20260101", 6, product="hcho")
-        self.workspace.write_stations("2026010113")
-        payload = self.assert_plot(
-            self.workspace.overlay("20260101", "--product", "hcho")
-        )
-        self.assertEqual(
-            layer(payload, "station")["quantity"]["name"], "O3_8h_24h"
-        )
-
-    def test_user_gets_mda8_ozone_for_gems_hcho(self):
-        """Given a GEMS HCHO scan, when omitting --var, then use MDA8."""
+    def test_user_overlays_a_gems_hcho_scan_with_mda8_ozone(self):
+        """Given a GEMS HCHO scan, when naming MDA8 ozone, then show it."""
         self.workspace.write_gems_scan("202601010400", 6, product="hcho")
         self.workspace.write_stations("2026010112")
         payload = self.assert_plot(
@@ -164,6 +142,7 @@ class OverlayE2E(unittest.TestCase):
                 "--product",
                 "hcho",
                 station=None,
+                station_var="O3_8h_24h",
             )
         )
         self.assertEqual(
@@ -171,25 +150,25 @@ class OverlayE2E(unittest.TestCase):
         )
 
     def test_user_selects_a_station_variable_explicitly(self):
-        """Given total ozone, when supplying --var O3, then stations show O3."""
+        """Given total ozone, when naming O3, then stations show O3."""
         self.workspace.write_swath("20260101", 300, product="o3")
         self.workspace.write_stations("2026010113")
         payload = self.assert_plot(
             self.workspace.overlay(
-                "20260101", "--product", "o3", "--var", "O3"
+                "20260101", "--product", "o3", station_var="O3"
             )
         )
         self.assertEqual(layer(payload, "station")["quantity"]["name"], "O3")
 
     def test_user_learns_the_station_variable_is_unknown(self):
-        """Given an unknown variable, when overlaying, then reject --var."""
+        """Given an unknown variable, when overlaying, then reject it."""
         self.workspace.write_swath("20260101", 4)
         self.workspace.write_stations("2026010113")
         self.assert_rejected(
-            self.workspace.overlay("20260101", "--var", "XYZ"),
+            self.workspace.overlay("20260101", station_var="XYZ"),
             "XYZ",
             "invalid_argument",
-            "--var",
+            "--station-var",
         )
 
     def test_user_rejects_hourly_tropomi_dates(self):

@@ -176,13 +176,11 @@ def _emit_radius(
                 option="--station-var",
             )
     options = {
-        "product": "o3",
         "sensor": "tropomi",
         "processing": None,
         "days": None,
         "n_min": None,
         "level": None,
-        "output": None,
         "dpi": 300,
         "res": None,
         "basemap": "none",
@@ -274,21 +272,6 @@ def _emit_radius(
         n_valid=int(np.isfinite(values[selected]).sum()),
     )
     source_label = prod.sensor.upper() + (" NRTI" if prod.processing else "")
-    source_name = prod.sensor + ("_nrti" if prod.processing else "")
-    period = f"{dates[0]}~{dates[-1]}" if window_mode else date_arg
-    if options["output"] is None:
-        suffix = (
-            f"_{station_var}_{locations.datetime}"
-            if station_var
-            else "_positions"
-        )
-        options["output"] = str(
-            Path("/tmp")
-            / (
-                f"rsplot_radius_{station_id}_{source_name}_"
-                f"{options['product']}_{period}_{km:g}km{suffix}.png"
-            )
-        )
     if options["title"] is None:
         pretty_period = (
             f"{dates[0][:4]}-{dates[0][4:6]}-{dates[0][6:]} ~ "

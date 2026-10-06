@@ -30,6 +30,8 @@ offsets d = 0, 10, 20 and an outside station at 999.
 | user rejects GEMS for station summaries | Three daily station files | Station summary with --sensor gems | Rejected with `invalid_argument` on option --sensor |
 | user learns the station variable is unknown | Three daily station files | Station summary with --var XYZ | Rejected with `invalid_argument` on option --var |
 | user learns the region does not exist | Three daily swaths | Summarize region Atlantis | Rejected with `region_not_found` |
+| user names the product for satellite summaries | Three daily swaths | Summarize with --source raster and no --product | Rejected with `invalid_argument` on option --product |
+| user names the variable for station summaries | Three daily station files | Summarize with --source station and no --var | Rejected with `invalid_argument` on option --var |
 
 For suspected bugs, run the corresponding scenario against the unchanged
 application and record the failure before applying a fix.

@@ -221,6 +221,37 @@ class FnrE2E(unittest.TestCase):
             "region_not_found",
         )
 
+    def test_user_names_the_window_for_a_single_date(self):
+        """Given one end date, when omitting --days, then reject it."""
+        self.workspace.write_days(2, 6)
+        self.assert_rejected(
+            self.workspace.fnr("20260103", days=None),
+            "--days",
+            "invalid_argument",
+            "--days",
+        )
+
+    def test_user_maps_an_explicit_date_range(self):
+        """Given a date range, when omitting --days, then map the range."""
+        self.workspace.write_days(2, 6)
+        payload = self.assert_plot(
+            self.workspace.fnr("20260101-20260103", days=None)
+        )
+        self.assertEqual(
+            [layer(payload, "fnr")["time"][k] for k in ("start", "end")],
+            ["20260101", "20260103"],
+        )
+
+    def test_user_cannot_combine_a_date_range_with_days(self):
+        """Given a date range, when adding --days, then reject it."""
+        self.workspace.write_days(2, 6)
+        self.assert_rejected(
+            self.workspace.fnr("20260101-20260103"),
+            "--days",
+            "invalid_argument",
+            "--days",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

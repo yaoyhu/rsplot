@@ -262,3 +262,13 @@ one rejected former alias) failed against the unchanged application. The 29
 aliases were removed from `cli.py` and from each command's option table.
 The help check also caught `-p`/`-o` in the usage examples printed by
 `raster`, `overlay`, `station` and `recent` help; those now use long names.
+
+Rule 3 (nothing that selects data is implicit): 14 CLI scenarios for a
+missing `--output`, `--product`, `--var` or `--days`, plus overlay, trend,
+FNR and recent scenarios, were written first. Against the unchanged
+application all 14 CLI scenarios failed, every overlay scenario failed (no
+`--station-var` option), and the trend, FNR and recent window/selection
+rejections failed (a single date silently used a 7-day default; a range
+silently ignored `--days`; recent defaulted to `o3`/`AQI`). The five
+product-to-station-variable default scenarios were replaced by a required
+`--station-var`, the removed `--var`, and an explicit GEMS HCHO pairing.

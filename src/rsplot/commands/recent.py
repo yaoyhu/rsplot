@@ -79,12 +79,12 @@ def _emit_recent(
     end_date: str,
     days: int,
     source: str,
-    product: str,
+    product: str | None,
     sensor: str = "tropomi",
     processing: str | None = None,
-    var: str,
+    var: str | None,
     level: str | None,
-    output: str | None,
+    output: str,
     res: float | None,
     qa: float | None,
     cf: float = 0.5,
@@ -123,6 +123,18 @@ def _emit_recent(
             "invalid_argument",
             "--source 仅支持 raster / station",
             option="--source",
+        )
+    if use_source == "raster" and product is None:
+        raise RsplotError(
+            "invalid_argument",
+            "--source raster 需要 --product 指定卫星产品。",
+            option="--product",
+        )
+    if use_source == "station" and var is None:
+        raise RsplotError(
+            "invalid_argument",
+            "--source station 需要 --var 指定站点变量。",
+            option="--var",
         )
     if days < 1:
         raise RsplotError(
@@ -172,21 +184,6 @@ def _emit_recent(
         f"[bold]统计窗口:[/bold] {dates[0]} ~ {dates[-1]} ({len(dates)} 天)"
     )
 
-    if output is None:
-        if use_source == "raster":
-            prefix = (
-                "nrti_" if processing else "gems_" if sensor == "gems" else ""
-            )
-            output = (
-                f"/tmp/rsplot_recent_{prefix}"
-                f"{info.name}_{product}_"
-                f"{dates[0]}_{dates[-1]}.json"
-            )
-        else:
-            output = (
-                f"/tmp/rsplot_recent_{info.name}_{var}_"
-                f"{dates[0]}_{dates[-1]}.json"
-            )
     sidecar = sidecar_path(str(Path(output).resolve()))
 
     def source_of(name: str, value: Any, default: str) -> dict[str, Any]:

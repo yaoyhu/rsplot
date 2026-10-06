@@ -68,7 +68,7 @@ def raster(
         help="TROPOMI 处理流: nrti（筛选并去重）；省略则读取目录内匹配文件",
     ),
     product: str = typer.Option(
-        "o3",
+        ...,
         "--product",
         help="产品类型: no2 / o3 / o3pr / hcho",
     ),
@@ -94,10 +94,10 @@ def raster(
         "--level",
         help="强制指定级别: country / key_region / province / city / county",
     ),
-    output: str | None = typer.Option(
-        None,
+    output: str = typer.Option(
+        ...,
         "--output",
-        help="输出 PNG 路径，同时写同名 JSON；省略时自动保存至 /tmp。",
+        help="输出 PNG 路径，同时写同名 JSON",
     ),
     dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
     res: float | None = typer.Option(
@@ -185,7 +185,7 @@ def radius(
         help="TROPOMI 处理流: nrti；省略时沿用原有目录与读取行为",
     ),
     product: str = typer.Option(
-        "o3",
+        ...,
         "--product",
         help="产品类型: no2 / o3 / o3pr / hcho",
     ),
@@ -218,10 +218,10 @@ def radius(
         "--station-datetime",
         help="站点北京时间 YYYYMMDDHH；日均/窗口叠加变量时必填，GEMS 扫描默认匹配最近整点",
     ),
-    output: str | None = typer.Option(
-        None,
+    output: str = typer.Option(
+        ...,
         "--output",
-        help="输出 PNG 路径，默认保存到 /tmp 并生成同名 JSON。",
+        help="输出 PNG 路径，同时写同名 JSON",
     ),
     dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
     res: float | None = typer.Option(
@@ -310,8 +310,8 @@ def meteo(
         "--level",
         help="强制指定行政区级别: country/key_region/province/city/county",
     ),
-    output: str | None = typer.Option(
-        None,
+    output: str = typer.Option(
+        ...,
         "--output",
         help="输出 PNG 路径；同时写同名 JSON",
     ),
@@ -399,7 +399,7 @@ def station(
         help="北京时间 YYYYMMDDHH（必须指定小时，不自动选择最新小时）",
     ),
     var: str = typer.Option(
-        "O3_8h_24h",
+        ...,
         "--var",
         help="变量名: AQI, PM2.5, PM2.5_24h, PM10, PM10_24h, SO2, SO2_24h, NO2, NO2_24h, O3, O3_24h, O3_8h, O3_8h_24h, CO, CO_24h",
     ),
@@ -408,8 +408,8 @@ def station(
         "--level",
         help="强制指定级别: country / key_region / province / city / county",
     ),
-    output: str | None = typer.Option(
-        None,
+    output: str = typer.Option(
+        ...,
         "--output",
         help="输出文件路径",
     ),
@@ -455,13 +455,13 @@ def trend(
         ...,
         help="结束日期 YYYYMMDD，或显式范围 YYYYMMDD-YYYYMMDD",
     ),
-    days: int = typer.Option(
-        7,
+    days: int | None = typer.Option(
+        None,
         "--days",
-        help="最近天数；仅当 DATE 为单日时生效，默认 7",
+        help="以单日 DATE 为结束日的天数；单日 DATE 必填，日期区间时不可用",
     ),
     var: str = typer.Option(
-        "O3_8h_24h",
+        ...,
         "--var",
         help="变量名: AQI, PM2.5, PM10, NO2, O3, SO2, CO, O3_8h, O3_8h_24h",
     ),
@@ -493,8 +493,8 @@ def trend(
         "--level",
         help="区域模式强制级别: country / key_region / province / city / county",
     ),
-    output: str | None = typer.Option(
-        None,
+    output: str = typer.Option(
+        ...,
         "--output",
         help="PNG 输出文件路径",
     ),
@@ -553,7 +553,7 @@ def overlay(
         help="TROPOMI 处理流: nrti；省略时沿用原有目录与读取行为",
     ),
     product: str = typer.Option(
-        "o3",
+        ...,
         "--product",
         help="卫星产品类型: no2 / o3 / o3pr / hcho",
     ),
@@ -580,10 +580,10 @@ def overlay(
         ),
     ),
     # --- station variable ---
-    var: str | None = typer.Option(
-        None,
-        "--var",
-        help="站点变量名；省略时 no2→NO2，o3 / o3pr / hcho→O3_8h_24h",
+    station_var: str = typer.Option(
+        ...,
+        "--station-var",
+        help="站点变量名，如 NO2 / O3 / O3_8h_24h；与卫星产品无默认配对",
     ),
     # --- overrides ---
     level: str | None = typer.Option(
@@ -591,10 +591,10 @@ def overlay(
         "--level",
         help="强制指定级别: country / key_region / province / city / county",
     ),
-    output: str | None = typer.Option(
-        None,
+    output: str = typer.Option(
+        ...,
         "--output",
-        help="输出文件路径，不指定则弹窗显示。",
+        help="输出 PNG 路径，同时写同名 JSON",
     ),
     dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
     res: float | None = typer.Option(
@@ -651,7 +651,7 @@ def overlay(
         product=product,
         sensor=sensor,
         processing=processing,
-        var=var,
+        station_var=station_var,
         level=level,
         output=output,
         dpi=dpi,
@@ -677,7 +677,7 @@ def recent(
         ..., help="结束日期 YYYYMMDD，最近 N 天统计以该日期为窗口末端"
     ),
     days: int = typer.Option(
-        30,
+        ...,
         "--days",
         help="最近天数，如 7 / 30 / 365",
     ),
@@ -694,23 +694,23 @@ def recent(
         "--processing",
         help="TROPOMI 处理流: nrti；省略时沿用原有目录与读取行为",
     ),
-    product: str = typer.Option(
-        "o3",
+    product: str | None = typer.Option(
+        None,
         "--product",
-        help="source=raster 时的产品: no2 / o3 / o3pr / hcho",
+        help="source=raster 时必填的产品: no2 / o3 / o3pr / hcho",
     ),
-    var: str = typer.Option(
-        "AQI",
+    var: str | None = typer.Option(
+        None,
         "--var",
-        help="source=station 时的变量名: AQI, PM2.5, PM10, NO2, O3, SO2, CO...",
+        help="source=station 时必填的变量名: AQI, PM2.5, PM10, NO2, O3, SO2, CO...",
     ),
     level: str | None = typer.Option(
         None,
         "--level",
         help="强制指定级别: country / key_region / province / city / county",
     ),
-    output: str | None = typer.Option(
-        None,
+    output: str = typer.Option(
+        ...,
         "--output",
         help="输出 JSON 路径",
     ),
@@ -767,10 +767,10 @@ def fnr(
         "(YYYYMMDD-YYYYMMDD，闭区间)",
     ),
     # --- window ---
-    days: int = typer.Option(
-        7,
+    days: int | None = typer.Option(
+        None,
         "--days",
-        help="时间窗口天数（仅当 date_arg 为单日时生效，默认 7）",
+        help="以单日 DATE 为结束日的窗口天数；单日 DATE 必填，日期区间时不可用",
     ),
     n_min: int | None = typer.Option(
         None,
@@ -804,8 +804,8 @@ def fnr(
         "--level",
         help="强制指定级别: country / key_region / province / city / county",
     ),
-    output: str | None = typer.Option(
-        None,
+    output: str = typer.Option(
+        ...,
         "--output",
         help="输出文件路径",
     ),

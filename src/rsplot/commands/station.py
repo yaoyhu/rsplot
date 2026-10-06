@@ -54,7 +54,7 @@ def _emit_station(
     datetime_str: str,
     var: str,
     level: str | None,
-    output: str | None,
+    output: str,
     dpi: int | None,
     basemap: str | None,
     title: str | None,
@@ -175,8 +175,6 @@ def _emit_station(
         # The renderer's default, recorded so the sidecar states it.
         use_title = f"{var} - {info.name}"
 
-    if output is None:
-        output = f"/tmp/rsplot_station_{info.name}_{var}_{resolved_dt}.png"
     image = str(Path(output).resolve())
     sidecar = sidecar_path(image)
 

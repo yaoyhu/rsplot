@@ -20,13 +20,15 @@ class TrendWorkspace(OverlayWorkspace):
                 ),
             )
 
-    def trend(self, target: str, date: str, *options: str):
+    def trend(
+        self, target: str, date: str, *options: str, days: str | None = "1"
+    ):
+        window = () if days is None else ("--days", days)
         return self.invoke(
             "trend",
             target,
             date,
-            "--days",
-            "1",
+            *window,
             "--var",
             "NO2",
             "--dpi",

@@ -28,6 +28,9 @@ cover the 3 days ending Jan 3 with the default n-min of 3, so FNR is 3.
 | user rejects an impossible n-min | Same inputs | Map with --n-min 5 | Rejected with `invalid_argument` on option --n-min |
 | user rejects crossed thresholds | Same inputs | Map with --voc-threshold 3 --nox-threshold 2 | Rejected with `invalid_argument` |
 | user learns the region does not exist | Same inputs | Map region Atlantis | Rejected with `region_not_found` |
+| user names the window for a single date | Same inputs | Map ending 20260103 without --days | Rejected with `invalid_argument` on option --days |
+| user maps an explicit date range | Same inputs | Map 20260101-20260103 without --days | A PNG; `fnr` runs from 20260101 to 20260103 |
+| user cannot combine a date range with days | Same inputs | Map 20260101-20260103 with --days 3 | Rejected with `invalid_argument` on option --days |
 
 For suspected bugs, run the corresponding scenario against the unchanged
 application and record the failure before applying a fix.

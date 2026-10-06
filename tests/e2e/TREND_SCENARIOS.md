@@ -28,6 +28,9 @@ S003A in `EastCity` reads 999. Requests use `--days 1 --var NO2`.
 | user learns no files exist | No hourly files | Trend S001A | Rejected with `data_not_found` |
 | user rejects an invalid date | 24 hourly files | Trend S001A for 20260230 | Rejected with `invalid_time` |
 | user rejects a regional view for one station | 24 hourly files | Trend S001A with --view mean | Rejected with `invalid_argument` on option --view |
+| user names the window for a single date | 24 hourly files | Trend S001A 20260101 without --days | Rejected with `invalid_argument` on option --days |
+| user plots an explicit date range | 24 hourly files | Trend S001A 20260101-20260101 without --days | A PNG; the series runs from 20260101 to 20260101 |
+| user cannot combine a date range with days | 24 hourly files | Trend S001A 20260101-20260101 with --days 1 | Rejected with `invalid_argument` on option --days |
 
 For suspected bugs, run the corresponding scenario against the unchanged
 application and record the failure before applying a fix.

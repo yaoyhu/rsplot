@@ -228,6 +228,26 @@ class RecentE2E(unittest.TestCase):
         )
         self.assert_rejected(result, "Atlantis", "region_not_found")
 
+    def test_user_names_the_product_for_satellite_summaries(self):
+        """Given swaths, when omitting --product, then reject it."""
+        self.three_days()
+        self.assert_rejected(
+            self.workspace.recent("20260103", "--res", "0.25"),
+            "--product",
+            "invalid_argument",
+            "--product",
+        )
+
+    def test_user_names_the_variable_for_station_summaries(self):
+        """Given station files, when omitting --var, then reject it."""
+        self.station_days()
+        self.assert_rejected(
+            self.workspace.recent("20260103", source="station"),
+            "--var",
+            "invalid_argument",
+            "--var",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
