@@ -106,8 +106,8 @@ export RSPLOT_DATA_DIR_FORECAST="/path/to/forecast"
 export RSPLOT_DATA_DIR_RECONSTRUCT="/path/to/reconstruct"
 ```
 
-Command-line directory options, such as `--data-dir`, take precedence for the
-command being run. If no TianDiTu API key is configured, use `--basemap none`
+Data folders come from configuration only; commands have no directory
+options. If no TianDiTu API key is configured, use `--basemap none`
 to avoid requesting satellite tiles.
 
 City subdivision overrides replace the county layer only for the configured
@@ -396,8 +396,8 @@ uv run rsplot radius 1379A 202609071245 --km 5 \
 - Station observations are **never averaged across hours**. `NO2`, `O3`,
   `PM2.5`, `PM10`, `SO2`, `CO`, `AQI`, and the existing derived fields are
   supported. Fields such as `O3_8h` are read as stored in the selected file.
-  Use `--station-data-dir` for the station archive and `--data-dir` for
-  satellite files.
+  The station archive and satellite files come from the configured
+  `guokong` and product folders.
 - GEMS dates mean equal-weight averages of the day's available valid scans,
   not a 24-hour mean. Actual scan counts vary; archive filenames are UTC,
   while command dates and station hours are China time. Titles distinguish
@@ -452,9 +452,8 @@ uv run rsplot overlay \
   -o ./logs/zhongshan/three_streets_overlay.png
 ```
 
-These examples use your existing product/station data paths. Optional
-`--data-dir` for raster or `--raster-dir` for overlay overrides the satellite
-root; no named region group needs to be added to configuration.
+These examples use your configured product/station data paths; no named
+region group needs to be added to configuration.
 
 Every member is resolved before reading data. Repeated aliases are removed
 in first-occurrence order; empty items and unknown names fail with an explicit
@@ -525,10 +524,8 @@ tropomi_nrti_o3pr = "/path/to/O3PR/NRT"
 
 The corresponding environment variables are `RSPLOT_DATA_DIR_TROPOMI_NRTI_NO2`,
 `RSPLOT_DATA_DIR_TROPOMI_NRTI_HCHO`, `RSPLOT_DATA_DIR_TROPOMI_NRTI_O3`, and
-`RSPLOT_DATA_DIR_TROPOMI_NRTI_O3PR`. Existing directory options override these:
-`--data-dir` for raster/radius/recent, `--raster-dir` for overlay, and
-`--no2-dir`/`--hcho-dir` for FNR. Missing NRTI configuration or files produce
-an error; rsplot does not fall back to another processing stream.
+`RSPLOT_DATA_DIR_TROPOMI_NRTI_O3PR`. Missing NRTI configuration or files
+produce an error; rsplot does not fall back to another processing stream.
 
 Each root directly contains `S5P_NRTI_L2__*.nc` or `.nc.zip` files. The checked
 NRT archive's `.nc.zip` files are HDF5/NetCDF containers despite the extension;
@@ -593,7 +590,6 @@ gems_o3 = "/path/to/GEMS/O3"
 
 Alternatively set `RSPLOT_DATA_DIR_GEMS_NO2`, `RSPLOT_DATA_DIR_GEMS_HCHO`,
 and `RSPLOT_DATA_DIR_GEMS_O3`. Each root contains `YYYYMM/DD/*.nc`.
-`--data-dir` (`--raster-dir` for overlay) overrides the configured root.
 
 | Product | GEMS variable | Display unit |
 | --- | --- | --- |

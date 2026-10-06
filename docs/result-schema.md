@@ -184,9 +184,9 @@ no data files, and writes the envelope with `status: "error"`, `quality.grade:
 | `internal_error` | Unexpected failure; `details` carries the exception type. |
 
 `option` names the offending option when there is one. `message` keeps the
-existing Chinese CLI wording. If argument parsing fails before `--output` is
-known, no sidecar can be written; the exit code (2 for usage errors) is the
-only signal.
+existing Chinese CLI wording. Usage errors caught by the CLI parser (an
+unknown option, a missing required option or argument) exit 2 before rsplot
+runs and write no sidecar; the exit code is the only signal.
 
 ## Versioning
 

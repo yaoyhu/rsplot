@@ -27,7 +27,6 @@ TREND_OPTIONS = {
     "focus_station_ids": ("--focus-station",),
     "threshold": ("--threshold",),
     "level": ("--level", "-l"),
-    "data_dir": ("--data-dir", "-d"),
     "output": ("--output", "-o"),
     "dpi": ("--dpi",),
     "title": ("--title",),
@@ -62,7 +61,6 @@ def _emit_trend(
     focus_station_ids: list[str] | None,
     threshold: float | None,
     level: str | None,
-    data_dir: str | None,
     output: str | None,
     dpi: int | None,
     title: str | None,
@@ -142,9 +140,7 @@ def _emit_trend(
 
     cfg = AppConfig.load()
     setup_fonts(cfg.font_dir)
-    use_data_dir = (
-        data_dir if data_dir is not None else cfg.get_data_dir("guokong")
-    )
+    use_data_dir = cfg.get_data_dir("guokong")
     unit, limit_key, limit_time = STATION_VAR_META[var]
     use_threshold = (
         threshold if threshold is not None else get_exceedance_threshold(var)
@@ -350,7 +346,7 @@ def _emit_trend(
             if info is not None
             else None
         ),
-        "data_dir": source_of("data_dir", root, "config"),
+        "data_dir": resolved(root, "config"),
         "output": source_of("output", use_output, "built_in"),
         "dpi": source_of("dpi", use_dpi, "built_in"),
         "title": source_of("title", use_title, "built_in"),

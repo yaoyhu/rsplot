@@ -221,8 +221,6 @@ class RecentE2E(unittest.TestCase):
             "20260103",
             "--days",
             "3",
-            "--data-dir",
-            str(self.workspace.data),
             "--product",
             "no2",
             "--output",

@@ -26,8 +26,6 @@ RADIUS_OPTIONS = {
     "km": ("--km",),
     "station_var": ("--station-var",),
     "station_datetime": ("--station-datetime",),
-    "station_data_dir": ("--station-data-dir",),
-    "data_dir": ("--data-dir", "-d"),
     "output": ("--output", "-o"),
     "dpi": ("--dpi",),
     "res": ("--res",),
@@ -113,7 +111,6 @@ def _emit_radius(
     km: float,
     station_var: str | None = None,
     station_datetime: str | None = None,
-    station_data_dir: str | None = None,
     console: Console,
     **raster_options: Any,
 ) -> None:
@@ -185,7 +182,6 @@ def _emit_radius(
         "days": None,
         "n_min": None,
         "level": None,
-        "data_dir": None,
         "output": None,
         "dpi": 300,
         "res": None,
@@ -224,7 +220,7 @@ def _emit_radius(
             date_arg[:8] if scan_mode else date_arg, options["days"]
         )
     cfg = AppConfig.load()
-    directory = station_data_dir or cfg.get_data_dir("guokong")
+    directory = cfg.get_data_dir("guokong")
     locations = read_station_locations(directory, request)
     values = np.full(len(locations.id), np.nan)
     if station_var is not None:
@@ -513,11 +509,7 @@ def _emit_radius(
                 else "end date snapshot",
             )
         ),
-        station_data_dir=(
-            resolved(str(directory), "cli")
-            if station_data_dir is not None
-            else resolved(str(directory), "config")
-        ),
+        station_data_dir=resolved(str(directory), "config"),
     )
     render_layers = dict(run.render["layers"])
     if station_var is not None:

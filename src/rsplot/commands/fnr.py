@@ -31,8 +31,6 @@ FNR_OPTIONS = {
     "nox_threshold": ("--nox-threshold",),
     "display_max": ("--display-max",),
     "level": ("--level", "-l"),
-    "raster_dir_no2": ("--no2-dir",),
-    "raster_dir_hcho": ("--hcho-dir",),
     "output": ("--output", "-o"),
     "dpi": ("--dpi",),
     "res": ("--res",),
@@ -71,8 +69,6 @@ def _emit_fnr(
     nox_threshold: float,
     display_max: float,
     level: str | None,
-    raster_dir_no2: str | None,
-    raster_dir_hcho: str | None,
     output: str | None,
     dpi: int | None,
     res: float | None,
@@ -210,16 +206,8 @@ def _emit_fnr(
         console=console,
     )
 
-    use_no2_dir = (
-        raster_dir_no2
-        if raster_dir_no2 is not None
-        else cfg.get_data_dir(no2_info.data_key or "no2")
-    )
-    use_hcho_dir = (
-        raster_dir_hcho
-        if raster_dir_hcho is not None
-        else cfg.get_data_dir(hcho_info.data_key or "hcho")
-    )
+    use_no2_dir = cfg.get_data_dir(no2_info.data_key or "no2")
+    use_hcho_dir = cfg.get_data_dir(hcho_info.data_key or "hcho")
     console.print("\n[bold]读取数据:[/bold]")
     console.print(f"  NO2 : {use_no2_dir}")
     console.print(f"  HCHO: {use_hcho_dir}")
@@ -593,8 +581,8 @@ def _emit_fnr(
         ),
         "display_max": source_of("display_max", use_display_max, "built_in"),
         "level": source_of("level", info.level, "built_in"),
-        "no2_dir": source_of("raster_dir_no2", str(use_no2_dir), "config"),
-        "hcho_dir": source_of("raster_dir_hcho", str(use_hcho_dir), "config"),
+        "no2_dir": resolved(str(use_no2_dir), "config"),
+        "hcho_dir": resolved(str(use_hcho_dir), "config"),
         "output": source_of("output", output, "built_in"),
         "dpi": source_of("dpi", use_dpi, "built_in"),
         "res": source_of("res", use_res, "level_default"),

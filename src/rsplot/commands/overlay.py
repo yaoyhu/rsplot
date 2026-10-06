@@ -37,8 +37,6 @@ OVERLAY_OPTIONS = {
     "station_datetime": ("--station-datetime",),
     "var": ("--var", "-v"),
     "level": ("--level", "-l"),
-    "raster_dir": ("--raster-dir",),
-    "station_dir": ("--station-dir",),
     "output": ("--output", "-o"),
     "dpi": ("--dpi",),
     "res": ("--res",),
@@ -141,8 +139,6 @@ def _emit_overlay(
     station_datetime: str | None = None,
     var: str | None,
     level: str | None,
-    raster_dir: str | None,
-    station_dir: str | None,
     output: str | None,
     dpi: int | None,
     res: float | None,
@@ -164,7 +160,6 @@ def _emit_overlay(
     from rsplot.plotting.overlay import plot_overlay
     from rsplot.readers.guokong import read_stations, resolve_station_file
     from rsplot.result_builders.envelope import (
-        option_given,
         request_block,
         resolved,
         sidecar_path,
@@ -211,9 +206,7 @@ def _emit_overlay(
             "region_not_found", str(error), details={"region": region}
         ) from error
 
-    use_station_dir = (
-        station_dir if station_dir is not None else cfg.get_data_dir("guokong")
-    )
+    use_station_dir = cfg.get_data_dir("guokong")
     console.print(f"\n[bold]读取站点数据:[/bold] {use_station_dir}")
     console.print(f"  时间: {station_hour} 北京时间, 变量: {var}")
     read, _ = read_stations(
@@ -263,7 +256,6 @@ def _emit_overlay(
         days=days,
         n_min=n_min,
         level=level,
-        data_dir=raster_dir,
         output=output,
         dpi=dpi,
         res=res,
@@ -372,16 +364,8 @@ def _emit_overlay(
 
     request = dict(run.resolved)
     request.pop("data_dir", None)
-    request["raster_dir"] = (
-        resolved(raster_dir, "cli")
-        if option_given(*OVERLAY_OPTIONS["raster_dir"])
-        else resolved(satellite_inputs.data_root, "config")
-    )
-    request["station_dir"] = (
-        resolved(station_dir, "cli")
-        if option_given(*OVERLAY_OPTIONS["station_dir"])
-        else resolved(str(use_station_dir), "config")
-    )
+    request["raster_dir"] = resolved(satellite_inputs.data_root, "config")
+    request["station_dir"] = resolved(str(use_station_dir), "config")
     request["station_var"] = (
         resolved(var, "cli")
         if var_given

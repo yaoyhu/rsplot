@@ -243,9 +243,9 @@ class AppConfig:
             "data_not_configured",
             f"No data directory configured for product '{product}'. "
             f"Set [paths.data_dirs].{key} in {CONFIG_PATH}, set "
-            f"RSPLOT_DATA_DIR_{key.upper()}, point {CONFIG_ENV_VAR} to a "
-            "TOML config file, or pass the command-specific data directory "
-            f"option. Known products: {', '.join(KNOWN_DATA_PRODUCTS)}. "
+            f"RSPLOT_DATA_DIR_{key.upper()}, or point {CONFIG_ENV_VAR} to a "
+            "TOML config file. "
+            f"Known products: {', '.join(KNOWN_DATA_PRODUCTS)}. "
             f"Configured products: {configured}.",
             details={"config_key": key},
         )

@@ -30,7 +30,6 @@ RECENT_OPTIONS = {
     "product": ("--product", "-p"),
     "var": ("--var", "-v"),
     "level": ("--level", "-l"),
-    "data_dir": ("--data-dir", "-d"),
     "output": ("--output", "-o"),
     "res": ("--res",),
     "qa": ("--qa",),
@@ -85,7 +84,6 @@ def _emit_recent(
     processing: str | None = None,
     var: str,
     level: str | None,
-    data_dir: str | None,
     output: str | None,
     res: float | None,
     qa: float | None,
@@ -220,11 +218,7 @@ def _emit_recent(
             validate_unit_interval(cf, "--cf")
         except ValueError as error:
             raise RsplotError("invalid_argument", str(error)) from error
-        use_data_dir = (
-            data_dir
-            if data_dir is not None
-            else cfg.get_data_dir(prod_info.data_key or product)
-        )
+        use_data_dir = cfg.get_data_dir(prod_info.data_key or product)
         console.print(
             f"\n[bold]统计栅格:[/bold] {use_data_dir} "
             f"(产品: {product}, {satellite_filter_label(sensor, use_qa, cf)}, "
@@ -289,15 +283,13 @@ def _emit_recent(
             processing=source_of(
                 "processing", source_block["processing"], "built_in"
             ),
-            data_dir=source_of("data_dir", str(use_data_dir), "config"),
+            data_dir=resolved(str(use_data_dir), "config"),
             res=source_of("res", use_res, "level_default"),
             qa=None if gems else source_of("qa", use_qa, "config"),
             cf=source_of("cf", cf, "built_in"),
         )
     else:
-        use_data_dir = (
-            data_dir if data_dir is not None else cfg.get_data_dir("guokong")
-        )
+        use_data_dir = cfg.get_data_dir("guokong")
         unit = STATION_VAR_META[var][0]
         console.print(f"\n[bold]统计站点:[/bold] {use_data_dir} (变量: {var})")
         daily = summarize_recent_station(
@@ -338,7 +330,7 @@ def _emit_recent(
         columns = STATION_COLUMNS
         request.update(
             var=source_of("var", var, "built_in"),
-            data_dir=source_of("data_dir", str(use_data_dir), "config"),
+            data_dir=resolved(str(use_data_dir), "config"),
         )
 
     values = np.array(

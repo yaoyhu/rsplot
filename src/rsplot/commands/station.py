@@ -24,7 +24,6 @@ if TYPE_CHECKING:
 STATION_OPTIONS = {
     "var": ("--var", "-v"),
     "level": ("--level", "-l"),
-    "data_dir": ("--data-dir", "-d"),
     "output": ("--output", "-o"),
     "dpi": ("--dpi",),
     "basemap": ("--basemap", "-b"),
@@ -55,7 +54,6 @@ def _emit_station(
     datetime_str: str,
     var: str,
     level: str | None,
-    data_dir: str | None,
     output: str | None,
     dpi: int | None,
     basemap: str | None,
@@ -144,7 +142,7 @@ def _emit_station(
         console=console,
     )
 
-    use_data_dir = data_dir or cfg.get_data_dir("guokong")
+    use_data_dir = cfg.get_data_dir("guokong")
     console.print(f"\n[bold]读取站点数据:[/bold] {use_data_dir}")
     console.print(f"  时间: {datetime_str}, 变量: {var}")
     read, resolved_dt = read_stations(
@@ -255,7 +253,7 @@ def _emit_station(
                 "datetime": resolved(datetime_str, "cli"),
                 "var": source("var", var, "built_in"),
                 "level": source("level", info.level, "built_in"),
-                "data_dir": source("data_dir", str(use_data_dir), "config"),
+                "data_dir": resolved(str(use_data_dir), "config"),
                 "output": source("output", output, "built_in"),
                 "dpi": source("dpi", use_dpi, "built_in"),
                 "basemap": source(

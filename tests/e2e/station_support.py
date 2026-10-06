@@ -21,8 +21,6 @@ class StationWorkspace(OverlayWorkspace):
             hour,
             "--var",
             var,
-            "--data-dir",
-            str(self.stations),
             "--dpi",
             "60",
             "--basemap",

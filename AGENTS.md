@@ -180,8 +180,8 @@ Cartopy, GeoPandas, Shapely, xarray, SciPy, Astropy, Matplotlib, and NetCDF4.
 
 Most real commands require external data paths. Runtime paths are intentionally
 not hard-coded in `src/rsplot/config.py`; use `~/.config/rsplot/config.toml`,
-`RSPLOT_CONFIG`, or environment variables. CLI directory options are being
-removed command by command (see CLI Conventions rule 1).
+`RSPLOT_CONFIG`, or environment variables. Commands have no data-directory
+options (CLI Conventions rule 1).
 
 Create a local config from the example. Optional paths such as `font_dir`
 may be left unset; required runtime paths include the

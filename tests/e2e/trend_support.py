@@ -29,8 +29,6 @@ class TrendWorkspace(OverlayWorkspace):
             "1",
             "--var",
             "NO2",
-            "--data-dir",
-            str(self.stations),
             "--dpi",
             "60",
             "--output",

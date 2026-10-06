@@ -36,7 +36,6 @@ RASTER_OPTIONS = {
     "days": ("--days",),
     "n_min": ("--n-min",),
     "level": ("--level", "-l"),
-    "data_dir": ("--data-dir", "-d"),
     "output": ("--output", "-o"),
     "dpi": ("--dpi",),
     "res": ("--res",),
@@ -230,7 +229,6 @@ def prepare_raster(
     days: int | None,
     n_min: int | None,
     level: str | None,
-    data_dir: str | None,
     output: str | None,
     dpi: int | None,
     res: float | None,
@@ -376,11 +374,7 @@ def prepare_raster(
     )
 
     read_extent = buffered_extent(info.extent, 1.0)
-    use_data_dir = (
-        data_dir
-        if data_dir is not None
-        else cfg.get_data_dir(prod_info.data_key or product)
-    )
+    use_data_dir = cfg.get_data_dir(prod_info.data_key or product)
     reader = prod_info.create_reader()
     reader.cloud_fraction_max = cf
     if sensor == "gems":
@@ -781,7 +775,7 @@ def prepare_raster(
             else None
         ),
         "level": _source("level", info.level, "built_in", "from region"),
-        "data_dir": _source("data_dir", str(use_data_dir), "config"),
+        "data_dir": resolved(str(use_data_dir), "config"),
         "res": res_entry,
         "smooth": smooth_entry,
         "qa": None if china else _source("qa", use_qa, "config"),

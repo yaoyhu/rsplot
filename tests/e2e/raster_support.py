@@ -64,14 +64,20 @@ class RasterWorkspace:
                 ),
                 encoding="utf-8",
             )
+        self.boundaries = boundaries
+        # Data paths come from configuration only (CLI rule 1): every
+        # satellite archive is the fixture `data` folder.
+        satellite = ("no2", "o3", "o3pr", "hcho")
+        self.data_dirs = {
+            **{key: self.data for key in satellite},
+            **{f"tropomi_nrti_{key}": self.data for key in satellite},
+            **{f"gems_{key}": self.data for key in ("no2", "hcho", "o3")},
+            "guokong": root / "stations",
+            "era5": root / "era5",
+        }
         config = root / "config.toml"
-        config.write_text(
-            "[paths]\n"
-            f"geojson_dir = {json.dumps(str(boundaries))}\n"
-            f"font_dir = {json.dumps(str(root / 'fonts'))}\n"
-            "[defaults]\nqa_threshold = 0.5\n",
-            encoding="utf-8",
-        )
+        self.config = config
+        self.write_config()
         self.env = {
             key: value
             for key, value in os.environ.items()
@@ -79,13 +85,38 @@ class RasterWorkspace:
             # FORCE_COLOR overrides NO_COLOR and would colour help output.
             and key not in ("TIANDITU_API_KEY", "FORCE_COLOR")
         }
+        home = root / "home"
+        home.mkdir()
         self.env.update(
+            # A private HOME keeps ~/.config/rsplot/config.toml out of the
+            # merge; cartopy keeps reading the real shapefile cache.
+            HOME=str(home),
+            CARTOPY_DATA_DIR=os.environ.get(
+                "CARTOPY_DATA_DIR",
+                str(Path.home() / ".local" / "share" / "cartopy"),
+            ),
             RSPLOT_CONFIG=str(config),
             MPLBACKEND="Agg",
             MPLCONFIGDIR=str(root / "matplotlib"),
             PYTHONDONTWRITEBYTECODE="1",
             NO_COLOR="1",
             COLUMNS="180",
+        )
+
+    def write_config(self) -> None:
+        """Write the TOML config with the current `data_dirs`."""
+        data_dirs = "".join(
+            f"{key} = {json.dumps(str(path))}\n"
+            for key, path in self.data_dirs.items()
+        )
+        self.config.write_text(
+            "[paths]\n"
+            f"geojson_dir = {json.dumps(str(self.boundaries))}\n"
+            f"font_dir = {json.dumps(str(self.root / 'fonts'))}\n"
+            "[paths.data_dirs]\n"
+            f"{data_dirs}"
+            "[defaults]\nqa_threshold = 0.5\n",
+            encoding="utf-8",
         )
 
     @staticmethod
@@ -249,8 +280,6 @@ class RasterWorkspace:
             "raster",
             region,
             date,
-            "--data-dir",
-            str(self.data),
             "--product",
             "no2",
             "--res",

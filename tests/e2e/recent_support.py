@@ -27,7 +27,6 @@ class RecentWorkspace(OverlayWorkspace):
         )
 
     def recent(self, end: str, *options: str, source: str = "raster"):
-        data = self.data if source == "raster" else self.stations
         return self.invoke(
             "recent",
             "FixtureCity",
@@ -36,8 +35,6 @@ class RecentWorkspace(OverlayWorkspace):
             "3",
             "--source",
             source,
-            "--data-dir",
-            str(data),
             "--output",
             str(self.output),
             *options,

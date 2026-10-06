@@ -36,9 +36,11 @@ No pytest dependency is needed. The existing runtime dependencies supply
 the NetCDF reader and PNG decoder. Fixtures and outputs are created under
 the system temporary directory and removed after each test. Basemaps are
 disabled, so no satellite archive, API key, or tile download is required.
-The fixture configuration overrides data/boundary/font paths; it follows
-the application's normal config-loading rules, so a malformed user config
-can still prevent startup.
+The fixture configuration lists every data folder plus the boundary and
+font paths, and is the only configuration the CLI reads: each process gets a
+private `HOME`, so `~/.config/rsplot/config.toml` is never merged in.
+Cartopy still reads its shapefile cache from the real
+`~/.local/share/cartopy` (or `CARTOPY_DATA_DIR`).
 
 For optional branch measurement, set `RSPLOT_E2E_COVERAGE_DIR` to an
 existing temporary directory and run the same command with `coverage`
@@ -243,3 +245,14 @@ while the reader and the fixtures used `time`. The fixtures now write
 unchanged reader 6 of 14 scenarios failed with the real error. The reader
 accepts either name. All 14 pass, and the three real meteo maps (temperature,
 wind with stations, all layers) succeed with schema-valid sidecars.
+
+## CLI conventions
+
+Rule 1 (data paths from configuration only): 12 scenarios were added to
+`test_cli.py`, one per removed data-folder option, plus one for an
+unconfigured product. All 13 failed against the unchanged application.
+The command launchers stopped passing folder options; the fixture config
+now lists every data folder. The unconfigured-product scenario then showed
+that the user's `~/.config/rsplot/config.toml` was merged into every test
+run (the test read the real NO2 archive); the launcher now gives each
+process a private `HOME`.

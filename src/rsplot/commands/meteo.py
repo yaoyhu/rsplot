@@ -28,8 +28,6 @@ METEO_OPTIONS = {
     "wind_level": ("--wind-level",),
     "station_var": ("--station-var",),
     "level": ("--level", "-l"),
-    "data_dir": ("--data-dir", "-d"),
-    "station_data_dir": ("--station-data-dir",),
     "output": ("--output", "-o"),
     "dpi": ("--dpi",),
     "basemap": ("--basemap", "-b"),
@@ -68,8 +66,6 @@ def _emit_meteo(
     wind_level: str | None,
     station_var: str | None,
     level: str | None,
-    data_dir: str | None,
-    station_data_dir: str | None,
     output: str | None,
     dpi: int | None,
     basemap: str | None,
@@ -216,7 +212,7 @@ def _emit_meteo(
     station_colorbar_label = ""
     use_station_dir = None
     if station_var is not None:
-        use_station_dir = station_data_dir or cfg.get_data_dir("guokong")
+        use_station_dir = cfg.get_data_dir("guokong")
         console.print(f"\n[bold]读取站点数据:[/bold] {use_station_dir}")
         console.print(f"  时间: {datetime_str}, 变量: {station_var}")
         read, _ = read_stations(
@@ -234,7 +230,7 @@ def _emit_meteo(
             f"{display_var} ({station_unit})" if station_unit else display_var
         )
 
-    use_data_dir = str(data_dir or cfg.get_data_dir("era5"))
+    use_data_dir = str(cfg.get_data_dir("era5"))
     console.print(f"\n[bold]读取 ERA5:[/bold] {use_data_dir}")
     console.print(f"  输入时次: {datetime_str} (中国时间)")
     field = wind = None
@@ -542,9 +538,9 @@ def _emit_meteo(
             resolved(station_var, "cli") if station_var is not None else None
         ),
         "level": source_of("level", info.level, "built_in"),
-        "data_dir": source_of("data_dir", use_data_dir, "config"),
+        "data_dir": resolved(use_data_dir, "config"),
         "station_data_dir": (
-            source_of("station_data_dir", str(use_station_dir), "config")
+            resolved(str(use_station_dir), "config")
             if use_station_dir is not None
             else None
         ),
