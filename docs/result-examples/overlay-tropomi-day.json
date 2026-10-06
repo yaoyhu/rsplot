@@ -1,0 +1,220 @@
+{
+  "schema": "rsplot.result/2",
+  "status": "ok",
+  "command": "overlay",
+  "rsplot_version": "0.3.2.dev4",
+  "generated_at": "2026-10-05T14:02:11+08:00",
+  "request": {
+    "argv": [
+      "overlay", "合肥", "20260919",
+      "--product", "no2",
+      "--station-var", "NO2",
+      "--station-datetime", "2026091913",
+      "--basemap", "none",
+      "--output", "out/hefei_no2.png"
+    ],
+    "resolved": {
+      "sensor": {"value": "tropomi", "source": "built_in"},
+      "processing": {"value": "offl", "source": "built_in"},
+      "product": {"value": "no2", "source": "cli"},
+      "station_var": {"value": "NO2", "source": "cli"},
+      "station_datetime": {"value": "2026091913", "source": "cli"},
+      "level": {"value": "city", "source": "built_in", "detail": "resolved from region"},
+      "res": {"value": 0.03, "source": "level_default", "detail": "city"},
+      "smooth": {"value": 1.5, "source": "level_default", "detail": "city"},
+      "qa": {"value": 0.5, "source": "config"},
+      "cf": {"value": 0.5, "source": "built_in"},
+      "dpi": {"value": 300, "source": "built_in"},
+      "basemap": {"value": "none", "source": "cli"}
+    }
+  },
+  "region": {
+    "name": "合肥市",
+    "level": "city",
+    "kind": "administrative",
+    "extent": [116.69, 117.98, 30.94, 32.54],
+    "members": []
+  },
+  "layers": [
+    {
+      "id": "satellite",
+      "kind": "grid",
+      "quantity": {
+        "name": "tropospheric_no2_column",
+        "unit": "molec/cm2",
+        "scale": 1e15,
+        "label": "NO2 VCD (x10^15 molec/cm2)"
+      },
+      "time": {
+        "aggregation": "daily",
+        "start": "20260919",
+        "end": "20260919",
+        "timezone": "UTC",
+        "basis": "filename_start_date_utc"
+      },
+      "source": {
+        "sensor": "tropomi",
+        "processing": "offl",
+        "data_root": "/mnt/nas/tianpu/no2/OFFL",
+        "files": [
+          "S5P_OFFL_L2__NO2____20260919T011845_20260919T030014_46289_03_020901_20260920T165908.nc.zip",
+          "S5P_OFFL_L2__NO2____20260919T030014_20260919T044144_46290_03_020901_20260920T190023.nc.zip",
+          "S5P_OFFL_L2__NO2____20260919T044144_20260919T062313_46291_03_020901_20260920T205154.nc.zip",
+          "S5P_OFFL_L2__NO2____20260919T062313_20260919T080443_46292_03_020901_20260920T223654.nc.zip",
+          "S5P_OFFL_L2__NO2____20260919T080443_20260919T094612_46293_03_020901_20260921T001835.nc.zip"
+        ],
+        "failed_files": {},
+        "files_total": 5,
+        "files_manifest": null,
+        "versions": {"processor": ["02.09.01"], "product": ["02.09.01"]}
+      },
+      "method": {
+        "qa_min_exclusive": 0.5,
+        "cloud_fraction_max": 0.5,
+        "grid_deg": 0.03,
+        "pixels_used": 1740,
+        "gap_fill": "nearest_within_3_cells",
+        "smoothing_sigma": 1.5,
+        "smoothing_affects": "values_not_coverage",
+        "cell_selection": "center_strictly_inside",
+        "cell_weighting": "equal"
+      },
+      "coverage": {"valid": 802, "total": 1209, "fraction": 0.663, "unit": "cells"},
+      "stats": {
+        "n": 802, "mean": 2.52, "std": 0.71, "min": 1.26, "p10": 1.67,
+        "p25": 1.93, "median": 2.3, "p75": 3.11, "p90": 3.75, "max": 4.46
+      },
+      "by_admin": [
+        {"name": "长丰县", "level": "county", "n": 77, "mean": 3.51, "min": 2.73, "max": 4.46},
+        {"name": "包河区", "level": "county", "n": 31, "mean": 3.02, "min": 2.41, "max": 3.68}
+      ],
+      "extremes": {
+        "items": [
+          {"lon": 117.139, "lat": 32.128, "value": 4.46, "admin": "长丰县"},
+          {"lon": 117.169, "lat": 32.098, "value": 4.41, "admin": "长丰县"}
+        ],
+        "total": 802,
+        "truncated": true,
+        "order": "value_desc"
+      },
+      "data": "/data/out/hefei_no2.satellite.nc"
+    },
+    {
+      "id": "station",
+      "kind": "points",
+      "quantity": {"name": "NO2", "unit": "ug/m3", "scale": 1, "label": "NO2 (ug/m3)"},
+      "time": {
+        "aggregation": "hourly",
+        "at": "2026091913",
+        "timezone": "Asia/Shanghai",
+        "basis": "station_hour"
+      },
+      "source": {
+        "sensor": "station",
+        "processing": null,
+        "data_root": "/mnt/nas/tianpu/stations",
+        "files": ["2026091913.nc"],
+        "failed_files": {},
+        "files_total": 1,
+        "files_manifest": null
+      },
+      "method": {"region_selection": "point_inside_region"},
+      "coverage": {"valid": 9, "total": 10, "fraction": 0.9, "unit": "stations"},
+      "stats": {
+        "n": 9, "mean": 13.78, "std": 3.11, "min": 10.0, "p10": 10.8,
+        "p25": 11.0, "median": 13.0, "p75": 16.0, "p90": 17.4, "max": 19.0
+      },
+      "exceedance": {
+        "threshold": 200,
+        "operator": ">",
+        "standard": "GB 3095 hourly NO2",
+        "count": 0,
+        "fraction": 0.0
+      },
+      "by_admin": [
+        {"name": "包河区", "level": "county", "n": 2, "mean": 18.0, "max": 19.0, "n_exceed": 0}
+      ],
+      "extremes": {
+        "items": [
+          {"id": "1277A", "lon": 117.303, "lat": 31.796, "value": 19.0, "admin": "包河区"}
+        ],
+        "total": 9,
+        "truncated": true,
+        "order": "value_desc"
+      },
+      "data": "/data/out/hefei_no2.station.csv"
+    }
+  ],
+  "relations": {
+    "time_matching": {
+      "layers": ["satellite", "station"],
+      "reference": "period_mean_with_explicit_station_hour",
+      "difference_minutes": null,
+      "manual_override": true
+    },
+    "colocation": {
+      "layers": ["satellite", "station"],
+      "method": "station_in_valid_statistics_cell",
+      "pairs": 8,
+      "spearman": 0.41,
+      "comparable_units": false,
+      "data": "/data/out/hefei_no2.station.csv"
+    }
+  },
+  "quality": {
+    "grade": "good",
+    "flags": [
+      {
+        "code": "daily_vs_hourly",
+        "severity": "info",
+        "message": "A daily satellite field is compared with one station hour; there is no single satellite observation time.",
+        "evidence": {"satellite": "20260919", "station": "2026091913"}
+      },
+      {
+        "code": "column_vs_surface",
+        "severity": "info",
+        "message": "Satellite columns and surface concentrations show spatial agreement, not equal quantities."
+      },
+      {
+        "code": "values_smoothed",
+        "severity": "info",
+        "layer": "satellite",
+        "message": "Gaussian smoothing (sigma 1.5) changed statistic values; coverage is unchanged. Use --smooth 0 for raw values.",
+        "evidence": {"sigma": 1.5}
+      }
+    ]
+  },
+  "render": {
+    "image": "/data/out/hefei_no2.png",
+    "dpi": 300,
+    "basemap": "none",
+    "title": "TROPOMI NO2 20260919 + Station NO2 2026091913 CST - 合肥市",
+    "layers": {
+      "satellite": {"cmap": "rsplot_22", "vmin": 0.0, "vmax": 20.0, "display_grid_shape": [54, 43]},
+      "station": {"cmap": "rsplot_station_threshold", "vmin": 0.0, "vmax": 220.0, "extend": "max"}
+    }
+  },
+  "artifacts": {
+    "image": "/data/out/hefei_no2.png",
+    "sidecar": "/data/out/hefei_no2.json",
+    "data": [
+      {
+        "path": "/data/out/hefei_no2.satellite.nc",
+        "format": "netcdf4",
+        "content": "statistical_grid",
+        "layer": "satellite",
+        "shape": [54, 43],
+        "bytes": 14876
+      },
+      {
+        "path": "/data/out/hefei_no2.station.csv",
+        "format": "csv",
+        "content": "station_table",
+        "layer": "station",
+        "rows": 10,
+        "bytes": 812
+      }
+    ]
+  },
+  "error": null
+}

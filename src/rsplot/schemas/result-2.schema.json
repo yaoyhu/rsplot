@@ -1,0 +1,638 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://git.lug.ustc.edu.cn/yaoyhu/rsplot/schemas/result-2.schema.json",
+  "title": "rsplot result sidecar, schema rsplot.result/2",
+  "description": "One envelope for every rsplot command. Written next to the image (or alone for recent) and also on failure. See docs/result-schema.md.",
+  "type": "object",
+  "required": [
+    "schema",
+    "status",
+    "command",
+    "rsplot_version",
+    "generated_at",
+    "request",
+    "region",
+    "layers",
+    "relations",
+    "quality",
+    "render",
+    "artifacts",
+    "error"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {"const": "rsplot.result/2"},
+    "status": {"enum": ["ok", "error"]},
+    "command": {
+      "enum": [
+        "raster",
+        "radius",
+        "overlay",
+        "station",
+        "trend",
+        "meteo",
+        "recent",
+        "fnr"
+      ]
+    },
+    "rsplot_version": {"type": "string"},
+    "generated_at": {
+      "type": "string",
+      "description": "ISO 8601 timestamp with UTC offset."
+    },
+    "request": {"$ref": "#/$defs/request"},
+    "region": {
+      "oneOf": [{"$ref": "#/$defs/region"}, {"type": "null"}],
+      "description": "Null only when the command targets one station (trend station mode) or failed before resolving a region."
+    },
+    "layers": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/layer"}
+    },
+    "relations": {"$ref": "#/$defs/relations"},
+    "quality": {"$ref": "#/$defs/quality"},
+    "render": {
+      "oneOf": [{"$ref": "#/$defs/render"}, {"type": "null"}],
+      "description": "Null for recent (no image) and for failed runs."
+    },
+    "artifacts": {"$ref": "#/$defs/artifacts"},
+    "error": {
+      "oneOf": [{"$ref": "#/$defs/error"}, {"type": "null"}]
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "ok"}}},
+      "then": {
+        "properties": {
+          "error": {"type": "null"},
+          "layers": {"minItems": 1}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "error"}}},
+      "then": {
+        "properties": {
+          "error": {"$ref": "#/$defs/error"},
+          "render": {"type": "null"},
+          "artifacts": {
+            "properties": {"image": {"type": "null"}, "data": {"maxItems": 0}}
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "nullableNumber": {"type": ["number", "null"]},
+    "compactDate": {"type": "string", "pattern": "^[0-9]{8}$"},
+    "compactHour": {"type": "string", "pattern": "^[0-9]{10}$"},
+    "compactScan": {"type": "string", "pattern": "^[0-9]{12}$"},
+
+    "request": {
+      "type": "object",
+      "required": ["argv", "resolved"],
+      "additionalProperties": false,
+      "properties": {
+        "argv": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Arguments after the program name, exactly as received."
+        },
+        "resolved": {
+          "type": "object",
+          "description": "Every effective parameter, keyed by long option name without dashes (e.g. 'res', 'station_datetime').",
+          "additionalProperties": {"$ref": "#/$defs/resolvedValue"}
+        }
+      }
+    },
+    "resolvedValue": {
+      "type": "object",
+      "required": ["value", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "value": {},
+        "source": {
+          "enum": [
+            "cli",
+            "config",
+            "level_default",
+            "product_default",
+            "built_in"
+          ]
+        },
+        "detail": {
+          "type": "string",
+          "description": "Optional qualifier, e.g. the level name for level_default."
+        }
+      }
+    },
+
+    "region": {
+      "type": "object",
+      "required": ["name", "level", "kind", "extent", "members"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "level": {
+          "enum": [
+            "country",
+            "key_region",
+            "province",
+            "city",
+            "county",
+            "township",
+            "station_radius"
+          ]
+        },
+        "kind": {"enum": ["administrative", "station_radius"]},
+        "extent": {
+          "type": "array",
+          "items": {"type": "number"},
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "[lon_min, lon_max, lat_min, lat_max] in degrees."
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "level"],
+            "additionalProperties": false,
+            "properties": {
+              "name": {"type": "string"},
+              "qualified_name": {"type": ["string", "null"]},
+              "level": {"type": "string"}
+            }
+          }
+        },
+        "radius": {
+          "type": "object",
+          "required": ["center_station", "km", "side_length_km", "shape"],
+          "additionalProperties": false,
+          "properties": {
+            "center_station": {"type": "string"},
+            "km": {"type": "number"},
+            "side_length_km": {"type": "number"},
+            "shape": {"const": "square"},
+            "projection": {"type": "string"},
+            "center_lon": {"type": "number"},
+            "center_lat": {"type": "number"},
+            "administrative_context": {
+              "type": "object",
+              "description": "Cities containing the centre, cities visible in the square, and visible subdivisions."
+            }
+          }
+        }
+      }
+    },
+
+    "quantity": {
+      "type": "object",
+      "required": ["name", "unit", "scale"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Machine name, e.g. no2_tropospheric_column, NO2, O3_8h_24h, t2m, wind_10m, fnr."
+        },
+        "unit": {
+          "type": "string",
+          "description": "SI-style unit of the stored numbers after multiplying by scale, e.g. molec/cm2, DU, ug/m3, mg/m3, K, degC, m/s, 1."
+        },
+        "scale": {
+          "type": "number",
+          "description": "Stored value x scale = value in unit. 1e15 for NO2/HCHO columns."
+        },
+        "label": {
+          "type": "string",
+          "description": "Human label used on the image; informational only."
+        }
+      }
+    },
+
+    "time": {
+      "type": "object",
+      "required": ["aggregation", "timezone", "basis"],
+      "additionalProperties": false,
+      "properties": {
+        "aggregation": {
+          "enum": [
+            "scan",
+            "hourly",
+            "daily",
+            "daily_scan_mean",
+            "window_mean",
+            "hourly_series",
+            "daily_series"
+          ]
+        },
+        "at": {
+          "type": "string",
+          "description": "Instant for scan/hourly: YYYYMMDDHHMM or YYYYMMDDHH."
+        },
+        "start": {"$ref": "#/$defs/compactDate"},
+        "end": {"$ref": "#/$defs/compactDate"},
+        "timezone": {"enum": ["UTC", "Asia/Shanghai"]},
+        "basis": {
+          "enum": [
+            "filename_start_date_utc",
+            "asia_shanghai_calendar_day",
+            "nominal_scan_time",
+            "station_hour",
+            "era5_hour"
+          ]
+        },
+        "archive_time_utc": {
+          "type": "string",
+          "description": "Matched UTC archive time when it differs from the input time (ERA5, GEMS)."
+        },
+        "days": {"$ref": "#/$defs/days"}
+      }
+    },
+    "days": {
+      "type": "object",
+      "required": ["requested", "found", "failed", "n_min"],
+      "additionalProperties": false,
+      "properties": {
+        "requested": {"type": "integer", "minimum": 1},
+        "found": {"type": "integer", "minimum": 0},
+        "failed": {
+          "type": "object",
+          "additionalProperties": {"type": "string"},
+          "description": "Date -> reason."
+        },
+        "n_min": {"type": ["integer", "null"]},
+        "valid_days_per_cell": {"$ref": "#/$defs/stats"}
+      }
+    },
+
+    "source": {
+      "type": "object",
+      "required": [
+        "data_root",
+        "files",
+        "files_total",
+        "files_manifest",
+        "failed_files"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "sensor": {"enum": ["tropomi", "gems", "station", "era5"]},
+        "processing": {"enum": ["offl", "nrti", null]},
+        "data_root": {"type": "string"},
+        "files": {
+          "type": "array",
+          "items": {"type": "string"},
+          "maxItems": 200,
+          "description": "File names relative to data_root, sorted; at most the first 200."
+        },
+        "files_total": {"type": "integer", "minimum": 0},
+        "files_manifest": {
+          "type": ["string", "null"],
+          "description": "Absolute path of a CSV listing every file when files_total > 200; otherwise null."
+        },
+        "failed_files": {
+          "type": "object",
+          "additionalProperties": {"type": "string"},
+          "description": "Relative file name -> reason."
+        },
+        "versions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    },
+
+    "coverage": {
+      "type": "object",
+      "required": ["valid", "total", "fraction", "unit"],
+      "additionalProperties": false,
+      "properties": {
+        "valid": {"type": "integer", "minimum": 0},
+        "total": {"type": "integer", "minimum": 0},
+        "fraction": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "unit": {"enum": ["cells", "stations", "hours", "days", "vectors"]}
+      }
+    },
+
+    "stats": {
+      "type": "object",
+      "required": ["n"],
+      "additionalProperties": false,
+      "properties": {
+        "n": {"type": "integer", "minimum": 0},
+        "mean": {"$ref": "#/$defs/nullableNumber"},
+        "std": {"$ref": "#/$defs/nullableNumber"},
+        "min": {"$ref": "#/$defs/nullableNumber"},
+        "p10": {"$ref": "#/$defs/nullableNumber"},
+        "p25": {"$ref": "#/$defs/nullableNumber"},
+        "median": {"$ref": "#/$defs/nullableNumber"},
+        "p75": {"$ref": "#/$defs/nullableNumber"},
+        "p90": {"$ref": "#/$defs/nullableNumber"},
+        "max": {"$ref": "#/$defs/nullableNumber"}
+      }
+    },
+
+    "adminRow": {
+      "type": "object",
+      "required": ["name", "level", "n"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "level": {"type": "string"},
+        "n": {"type": "integer", "minimum": 0},
+        "mean": {"$ref": "#/$defs/nullableNumber"},
+        "min": {"$ref": "#/$defs/nullableNumber"},
+        "max": {"$ref": "#/$defs/nullableNumber"},
+        "n_exceed": {"type": "integer", "minimum": 0},
+        "category": {
+          "type": "string",
+          "description": "Dominant class of the unit, e.g. the FNR regime of its mean."
+        }
+      }
+    },
+
+    "cappedList": {
+      "type": "object",
+      "required": ["items", "total", "truncated"],
+      "additionalProperties": false,
+      "properties": {
+        "items": {"type": "array"},
+        "total": {"type": "integer", "minimum": 0},
+        "truncated": {"type": "boolean"},
+        "order": {"type": "string"}
+      }
+    },
+
+    "layer": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "quantity",
+        "time",
+        "source",
+        "method",
+        "coverage",
+        "stats",
+        "by_admin",
+        "extremes",
+        "data"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique within the sidecar: satellite, station, temperature, wind, no2, hcho, fnr, regional_mean, ..."
+        },
+        "kind": {"enum": ["grid", "points", "vector_grid", "series"]},
+        "subject": {
+          "type": "object",
+          "description": "Optional per-layer subject, e.g. {\"station_id\": \"1277A\"} for trend station mode.",
+          "additionalProperties": {"type": "string"}
+        },
+        "quantity": {"$ref": "#/$defs/quantity"},
+        "time": {"$ref": "#/$defs/time"},
+        "source": {"$ref": "#/$defs/source"},
+        "method": {
+          "type": "object",
+          "description": "Processing choices that change values. Keys are documented per layer kind in docs/result-schema.md."
+        },
+        "coverage": {"$ref": "#/$defs/coverage"},
+        "stats": {"$ref": "#/$defs/stats"},
+        "exceedance": {
+          "type": "object",
+          "required": ["threshold", "operator", "count", "fraction"],
+          "additionalProperties": false,
+          "properties": {
+            "threshold": {"type": "number"},
+            "operator": {"const": ">"},
+            "standard": {"type": "string"},
+            "count": {"type": "integer", "minimum": 0},
+            "fraction": {"type": ["number", "null"]}
+          }
+        },
+        "vector_summary": {
+          "type": "object",
+          "description": "Vector layers: resultant mean components and direction, component statistics, and the maximum-speed location."
+        },
+        "temporal_summary": {
+          "type": "object",
+          "description": "Comparisons across the series, e.g. last_7 vs prev_7 windows, changes and a linear trend (recent)."
+        },
+        "categories": {
+          "type": "object",
+          "description": "Counts per category band, e.g. AQI levels for AQI station layers.",
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        },
+        "by_admin": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/adminRow"},
+          "description": "All subdivisions of the region; never truncated."
+        },
+        "by_member": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/adminRow"},
+          "description": "Comma-selected regions only; computed from the shared statistical grid/data."
+        },
+        "extremes": {
+          "description": "Top values: hotspot cells for grids, highest stations for points. Capped; the full set is in the data file.",
+          "$ref": "#/$defs/cappedList"
+        },
+        "data": {
+          "oneOf": [{"type": "string"}, {"type": "null"}],
+          "description": "Absolute path of this layer's data file listed in artifacts.data."
+        }
+      }
+    },
+
+    "relations": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "time_matching": {"$ref": "#/$defs/timeMatching"},
+        "colocation": {"$ref": "#/$defs/colocation"}
+      }
+    },
+    "timeMatching": {
+      "type": "object",
+      "required": [
+        "layers",
+        "reference",
+        "difference_minutes",
+        "manual_override"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "layers": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Layer ids being paired, e.g. [\"satellite\", \"station\"]."
+        },
+        "reference": {
+          "enum": [
+            "nominal_scan_time",
+            "daily_mean_with_explicit_station_hour",
+            "period_mean_with_explicit_station_hour",
+            "explicit_station_hour",
+            "same_hour"
+          ]
+        },
+        "difference_minutes": {"type": ["number", "null"]},
+        "manual_override": {"type": "boolean"}
+      }
+    },
+    "colocation": {
+      "type": "object",
+      "required": [
+        "layers",
+        "method",
+        "pairs",
+        "spearman",
+        "comparable_units"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "layers": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "method": {"const": "station_in_valid_statistics_cell"},
+        "pairs": {"type": "integer", "minimum": 0},
+        "spearman": {"$ref": "#/$defs/nullableNumber"},
+        "comparable_units": {
+          "type": "boolean",
+          "description": "False for satellite columns vs surface concentrations: the pair shows spatial agreement, not a conversion."
+        },
+        "data": {
+          "type": "string",
+          "description": "Absolute path of the paired table (columns satellite_value and station_value)."
+        }
+      }
+    },
+
+    "quality": {
+      "type": "object",
+      "required": ["grade", "flags"],
+      "additionalProperties": false,
+      "properties": {
+        "grade": {
+          "enum": ["good", "limited", "unreliable", "failed"],
+          "description": "Worst flag severity: none/info -> good, warning -> limited, critical -> unreliable; failed for status=error."
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["code", "severity", "message"],
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "low_coverage",
+                  "very_low_coverage",
+                  "no_valid_data",
+                  "few_valid_days",
+                  "missing_days",
+                  "failed_files",
+                  "few_stations",
+                  "missing_station_values",
+                  "missing_hours",
+                  "daily_vs_hourly",
+                  "column_vs_surface",
+                  "manual_time_override",
+                  "values_smoothed"
+                ]
+              },
+              "severity": {"enum": ["info", "warning", "critical"]},
+              "layer": {"type": "string"},
+              "message": {"type": "string"},
+              "evidence": {"type": "object"}
+            }
+          }
+        }
+      }
+    },
+
+    "render": {
+      "type": "object",
+      "required": ["image", "dpi", "basemap", "title", "layers"],
+      "additionalProperties": false,
+      "properties": {
+        "image": {"type": "string"},
+        "dpi": {"type": "integer"},
+        "basemap": {"enum": ["satellite", "none"]},
+        "title": {"type": "string"},
+        "layers": {
+          "type": "object",
+          "description": "Layer id -> display settings actually used (cmap, vmin, vmax, extend, display smoothing, display grid shape, ...). Never affects statistics.",
+          "additionalProperties": {"type": "object"}
+        }
+      }
+    },
+
+    "artifacts": {
+      "type": "object",
+      "required": ["image", "sidecar", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "image": {"type": ["string", "null"]},
+        "sidecar": {"type": "string"},
+        "data": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "format", "content", "bytes"],
+            "additionalProperties": false,
+            "properties": {
+              "path": {"type": "string"},
+              "format": {"enum": ["netcdf4", "csv"]},
+              "content": {
+                "type": "string",
+                "description": "What the file holds, e.g. statistical_grid, station_table, hourly_series, colocation_pairs."
+              },
+              "layer": {"type": "string"},
+              "shape": {"type": "array", "items": {"type": "integer"}},
+              "rows": {"type": "integer"},
+              "bytes": {"type": "integer"}
+            }
+          }
+        }
+      }
+    },
+
+    "error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "invalid_argument",
+            "invalid_time",
+            "region_not_found",
+            "data_not_configured",
+            "data_not_found",
+            "no_valid_data",
+            "read_failed",
+            "internal_error"
+          ]
+        },
+        "message": {"type": "string"},
+        "option": {
+          "type": "string",
+          "description": "The offending option or argument, when there is one."
+        },
+        "details": {"type": "object"}
+      }
+    }
+  }
+}

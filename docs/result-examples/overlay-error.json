@@ -1,0 +1,39 @@
+{
+  "schema": "rsplot.result/2",
+  "status": "error",
+  "command": "overlay",
+  "rsplot_version": "0.3.2.dev4",
+  "generated_at": "2026-10-05T14:07:02+08:00",
+  "request": {
+    "argv": [
+      "overlay", "合肥", "20260919",
+      "--product", "no2",
+      "--station-var", "NO2",
+      "--station-datetime", "2026091904",
+      "--output", "out/hefei_no2.png"
+    ],
+    "resolved": {
+      "product": {"value": "no2", "source": "cli"},
+      "station_var": {"value": "NO2", "source": "cli"},
+      "station_datetime": {"value": "2026091904", "source": "cli"}
+    }
+  },
+  "region": {
+    "name": "合肥市",
+    "level": "city",
+    "kind": "administrative",
+    "extent": [116.69, 117.98, 30.94, 32.54],
+    "members": []
+  },
+  "layers": [],
+  "relations": {},
+  "quality": {"grade": "failed", "flags": []},
+  "render": null,
+  "artifacts": {"image": null, "sidecar": "/data/out/hefei_no2.json", "data": []},
+  "error": {
+    "code": "data_not_found",
+    "message": "未找到站点数据文件: /mnt/nas/tianpu/stations/2026091904.nc",
+    "option": "--station-datetime",
+    "details": {"path": "/mnt/nas/tianpu/stations/2026091904.nc"}
+  }
+}
