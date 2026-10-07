@@ -13,6 +13,7 @@ app = typer.Typer(
     name="rsplot",
     help="CLI tool for Remote sensing raster plotting.",
     no_args_is_help=True,
+    add_completion=False,
 )
 
 
@@ -58,7 +59,18 @@ def raster(
             "或结束日期 YYYYMMDD 配合 --days N，逐日等权平均。"
         ),
     ),
-    # --- optional overrides ---
+    # --- Required options ---
+    product: str = typer.Option(
+        ...,
+        "--product",
+        help="产品类型: no2 / o3 / o3pr / hcho",
+    ),
+    output: str = typer.Option(
+        ...,
+        "--output",
+        help="输出 PNG 路径，同时写同名 JSON",
+    ),
+    # --- Data selection and processing ---
     sensor: str = typer.Option(
         "tropomi", "--sensor", help="卫星来源: tropomi / gems"
     ),
@@ -66,11 +78,6 @@ def raster(
         None,
         "--processing",
         help="TROPOMI 处理流: nrti（筛选并去重）；省略则读取目录内匹配文件",
-    ),
-    product: str = typer.Option(
-        ...,
-        "--product",
-        help="产品类型: no2 / o3 / o3pr / hcho",
     ),
     days: int | None = typer.Option(
         None,
@@ -94,29 +101,11 @@ def raster(
         "--level",
         help="强制指定级别: country / key_region / province / city / county",
     ),
-    output: str = typer.Option(
-        ...,
-        "--output",
-        help="输出 PNG 路径，同时写同名 JSON",
-    ),
-    dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
     res: float | None = typer.Option(
         None,
         "--res",
         help="目标网格间距 (度)；GEMS 默认 0.05°，直接重映射原始像元",
     ),
-    basemap: str | None = typer.Option(
-        None,
-        "--basemap",
-        help="底图控制: satellite / none (覆盖级别默认)",
-    ),
-    vmin: float | None = typer.Option(None, "--vmin", help="Colorbar 最小值"),
-    vmax: float | None = typer.Option(None, "--vmax", help="Colorbar 最大值"),
-    cmap: str | None = typer.Option(None, "--cmap", help="Colormap 名称"),
-    smooth: float | None = typer.Option(
-        None, "--smooth", help="高斯平滑 sigma"
-    ),
-    title: str | None = typer.Option(None, "--title", help="自定义标题"),
     qa: float | None = typer.Option(
         None, "--qa", help="TROPOMI QA 阈值 (0-1)，默认取配置；GEMS 不适用"
     ),
@@ -127,6 +116,20 @@ def raster(
         max=1.0,
         help="最大云量比例 (0-1)，保留 CF <= 该值的卫星像元",
     ),
+    smooth: float | None = typer.Option(
+        None, "--smooth", help="高斯平滑 sigma"
+    ),
+    # --- Plotting ---
+    dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
+    basemap: str | None = typer.Option(
+        None,
+        "--basemap",
+        help="底图控制: satellite / none (覆盖级别默认)",
+    ),
+    vmin: float | None = typer.Option(None, "--vmin", help="Colorbar 最小值"),
+    vmax: float | None = typer.Option(None, "--vmax", help="Colorbar 最大值"),
+    cmap: str | None = typer.Option(None, "--cmap", help="Colormap 名称"),
+    title: str | None = typer.Option(None, "--title", help="自定义标题"),
 ) -> None:
     """绘制卫星遥感栅格图。
 
@@ -175,7 +178,23 @@ def radius(
         help="GEMS: 北京时间 YYYYMMDDHHMM 精确扫描，YYYYMMDD 日均；单日 YYYYMMDD 走单日路径；带 --days 或写成 YYYYMMDD-YYYYMMDD "
         "时切换为窗口均值（HCHO 单日覆盖率低，月均更可读）",
     ),
-    # --- optional overrides ---
+    # --- Required options ---
+    product: str = typer.Option(
+        ...,
+        "--product",
+        help="产品类型: no2 / o3 / o3pr / hcho",
+    ),
+    km: float = typer.Option(
+        ...,
+        "--km",
+        help="从站点向上下左右各延伸的公里数，正方形边长为该值的两倍",
+    ),
+    output: str = typer.Option(
+        ...,
+        "--output",
+        help="输出 PNG 路径，同时写同名 JSON",
+    ),
+    # --- Data selection and processing ---
     sensor: str = typer.Option(
         "tropomi", "--sensor", help="卫星来源: tropomi / gems"
     ),
@@ -183,11 +202,6 @@ def radius(
         None,
         "--processing",
         help="TROPOMI 处理流: nrti；省略时沿用原有目录与读取行为",
-    ),
-    product: str = typer.Option(
-        ...,
-        "--product",
-        help="产品类型: no2 / o3 / o3pr / hcho",
     ),
     days: int | None = typer.Option(
         None,
@@ -203,11 +217,6 @@ def radius(
             "max(3, 天数//2), HCHO=max(3, ceil(天数*0.25))"
         ),
     ),
-    km: float = typer.Option(
-        ...,
-        "--km",
-        help="从站点向上下左右各延伸的公里数，正方形边长为该值的两倍",
-    ),
     station_var: str | None = typer.Option(
         None,
         "--station-var",
@@ -218,29 +227,11 @@ def radius(
         "--station-datetime",
         help="站点北京时间 YYYYMMDDHH；日均/窗口叠加变量时必填，GEMS 扫描默认匹配最近整点",
     ),
-    output: str = typer.Option(
-        ...,
-        "--output",
-        help="输出 PNG 路径，同时写同名 JSON",
-    ),
-    dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
     res: float | None = typer.Option(
         None,
         "--res",
         help="目标网格间距 (度)；GEMS 默认 0.05°，直接重映射原始像元",
     ),
-    basemap: str | None = typer.Option(
-        "none",
-        "--basemap",
-        help="底图控制: satellite / none (覆盖级别默认)",
-    ),
-    vmin: float | None = typer.Option(None, "--vmin", help="Colorbar 最小值"),
-    vmax: float | None = typer.Option(None, "--vmax", help="Colorbar 最大值"),
-    cmap: str | None = typer.Option(None, "--cmap", help="Colormap 名称"),
-    smooth: float | None = typer.Option(
-        None, "--smooth", help="高斯平滑 sigma"
-    ),
-    title: str | None = typer.Option(None, "--title", help="自定义标题"),
     qa: float | None = typer.Option(
         None, "--qa", help="TROPOMI QA 阈值 (0-1)，默认取配置；GEMS 不适用"
     ),
@@ -251,6 +242,20 @@ def radius(
         max=1.0,
         help="最大云量比例 (0-1)，保留 CF <= 该值的卫星像元",
     ),
+    smooth: float | None = typer.Option(
+        None, "--smooth", help="高斯平滑 sigma"
+    ),
+    # --- Plotting ---
+    dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
+    basemap: str | None = typer.Option(
+        "none",
+        "--basemap",
+        help="底图控制: satellite / none (覆盖级别默认)",
+    ),
+    vmin: float | None = typer.Option(None, "--vmin", help="Colorbar 最小值"),
+    vmax: float | None = typer.Option(None, "--vmax", help="Colorbar 最大值"),
+    cmap: str | None = typer.Option(None, "--cmap", help="Colormap 名称"),
+    title: str | None = typer.Option(None, "--title", help="自定义标题"),
 ) -> None:
     """绘制站点居中、上下左右各延伸指定公里数的正方形卫星图，可叠加指定小时的站点变量。"""
     from rsplot.commands.radius import run_radius
@@ -290,6 +295,13 @@ def meteo(
         ...,
         help="中国时间 YYYYMMDDHH；不接受仅日期，不自动选择最新小时",
     ),
+    # --- Required options ---
+    output: str = typer.Option(
+        ...,
+        "--output",
+        help="输出 PNG 路径；同时写同名 JSON",
+    ),
+    # --- Data selection and processing ---
     temp_level: str | None = typer.Option(
         None,
         "--temp-level",
@@ -310,21 +322,12 @@ def meteo(
         "--level",
         help="强制指定行政区级别: country/key_region/province/city/county",
     ),
-    output: str = typer.Option(
-        ...,
-        "--output",
-        help="输出 PNG 路径；同时写同名 JSON",
-    ),
+    # --- Plotting ---
     dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
     basemap: str | None = typer.Option(
         None,
         "--basemap",
         help="底图控制: satellite / none",
-    ),
-    cmap: str | None = typer.Option(
-        None,
-        "--cmap",
-        help="温度色标；默认 RdYlBu_r",
     ),
     vmin: float | None = typer.Option(
         None,
@@ -335,6 +338,11 @@ def meteo(
         None,
         "--vmax",
         help="温度色标最大值 (°C)，默认区域 98% 分位",
+    ),
+    cmap: str | None = typer.Option(
+        None,
+        "--cmap",
+        help="温度色标；默认 RdYlBu_r",
     ),
     wind_stride: int | None = typer.Option(
         None,
@@ -398,21 +406,24 @@ def station(
         ...,
         help="北京时间 YYYYMMDDHH（必须指定小时，不自动选择最新小时）",
     ),
+    # --- Required options ---
     var: str = typer.Option(
         ...,
         "--var",
         help="变量名: AQI, PM2.5, PM2.5_24h, PM10, PM10_24h, SO2, SO2_24h, NO2, NO2_24h, O3, O3_24h, O3_8h, O3_8h_24h, CO, CO_24h",
-    ),
-    level: str | None = typer.Option(
-        None,
-        "--level",
-        help="强制指定级别: country / key_region / province / city / county",
     ),
     output: str = typer.Option(
         ...,
         "--output",
         help="输出文件路径",
     ),
+    # --- Data selection and processing ---
+    level: str | None = typer.Option(
+        None,
+        "--level",
+        help="强制指定级别: country / key_region / province / city / county",
+    ),
+    # --- Plotting ---
     dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
     basemap: str | None = typer.Option(
         None,
@@ -455,21 +466,41 @@ def trend(
         ...,
         help="结束日期 YYYYMMDD，或显式范围 YYYYMMDD-YYYYMMDD",
     ),
-    days: int | None = typer.Option(
-        None,
-        "--days",
-        help="以单日 DATE 为结束日的天数；单日 DATE 必填，日期区间时不可用",
-    ),
+    # --- Required options ---
     var: str = typer.Option(
         ...,
         "--var",
         help="变量名: AQI, PM2.5, PM10, NO2, O3, SO2, CO, O3_8h, O3_8h_24h",
+    ),
+    output: str = typer.Option(
+        ...,
+        "--output",
+        help="PNG 输出文件路径",
+    ),
+    # --- Data selection and processing ---
+    days: int | None = typer.Option(
+        None,
+        "--days",
+        help="以单日 DATE 为结束日的天数；单日 DATE 必填，日期区间时不可用",
     ),
     region: bool = typer.Option(
         False,
         "--region",
         help="将 TARGET 作为区域名称，绘制区域站点趋势",
     ),
+    threshold: float | None = typer.Option(
+        None,
+        "--threshold",
+        min=0.0,
+        help="覆盖变量默认超标阈值",
+    ),
+    level: str | None = typer.Option(
+        None,
+        "--level",
+        help="区域模式强制级别: country / key_region / province / city / county",
+    ),
+    # --- Plotting ---
+    dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
     view: str = typer.Option(
         "lines",
         "--view",
@@ -482,23 +513,6 @@ def trend(
             help="区域图中重点突出站点 ID；可重复指定",
         ),
     ] = None,
-    threshold: float | None = typer.Option(
-        None,
-        "--threshold",
-        min=0.0,
-        help="覆盖变量默认超标阈值",
-    ),
-    level: str | None = typer.Option(
-        None,
-        "--level",
-        help="区域模式强制级别: country / key_region / province / city / county",
-    ),
-    output: str = typer.Option(
-        ...,
-        "--output",
-        help="PNG 输出文件路径",
-    ),
-    dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
     title: str | None = typer.Option(None, "--title", help="自定义标题"),
 ) -> None:
     """绘制单站点或区域国控站点小时观测趋势图。
@@ -543,7 +557,23 @@ def overlay(
             " --days N，逐日等权平均。"
         ),
     ),
-    # --- satellite product ---
+    # --- Required options ---
+    product: str = typer.Option(
+        ...,
+        "--product",
+        help="卫星产品类型: no2 / o3 / o3pr / hcho",
+    ),
+    station_var: str = typer.Option(
+        ...,
+        "--station-var",
+        help="站点变量名，如 NO2 / O3 / O3_8h_24h；与卫星产品无默认配对",
+    ),
+    output: str = typer.Option(
+        ...,
+        "--output",
+        help="输出 PNG 路径，同时写同名 JSON",
+    ),
+    # --- Data selection and processing ---
     sensor: str = typer.Option(
         "tropomi", "--sensor", help="卫星来源: tropomi / gems"
     ),
@@ -551,11 +581,6 @@ def overlay(
         None,
         "--processing",
         help="TROPOMI 处理流: nrti；省略时沿用原有目录与读取行为",
-    ),
-    product: str = typer.Option(
-        ...,
-        "--product",
-        help="卫星产品类型: no2 / o3 / o3pr / hcho",
     ),
     days: int | None = typer.Option(
         None,
@@ -579,29 +604,31 @@ def overlay(
             "不会自动选择最新小时。"
         ),
     ),
-    # --- station variable ---
-    station_var: str = typer.Option(
-        ...,
-        "--station-var",
-        help="站点变量名，如 NO2 / O3 / O3_8h_24h；与卫星产品无默认配对",
-    ),
-    # --- overrides ---
     level: str | None = typer.Option(
         None,
         "--level",
         help="强制指定级别: country / key_region / province / city / county",
     ),
-    output: str = typer.Option(
-        ...,
-        "--output",
-        help="输出 PNG 路径，同时写同名 JSON",
-    ),
-    dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
     res: float | None = typer.Option(
         None,
         "--res",
         help="目标网格间距 (度)；GEMS 默认 0.05°，直接重映射原始像元",
     ),
+    qa: float | None = typer.Option(
+        None, "--qa", help="TROPOMI QA 阈值 (0-1)，默认取配置；GEMS 不适用"
+    ),
+    cf: float = typer.Option(
+        0.5,
+        "--cf",
+        min=0.0,
+        max=1.0,
+        help="最大云量比例 (0-1)，保留 CF <= 该值的卫星像元",
+    ),
+    smooth: float | None = typer.Option(
+        None, "--smooth", help="高斯平滑 sigma"
+    ),
+    # --- Plotting ---
+    dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
     basemap: str | None = typer.Option(
         None,
         "--basemap",
@@ -614,19 +641,6 @@ def overlay(
         None, "--vmax", help="卫星 colorbar 最大值"
     ),
     cmap: str | None = typer.Option(None, "--cmap", help="卫星 colormap 名称"),
-    smooth: float | None = typer.Option(
-        None, "--smooth", help="高斯平滑 sigma"
-    ),
-    qa: float | None = typer.Option(
-        None, "--qa", help="TROPOMI QA 阈值 (0-1)，默认取配置；GEMS 不适用"
-    ),
-    cf: float = typer.Option(
-        0.5,
-        "--cf",
-        min=0.0,
-        max=1.0,
-        help="最大云量比例 (0-1)，保留 CF <= 该值的卫星像元",
-    ),
     title: str | None = typer.Option(None, "--title", help="自定义标题"),
 ) -> None:
     """叠加绘制卫星栅格+国控站点图。
@@ -676,11 +690,18 @@ def recent(
     end_date: str = typer.Argument(
         ..., help="结束日期 YYYYMMDD，最近 N 天统计以该日期为窗口末端"
     ),
+    # --- Required options ---
     days: int = typer.Option(
         ...,
         "--days",
         help="最近天数，如 7 / 30 / 365",
     ),
+    output: str = typer.Option(
+        ...,
+        "--output",
+        help="输出 JSON 路径",
+    ),
+    # --- Data selection and processing ---
     source: str = typer.Option(
         "raster",
         "--source",
@@ -708,11 +729,6 @@ def recent(
         None,
         "--level",
         help="强制指定级别: country / key_region / province / city / county",
-    ),
-    output: str = typer.Option(
-        ...,
-        "--output",
-        help="输出 JSON 路径",
     ),
     res: float | None = typer.Option(
         None,
@@ -766,7 +782,18 @@ def fnr(
         help="单日 (YYYYMMDD，默认向前 --days 天) 或范围 "
         "(YYYYMMDD-YYYYMMDD，闭区间)",
     ),
-    # --- window ---
+    # --- Required options ---
+    output: str = typer.Option(
+        ...,
+        "--output",
+        help="输出文件路径",
+    ),
+    # --- Data selection and processing ---
+    processing: str | None = typer.Option(
+        None,
+        "--processing",
+        help="TROPOMI 处理流: nrti，同时用于 NO2 与 HCHO",
+    ),
     days: int | None = typer.Option(
         None,
         "--days",
@@ -793,32 +820,12 @@ def fnr(
         "--nox-threshold",
         help="NOx-limited 分级阈值：FNR 大于该值判为 NOx-limited",
     ),
-    display_max: float = typer.Option(
-        6.0,
-        "--display-max",
-        help="FNR 图例显示上限，必须大于 --nox-threshold",
-    ),
-    # --- overrides ---
     level: str | None = typer.Option(
         None,
         "--level",
         help="强制指定级别: country / key_region / province / city / county",
     ),
-    output: str = typer.Option(
-        ...,
-        "--output",
-        help="输出文件路径",
-    ),
-    dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
     res: float | None = typer.Option(None, "--res", help="网格分辨率 (度)"),
-    basemap: str | None = typer.Option(
-        None,
-        "--basemap",
-        help="底图控制: satellite / none",
-    ),
-    smooth: float | None = typer.Option(
-        None, "--smooth", help="高斯平滑 sigma"
-    ),
     qa: float | None = typer.Option(
         0.5,
         "--qa",
@@ -831,10 +838,20 @@ def fnr(
         max=1.0,
         help="最大云量比例，同时应用于 NO2 和 HCHO；保留 CF <= 该值的像元",
     ),
-    processing: str | None = typer.Option(
+    smooth: float | None = typer.Option(
+        None, "--smooth", help="高斯平滑 sigma"
+    ),
+    # --- Plotting ---
+    dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
+    basemap: str | None = typer.Option(
         None,
-        "--processing",
-        help="TROPOMI 处理流: nrti，同时用于 NO2 与 HCHO",
+        "--basemap",
+        help="底图控制: satellite / none",
+    ),
+    display_max: float = typer.Option(
+        6.0,
+        "--display-max",
+        help="FNR 图例显示上限，必须大于 --nox-threshold",
     ),
     title: str | None = typer.Option(None, "--title", help="自定义标题"),
 ) -> None:
