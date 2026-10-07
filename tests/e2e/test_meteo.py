@@ -229,6 +229,63 @@ class MeteoE2E(unittest.TestCase):
             "region_not_found",
         )
 
+    def test_user_maps_weather_across_two_regions(self):
+        """Given ERA5, when mapping two regions, then summarize each grid."""
+        self.workspace.write_temperature(UTC)
+        self.workspace.write_wind(UTC)
+        payload = self.assert_plot(
+            self.workspace.meteo(
+                HOUR,
+                "--temp-level",
+                "2m",
+                "--wind-level",
+                "10m",
+                region="FixtureCity,EastCity",
+            ),
+            ["temperature", "wind"],
+        )
+        self.assertEqual(
+            [item["name"] for item in payload["region"]["members"]],
+            ["FixtureCity", "EastCity"],
+        )
+        self.assertEqual(
+            [
+                (row["name"], row["n"], row["mean"])
+                for row in layer(payload, "temperature")["by_member"]
+            ],
+            [("FixtureCity", 25, 20.0), ("EastCity", 15, 20.0)],
+        )
+        self.assertEqual(
+            [
+                (row["name"], row["n"], row["mean"])
+                for row in layer(payload, "wind")["by_member"]
+            ],
+            [("FixtureCity", 25, 5.0), ("EastCity", 15, 5.0)],
+        )
+
+    def test_user_maps_stations_with_weather_across_two_regions(self):
+        """Given stations, when mapping two regions, then summarize each."""
+        self.workspace.write_wind(UTC)
+        self.workspace.write_stations(HOUR)
+        payload = self.assert_plot(
+            self.workspace.meteo(
+                HOUR,
+                "--wind-level",
+                "10m",
+                "--station-var",
+                "NO2",
+                region="FixtureCity,EastCity",
+            ),
+            ["wind", "station"],
+        )
+        self.assertEqual(
+            [
+                (row["name"], row["n"], row["mean"])
+                for row in layer(payload, "station")["by_member"]
+            ],
+            [("FixtureCity", 2, 60.0), ("EastCity", 1, 999.0)],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

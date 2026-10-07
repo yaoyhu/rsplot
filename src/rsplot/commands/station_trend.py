@@ -9,7 +9,11 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from rsplot.commands.common import parse_explicit_window, validate_positive
+from rsplot.commands.common import (
+    parse_explicit_window,
+    require_single_region,
+    validate_positive,
+)
 from rsplot.config import AppConfig
 from rsplot.errors import RsplotError
 
@@ -138,6 +142,7 @@ def _emit_trend(
 
     info = None
     if region_mode:
+        require_single_region(target)
         try:
             info = resolve_region(target, cfg)
         except RsplotError:

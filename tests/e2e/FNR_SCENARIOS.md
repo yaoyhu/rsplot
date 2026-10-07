@@ -29,6 +29,8 @@ cover the 3 days ending Jan 3 with the default n-min of 3, so FNR is 3.
 | user rejects an impossible n-min | Same inputs | Map with --n-min 5 | Rejected with `invalid_argument` on option --n-min |
 | user rejects crossed thresholds | Same inputs | Map with --voc-threshold 3 --nox-threshold 2 | Rejected with `invalid_argument` |
 | user learns the region does not exist | Same inputs | Map region Atlantis | Rejected with `region_not_found` |
+| user maps FNR across two regions | Same inputs (swaths cover only `FixtureCity`) | Map `FixtureCity,EastCity` | `region.members` names both; `fnr` `by_member` FixtureCity n 16, mean 3, category `nox_limited`, and EastCity n 0 with null mean and category |
+| user compares the inputs across two regions | Same inputs | Map `FixtureCity,EastCity` | `no2` `by_member` FixtureCity n 16 mean 2 and EastCity n 0; `hcho` FixtureCity mean 6 |
 | user names the window for a single date | Same inputs | Map ending 20260103 without --days | Rejected with `invalid_argument` on option --days |
 | user maps an explicit date range | Same inputs | Map 20260101-20260103 without --days | A PNG; `fnr` runs from 20260101 to 20260103 |
 | user cannot combine a date range with days | Same inputs | Map 20260101-20260103 with --days 3 | Rejected with `invalid_argument` on option --days |

@@ -320,8 +320,8 @@
         "max": {"$ref": "#/$defs/nullableNumber"},
         "n_exceed": {"type": "integer", "minimum": 0},
         "category": {
-          "type": "string",
-          "description": "Dominant class of the unit, e.g. the FNR regime of its mean."
+          "type": ["string", "null"],
+          "description": "Dominant class of the unit, e.g. the FNR regime of its mean; null for a comma-selected member without valid cells."
         }
       }
     },

@@ -76,7 +76,7 @@ Every layer has the same keys:
 | `categories` | Counts per band where the variable has bands, e.g. AQI levels (优, 良, 轻度, 中度, 重度, 严重, 爆表). |
 | `temporal_summary` | Comparisons across a series (`recent`): `windows` (last/previous 7 and 30 days, last 365), `changes` between them, and the linear `trend`. |
 | `by_admin` | Statistics for every subdivision of the region, never truncated; may carry a `category` such as the dominant FNR regime. |
-| `by_member` | Comma-selected regions only, from the same statistical data. |
+| `by_member` | Comma-selected regions only (`raster`, `overlay`, `station`, `meteo`, `fnr`), from the same statistical data. A member without valid data keeps `n: 0` with null summaries (and a null FNR `category`). |
 | `extremes` | Highest cells or stations as a capped list: `items`, `total`, `truncated`, `order`. |
 | `data` | Absolute path of this layer's data file, or `null`. |
 

@@ -26,6 +26,7 @@ S003A in `EastCity` reads 999. Requests use `--days 1 --var NO2`.
 | user learns a focus station is outside the region | 24 hourly files | Regional trend with --focus-station S003A | Rejected with `invalid_argument` on option --focus-station |
 | user learns the station does not exist | 24 hourly files | Trend ZZZ9A | Rejected with `region_not_found`, naming ZZZ9A |
 | user learns the region does not exist | 24 hourly files | Trend Atlantis with --region | Rejected with `region_not_found` |
+| user trends one region at a time | 24 hourly files | Trend `FixtureCity，EastCity` (Chinese comma) with --region | Rejected with `invalid_argument`; the message says to run once per region and `details.regions` lists FixtureCity and EastCity |
 | user learns no files exist | No hourly files | Trend S001A | Rejected with `data_not_found` |
 | user rejects an invalid date | 24 hourly files | Trend S001A for 20260230 | Rejected with `invalid_time` |
 | user rejects a regional view for one station | 24 hourly files | Trend S001A with --view mean | Rejected with `invalid_argument` on option --view |

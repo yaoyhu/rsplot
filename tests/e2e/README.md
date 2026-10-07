@@ -312,3 +312,30 @@ failure, no format number). Against the unchanged application all
 rejection scenarios failed (no error line), every success scenario failed
 schema validation (the schema file is now `result.schema.json`), and the
 new CLI scenarios failed.
+
+## Comma-selected regions beyond raster and overlay
+
+`station` passed a comma list to the single-region resolver, so
+`FixtureCity,EastCity` failed as `region_not_found`. Two scenarios were
+written first (both regions summarized in `by_member`; a member without
+stations kept with `n: 0`); both failed against the unchanged application.
+`station` now resolves comma lists; its station layer already built
+`by_member`.
+
+`meteo` likewise failed both new scenarios (grid and station `by_member`)
+against the unchanged application. Its temperature and wind layers now add
+`by_member`, selecting each member's cells with the layer's own
+border-inclusive rule, so the fixture's shared-border cells count for both
+cities (25 and 15 of 35).
+
+`fnr` failed both new scenarios against the unchanged application. Its
+`no2`/`hcho` layers gained `by_member` from `build_satellite_layer`
+unchanged; the `fnr` layer adds member rows with the dominant regime, and
+the fixture's empty `EastCity` keeps `n: 0` with null `mean` and
+`category` (the schema's `adminRow.category` is now nullable).
+
+`recent` and `trend --region` reported a comma list as `region_not_found`,
+which did not say why. One scenario each (ASCII comma for `recent`,
+Chinese comma for `trend`) failed against the unchanged application; both
+now reject the list with `invalid_argument`, a message to run once per
+region, and `details.regions`.

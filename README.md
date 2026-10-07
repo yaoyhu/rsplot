@@ -453,11 +453,13 @@ nominal time difference.
 
 ## Select multiple regions without configuration
 
-`raster` and `overlay` accept a quoted, comma-separated region argument.
+`raster`, `overlay`, `station`, `meteo` and `fnr` accept a quoted,
+comma-separated region argument.
 Use English or Chinese commas; surrounding whitespace and embedded line
 breaks are ignored in a list. Province, city, and qualified county/township
 names can be mixed. County and township names still require their city,
-e.g. `中山市/东区街道`. Other commands retain their single-region input.
+e.g. `中山市/东区街道`. `recent` and `trend --region` summarize one region
+per run and reject a list; run them once per region.
 
 ```bash
 # One map covering three selected townships.

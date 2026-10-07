@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from rsplot.commands.common import (
+    require_single_region,
     resolve_satellite,
     satellite_filter_label,
     validate_positive,
@@ -168,6 +169,7 @@ def _emit_recent(
             option="--var",
         )
     console.print(f"[bold]解析区域:[/bold] {region}")
+    require_single_region(region)
     try:
         info = resolve_region(region, cfg)
     except RsplotError:

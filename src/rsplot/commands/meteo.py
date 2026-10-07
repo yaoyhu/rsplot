@@ -77,7 +77,7 @@ def _emit_meteo(
         get_exceedance_threshold,
     )
     from rsplot.data_files import data_path, write_grid_netcdf, write_table_csv
-    from rsplot.geo.boundaries import resolve_region
+    from rsplot.geo.boundaries import resolve_regions
     from rsplot.geo.processing import buffered_extent
     from rsplot.plotting.meteo import plot_meteo
     from rsplot.plotting.styles import setup_fonts
@@ -175,7 +175,7 @@ def _emit_meteo(
     setup_fonts(cfg.font_dir)
     console.print(f"[bold]解析区域:[/bold] {region}")
     try:
-        info = resolve_region(region, cfg)
+        info = resolve_regions(region, cfg)
     except RsplotError:
         raise
     except ValueError as error:
@@ -655,7 +655,37 @@ def _era5_grid_layer(
         ),
         "data": data,
     }
+    if region.members:
+        layer["by_member"] = _member_rows(values, lon, lat, region)
     return layer, coverage_flags(layer_id, coverage)
+
+
+def _member_rows(
+    values: np.ndarray,
+    lon: np.ndarray,
+    lat: np.ndarray,
+    region: Any,
+) -> list[dict[str, Any]]:
+    """Select each member's cells with the layer's own counted rule."""
+    from shapely import contains_xy
+
+    from rsplot.result_builders.common import member_basic_stats
+
+    rows = []
+    for member in region.members:
+        selected = contains_xy(member.geometry.buffer(1e-9), lon, lat)
+        stats = member_basic_stats(values[selected])
+        rows.append(
+            {
+                "name": member.qualified_name or member.name,
+                "level": member.administrative_level or member.level,
+                "n": int(stats["n"]),
+                "mean": stats["mean"],
+                "min": stats["min"],
+                "max": stats["max"],
+            }
+        )
+    return rows
 
 
 def _vector_summary(wind: Any) -> dict[str, Any]:

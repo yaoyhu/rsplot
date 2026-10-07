@@ -263,6 +263,25 @@ class RecentE2E(unittest.TestCase):
         )
         self.assert_rejected(result, "Atlantis", "region_not_found")
 
+    def test_user_summarizes_one_region_at_a_time(self):
+        """Given two regions, when summarizing, then ask for one per run."""
+        self.three_days()
+        result = self.workspace.invoke(
+            "recent",
+            "FixtureCity,EastCity",
+            "20260103",
+            "--days",
+            "3",
+            "--product",
+            "no2",
+            "--output",
+            str(self.workspace.output),
+        )
+        error = self.assert_rejected(result, "分别运行", "invalid_argument")
+        self.assertEqual(
+            error["details"], {"regions": ["FixtureCity", "EastCity"]}
+        )
+
     def test_user_names_the_product_for_satellite_summaries(self):
         """Given swaths, when omitting --product, then reject it."""
         self.three_days()

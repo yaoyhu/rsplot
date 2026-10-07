@@ -77,7 +77,7 @@ def _emit_station(
         get_exceedance_threshold,
     )
     from rsplot.data_files import data_path, write_table_csv
-    from rsplot.geo.boundaries import resolve_region
+    from rsplot.geo.boundaries import resolve_regions
     from rsplot.geo.processing import buffered_extent
     from rsplot.plotting.station import plot_station
     from rsplot.plotting.styles import setup_fonts
@@ -113,7 +113,7 @@ def _emit_station(
 
     console.print(f"[bold]解析区域:[/bold] {region}")
     try:
-        info = resolve_region(region, cfg)
+        info = resolve_regions(region, cfg)
     except RsplotError:
         raise
     except ValueError as error:

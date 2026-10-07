@@ -210,6 +210,45 @@ class FnrE2E(unittest.TestCase):
             "region_not_found",
         )
 
+    def test_user_maps_fnr_across_two_regions(self):
+        """Given data in one region, when mapping two, then keep both."""
+        self.workspace.write_days(2, 6)
+        payload = self.assert_plot(
+            self.workspace.fnr("20260103", region="FixtureCity,EastCity")
+        )
+        self.assertEqual(
+            [item["name"] for item in payload["region"]["members"]],
+            ["FixtureCity", "EastCity"],
+        )
+        self.assertEqual(
+            [
+                (row["name"], row["n"], row["mean"], row["category"])
+                for row in layer(payload, "fnr")["by_member"]
+            ],
+            [
+                ("FixtureCity", 16, 3.0, "nox_limited"),
+                ("EastCity", 0, None, None),
+            ],
+        )
+
+    def test_user_compares_the_inputs_across_two_regions(self):
+        """Given two regions, when mapping, then each input has members."""
+        self.workspace.write_days(2, 6)
+        payload = self.assert_plot(
+            self.workspace.fnr("20260103", region="FixtureCity,EastCity")
+        )
+        self.assertEqual(
+            [
+                (row["name"], row["n"], row["mean"])
+                for row in layer(payload, "no2")["by_member"]
+            ],
+            [("FixtureCity", 16, 2.0), ("EastCity", 0, None)],
+        )
+        self.assertEqual(
+            [row["mean"] for row in layer(payload, "hcho")["by_member"]],
+            [6.0, None],
+        )
+
     def test_user_names_the_window_for_a_single_date(self):
         """Given one end date, when omitting --days, then reject it."""
         self.workspace.write_days(2, 6)

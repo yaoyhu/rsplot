@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Callable
 from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
@@ -71,6 +72,18 @@ def parse_explicit_window(date_arg: str, days: int | None) -> list[str]:
         return parse_date_window(date_arg, default_days=days or 0)
     except ValueError as error:
         raise RsplotError("invalid_time", str(error)) from error
+
+
+def require_single_region(region: str) -> None:
+    """Reject a comma list where a merged regional mean would be implicit."""
+    names = [name.strip() for name in re.split("[,，]", region)]
+    if len(names) > 1:
+        raise RsplotError(
+            "invalid_argument",
+            f"'{region}' 列出了多个区域。时间序列一次只汇总一个区域，"
+            "合并多个区域会隐式加权；请对每个区域分别运行。",
+            details={"regions": [name for name in names if name]},
+        )
 
 
 def validate_positive(value: float, option: str) -> None:

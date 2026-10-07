@@ -191,6 +191,20 @@ class TrendE2E(unittest.TestCase):
             "region_not_found",
         )
 
+    def test_user_trends_one_region_at_a_time(self):
+        """Given two regions, when trending, then ask for one per run."""
+        self.workspace.write_hours("20260101")
+        error = self.assert_rejected(
+            self.workspace.trend(
+                "FixtureCity，EastCity", "20260101", "--region"
+            ),
+            "分别运行",
+            "invalid_argument",
+        )
+        self.assertEqual(
+            error["details"], {"regions": ["FixtureCity", "EastCity"]}
+        )
+
     def test_user_learns_no_files_exist(self):
         """Given no hourly files, when trending, then report missing data."""
         self.assert_rejected(

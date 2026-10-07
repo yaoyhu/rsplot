@@ -11,6 +11,52 @@ from rsplot.stats import round_finite
 if TYPE_CHECKING:
     import geopandas as gpd
 
+    from rsplot.geo.boundaries import RegionInfo
+
+
+def fnr_regime(
+    mean_fnr: float, voc_threshold: float, nox_threshold: float
+) -> str:
+    """Classify a mean FNR with the command's regime thresholds."""
+    if mean_fnr < voc_threshold:
+        return "voc_limited"
+    if mean_fnr <= nox_threshold:
+        return "transition"
+    return "nox_limited"
+
+
+def fnr_member_stats(
+    LON: np.ndarray,
+    LAT: np.ndarray,
+    fnr: np.ndarray,
+    region: RegionInfo,
+    *,
+    voc_threshold: float,
+    nox_threshold: float,
+) -> list[dict[str, Any]]:
+    """Summarize each comma-selected member, keeping empty members."""
+    from rsplot.geo.gridding import region_grid_mask
+
+    rows: list[dict[str, Any]] = []
+    for member in region.members:
+        finite = fnr[region_grid_mask(LON, LAT, member.geometry)]
+        finite = finite[np.isfinite(finite)]
+        mean_fnr = float(np.mean(finite)) if len(finite) else None
+        rows.append(
+            {
+                "name": member.qualified_name or member.name,
+                "level": member.administrative_level or member.level,
+                "n": len(finite),
+                "mean": None if mean_fnr is None else round_finite(mean_fnr),
+                "category": (
+                    None
+                    if mean_fnr is None
+                    else fnr_regime(mean_fnr, voc_threshold, nox_threshold)
+                ),
+            }
+        )
+    return rows
+
 
 def fnr_per_admin_stats(
     LON: np.ndarray,
@@ -32,12 +78,7 @@ def fnr_per_admin_stats(
         if len(finite) == 0:
             continue
         mean_fnr = float(np.mean(finite))
-        if mean_fnr < voc_threshold:
-            regime = "voc_limited"
-        elif mean_fnr <= nox_threshold:
-            regime = "transition"
-        else:
-            regime = "nox_limited"
+        regime = fnr_regime(mean_fnr, voc_threshold, nox_threshold)
         rows.append(
             {
                 "name": row["name"],

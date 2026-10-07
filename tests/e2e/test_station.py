@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 import numpy as np
+from overlay_support import STATIONS
 from PIL import Image
 from raster_support import assert_failed, schema_errors
 from station_support import StationWorkspace
@@ -157,6 +158,38 @@ class StationE2E(unittest.TestCase):
             self.workspace.station("2026010113", region="Atlantis"),
             "Atlantis",
             "region_not_found",
+        )
+
+    def test_user_maps_stations_across_two_regions(self):
+        """Given two regions, when mapping both, then summarize each."""
+        payload = self.assert_plot(
+            self.workspace.station("2026010113", region="FixtureCity,EastCity")
+        )
+        self.assertEqual(
+            [item["name"] for item in payload["region"]["members"]],
+            ["FixtureCity", "EastCity"],
+        )
+        self.assertEqual(station(payload)["stats"]["n"], 3)
+        self.assertEqual(
+            [
+                (row["name"], row["n"], row["mean"])
+                for row in station(payload)["by_member"]
+            ],
+            [("FixtureCity", 2, 60.0), ("EastCity", 1, 999.0)],
+        )
+
+    def test_user_sees_a_region_without_stations(self):
+        """Given no EastCity station, when mapping both, then keep it."""
+        self.workspace.write_stations("2026010113", STATIONS[:2])
+        payload = self.assert_plot(
+            self.workspace.station("2026010113", region="FixtureCity,EastCity")
+        )
+        self.assertEqual(
+            [
+                (row["name"], row["n"], row["mean"])
+                for row in station(payload)["by_member"]
+            ],
+            [("FixtureCity", 2, 60.0), ("EastCity", 0, None)],
         )
 
 

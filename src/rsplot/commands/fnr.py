@@ -83,7 +83,7 @@ def _emit_fnr(
         regime_percentages,
         validate_fnr_thresholds,
     )
-    from rsplot.geo.boundaries import resolve_region
+    from rsplot.geo.boundaries import resolve_regions
     from rsplot.geo.gridding import grid_coverage_in_region, region_grid_mask
     from rsplot.plotting.fnr import plot_fnr
     from rsplot.plotting.styles import setup_fonts
@@ -102,7 +102,10 @@ def _emit_fnr(
         success_envelope,
         write_sidecar,
     )
-    from rsplot.result_builders.fnr import fnr_per_admin_stats
+    from rsplot.result_builders.fnr import (
+        fnr_member_stats,
+        fnr_per_admin_stats,
+    )
     from rsplot.result_builders.satellite import (
         SatelliteInputs,
         build_satellite_layer,
@@ -159,7 +162,7 @@ def _emit_fnr(
 
     console.print(f"[bold]解析区域:[/bold] {region}")
     try:
-        info = resolve_region(region, cfg)
+        info = resolve_regions(region, cfg)
     except RsplotError:
         raise
     except ValueError as error:
@@ -509,6 +512,15 @@ def _emit_fnr(
         ),
         "data": fnr_entry["path"],
     }
+    if info.members:
+        fnr_layer["by_member"] = fnr_member_stats(
+            lon,
+            lat,
+            fnr_out.fnr,
+            info,
+            voc_threshold=use_voc_threshold,
+            nox_threshold=use_nox_threshold,
+        )
     layers.append(fnr_layer)
     flags.extend(coverage_flags("fnr", coverage))
     if use_smooth:

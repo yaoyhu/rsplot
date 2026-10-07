@@ -151,6 +151,10 @@ introduce new code that violates them.
    海南藏族自治州), like `吉林`.
    Counties are written `城市/区县`. `resolve_region(level_override=...)`
    remains only for the disabled `forecast`/`reconstruct` modules.
+   Map commands (`raster`, `overlay`, `station`, `meteo`, `fnr`) accept
+   comma-separated regions; `recent` and `trend --region` reject them with
+   `invalid_argument` (`commands.common.require_single_region`), because a
+   merged regional mean would weight regions implicitly.
 
 The disabled `forecast` and `reconstruct` commands are out of scope for this
 refactor.
@@ -493,8 +497,13 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
 
 ## Comma-Selected Regions
 
-- Only `raster` and `overlay` call `resolve_regions`; other commands retain
-  `resolve_region`. Single inputs delegate unchanged. Lists accept ASCII or
+- The map commands `raster`, `overlay`, `station`, `meteo` and `fnr` call
+  `resolve_regions`; `recent` and `trend --region` call
+  `require_single_region` before `resolve_region`. Each member's
+  `by_member` row uses its layer's own cell/station selection (meteo grids
+  count border cells for both neighbours, like their `coverage`). FNR's
+  `fnr` member rows carry the dominant `category`, null when empty
+  (`result_builders.fnr.fnr_member_stats`). Single inputs delegate unchanged. Lists accept ASCII or
   Chinese commas, strip surrounding whitespace and line breaks, reject empty
   or invalid items, and deduplicate canonical names in first-occurrence order.
 - `RegionInfo.members` stores each selected region. `qualified_name` retains
