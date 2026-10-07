@@ -109,10 +109,7 @@ def run_overlay(**kwargs: Any) -> None:
     from rsplot.commands.sidecar import run_with_sidecar
 
     run_with_sidecar(
-        command="overlay",
         kwargs=kwargs,
-        options=OVERLAY_OPTIONS,
-        positionals={"region": kwargs["region"], "date": kwargs["date_arg"]},
         emit=lambda created: _emit_overlay(created, **kwargs),
     )
 

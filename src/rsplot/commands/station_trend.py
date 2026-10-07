@@ -37,13 +37,7 @@ def run_trend(**kwargs: Any) -> None:
     from rsplot.commands.sidecar import run_with_sidecar
 
     run_with_sidecar(
-        command="trend",
         kwargs=kwargs,
-        options=TREND_OPTIONS,
-        positionals={
-            "target": kwargs["target"],
-            "date": kwargs["date_arg"],
-        },
         emit=lambda created: _emit_trend(created, **kwargs),
     )
 

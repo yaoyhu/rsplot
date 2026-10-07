@@ -6,7 +6,10 @@ itself and the conventions shared by every command.
 
 Data paths come from configuration only (CLI rule 1). The fixture config
 lists every data folder under `[paths.data_dirs]`. Typer rejects an unknown
-option with exit status 2 before rsplot runs, so no sidecar is written.
+option with exit status 2 before rsplot runs. Any other rejection exits 1,
+prints exactly one `rsplot error <code>[ <option>]: <message>[ <details>]`
+line on stderr, and leaves no PNG, JSON or data file; sidecars exist only
+for successful runs.
 
 Options have long names only (CLI rule 2). Nothing that selects data is
 implicit (CLI rule 3): `--output` is required everywhere, `--product` for
@@ -31,7 +34,7 @@ REGION_SCENARIOS.md).
 | user cannot point fnr at an HCHO folder | Configured paths | Run `fnr ... --hcho-dir /x` | Exit 2, "No such option", no output |
 | user cannot point meteo at an ERA5 folder | Configured paths | Run `meteo ... --data-dir /x` | Exit 2, "No such option", no output |
 | user cannot point meteo at a station folder | Configured paths | Run `meteo ... --station-data-dir /x` | Exit 2, "No such option", no output |
-| user learns a data folder is not configured | Config without `no2` | Map NO2 with `raster` | Exit 1; error sidecar `data_not_configured`, naming `[paths.data_dirs].no2` and no CLI option |
+| user learns a data folder is not configured | Config without `no2` | Map NO2 with `raster` | Exit 1; error line `data_not_configured` naming `[paths.data_dirs].no2` and no CLI option, details `{"config_key": "no2"}` |
 | user sees only long options for raster | CLI is installed | Request `raster --help` | No single-letter option such as `-p`, `-o` |
 | user sees only long options for overlay | CLI is installed | Request `overlay --help` | No single-letter option |
 | user sees only long options for radius | CLI is installed | Request `radius --help` | No single-letter option |
@@ -62,3 +65,6 @@ REGION_SCENARIOS.md).
 | user cannot force the recent region level | CLI is installed | Run `recent ... --level city` | Exit 2, "No such option", no output |
 | user cannot force the fnr region level | CLI is installed | Run `fnr ... --level city` | Exit 2, "No such option", no output |
 | user cannot force the meteo region level | CLI is installed | Run `meteo ... --level city` | Exit 2, "No such option", no output |
+| user reads a failure from one error line | One swath | Map with --days 0 | Exit 1; stderr has exactly one `rsplot error invalid_argument --days: --days 必须 >= 1。` line; no files are left |
+| user keeps no stale sidecar after a failure | An earlier successful map at the same output | Map again with --days 0 | Exit 1; the earlier sidecar is gone |
+| user finds no format number in a sidecar | One swath | Map it | The sidecar has no `schema`, `status` or `error` key; it has `rsplot_version` |

@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from raster_support import schema_errors
+from raster_support import ANY_OPTION, assert_failed, schema_errors
 from region_support import RegionWorkspace
 
 
@@ -25,14 +25,12 @@ class RegionE2E(unittest.TestCase):
         self.assertEqual(schema_errors(payload), [])
         return [payload["region"]["name"], payload["region"]["level"]]
 
-    def rejection(self, name: str) -> dict:
-        """Map NAME, expect exit 1, and return the error block."""
+    def rejection(self, name: str, code: str) -> dict:
+        """Map NAME, expect rejection CODE, and return the error line."""
         result = self.workspace.raster("20260101", region=name)
-        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertFalse(self.workspace.output.exists())
-        payload = self.workspace.payload()
-        self.assertEqual(schema_errors(payload), [])
-        return payload["error"]
+        return assert_failed(
+            self, self.workspace, result, name, code, ANY_OPTION
+        )
 
     def test_user_maps_a_city_whose_short_name_is_also_a_province(self):
         """Given 双名省 and 双名市, when mapping 双名市, then get the city."""
@@ -44,11 +42,8 @@ class RegionE2E(unittest.TestCase):
 
     def test_user_is_told_a_short_name_is_ambiguous(self):
         """Given 双名省 and 双名市, when mapping 双名, then reject it."""
-        error = self.rejection("双名")
-        self.assertEqual(
-            [error["code"], error["details"]["candidates"]],
-            ["region_ambiguous", ["双名省", "双名市"]],
-        )
+        error = self.rejection("双名", "region_ambiguous")
+        self.assertEqual(error["details"]["candidates"], ["双名省", "双名市"])
 
     def test_user_maps_beijing_as_a_city(self):
         """Given 北京市 in both files, when mapping 北京, then a city."""
@@ -78,10 +73,9 @@ class RegionE2E(unittest.TestCase):
 
     def test_user_is_told_hainan_is_ambiguous(self):
         """Given 海南省 and 海南藏族自治州, when mapping 海南, then reject."""
-        error = self.rejection("海南")
+        error = self.rejection("海南", "region_ambiguous")
         self.assertEqual(
-            [error["code"], error["details"]["candidates"]],
-            ["region_ambiguous", ["海南省", "海南藏族自治州"]],
+            error["details"]["candidates"], ["海南省", "海南藏族自治州"]
         )
 
     def test_user_maps_hainan_province_by_its_full_name(self):
@@ -90,9 +84,7 @@ class RegionE2E(unittest.TestCase):
 
     def test_user_cannot_use_a_pinyin_name(self):
         """Given Chinese boundary names, when mapping pinyin, then reject."""
-        self.assertEqual(
-            self.rejection("shuangming")["code"], "region_not_found"
-        )
+        self.rejection("shuangming", "region_not_found")
 
 
 if __name__ == "__main__":

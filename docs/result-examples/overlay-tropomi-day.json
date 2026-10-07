@@ -1,6 +1,4 @@
 {
-  "schema": "rsplot.result/2",
-  "status": "ok",
   "command": "overlay",
   "rsplot_version": "0.3.2.dev4",
   "generated_at": "2026-10-05T14:02:11+08:00",
@@ -215,6 +213,5 @@
         "bytes": 812
       }
     ]
-  },
-  "error": null
+  }
 }

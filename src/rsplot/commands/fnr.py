@@ -49,10 +49,7 @@ def run_fnr(**kwargs: Any) -> None:
     from rsplot.commands.sidecar import run_with_sidecar
 
     run_with_sidecar(
-        command="fnr",
         kwargs=kwargs,
-        options=FNR_OPTIONS,
-        positionals={"region": kwargs["region"], "date": kwargs["date_arg"]},
         emit=lambda created: _emit_fnr(created, **kwargs),
     )
 

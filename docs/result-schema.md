@@ -1,26 +1,26 @@
-# rsplot result sidecar — `rsplot.result/2`
+# rsplot result sidecar
 
 Status: **implemented for every enabled command.** The disabled `forecast`
 and `reconstruct` commands are out of scope.
 
-Every rsplot command writes one JSON sidecar with the same envelope, whether
-it succeeds or fails. The sidecar is written for agents that will analyse the
+Every rsplot command writes one JSON sidecar with the same envelope when it
+succeeds. A failed run writes no sidecar (see Errors). The sidecar is written for agents that will analyse the
 result further: it says what was computed, how far it can be trusted, how to
 reproduce it, and where the full data is. Humans read the PNG and stdout.
 
-- Machine schema: [`src/rsplot/schemas/result-2.schema.json`](../src/rsplot/schemas/result-2.schema.json)
+- Machine schema: [`src/rsplot/schemas/result.schema.json`](../src/rsplot/schemas/result.schema.json)
   (JSON Schema 2020-12, shipped inside the package).
 - Examples, all valid against the schema:
   - [`overlay-tropomi-day.json`](result-examples/overlay-tropomi-day.json):
     two layers, time matching, colocation, informational flags.
   - [`raster-window-unreliable.json`](result-examples/raster-window-unreliable.json):
     the real Hefei 7-day window with 2.9 % coverage, graded `unreliable`.
-  - [`overlay-error.json`](result-examples/overlay-error.json): a failed run.
 
   Examples abbreviate long lists (`files`, `by_admin`, `extremes`).
 
-This is a clean break from the old sidecars: no legacy keys are kept. The
-`schema` field identifies the version; a consumer must check it.
+This is a clean break from the old sidecars: no legacy keys are kept. There
+is no format number; `rsplot_version` identifies the release that wrote the
+file, and that release's shipped schema describes it.
 
 ## Design rules
 
@@ -39,19 +39,18 @@ This is a clean break from the old sidecars: no legacy keys are kept. The
 6. **Science and display are separate.** Everything that changes values lives
    in `layers[].method`; everything that only changes the picture lives in
    `render`.
-7. **Failures use the same envelope** with `status: "error"`.
+7. **A sidecar means success.** Failures write no sidecar; they exit 1 with
+   one `rsplot error` line on stderr.
 
 ## Top-level keys
 
 | Key | Meaning |
 | --- | --- |
-| `schema` | Always `"rsplot.result/2"`. |
-| `status` | `"ok"` or `"error"`. |
 | `command` | `raster`, `radius`, `overlay`, `station`, `trend`, `meteo`, `recent`, `fnr`. |
 | `rsplot_version`, `generated_at` | Package version and ISO 8601 time with offset. |
 | `request` | `argv` exactly as received, and `resolved`: every effective parameter as `{value, source, detail?}` where `source` is `cli`, `config`, `level_default`, `product_default` or `built_in`. |
-| `region` | `name`, `level`, `kind` (`administrative` or `station_radius`), `extent`, `members` (comma-selected regions), and for radius maps `radius` (`center_station`, `center_lon`, `center_lat`, `km`, `side_length_km`, `shape`, `projection`, `administrative_context`). `null` only for single-station trends or failures before region resolution. |
-| `layers` | One entry per data layer (below). Empty only on failure. |
+| `region` | `name`, `level`, `kind` (`administrative` or `station_radius`), `extent`, `members` (comma-selected regions), and for radius maps `radius` (`center_station`, `center_lon`, `center_lat`, `km`, `side_length_km`, `shape`, `projection`, `administrative_context`). `null` only for single-station trends. |
+| `layers` | One entry per data layer (below); never empty. |
 | `relations` | How layers relate: `time_matching` and `colocation`. `{}` for single-layer results. |
 | `quality` | `grade` and `flags` (below). |
 | `render` | Image settings actually used, per layer id. `null` for `recent` and failures. |
@@ -117,7 +116,7 @@ Only `overlay` and `radius` with a station variable produce colocation.
 ## Quality
 
 `grade` is the worst flag severity: no flags or only `info` → `good`; any
-`warning` → `limited`; any `critical` → `unreliable`; failed runs → `failed`.
+`warning` → `limited`; any `critical` → `unreliable`.
 Agents should not report `unreliable` statistics as regional values without
 saying so.
 
@@ -168,9 +167,17 @@ reports each file's `bytes` so an agent can decide whether to load it.
 
 ## Errors
 
-On any expected input or data error the command exits 1, writes no PNG and
-no data files, and writes the envelope with `status: "error"`, `quality.grade:
-"failed"`, empty `layers`, `render: null`, and `error`:
+On any expected input or data error the command exits 1 and prints exactly
+one line on stderr:
+
+```
+rsplot error <code>[ <option>]: <message>[ <details as one-line JSON>]
+rsplot error region_ambiguous: 区域名 '吉林' 同时匹配 吉林省（省级）和 吉林市（市级），请写全称。 {"region": "吉林", "candidates": ["吉林省", "吉林市"]}
+```
+
+It writes no sidecar, removes the PNG and data files it had written, and
+removes a sidecar an earlier run left at the same path, so a sidecar on disk
+always describes a successful run. Codes:
 
 | Code | Meaning |
 | --- | --- |
@@ -182,15 +189,15 @@ no data files, and writes the envelope with `status: "error"`, `quality.grade:
 | `data_not_found` | The requested file, day, scan or hour does not exist. |
 | `no_valid_data` | Data was read but nothing valid falls in the region. |
 | `read_failed` | Input files exist but could not be read. |
-| `internal_error` | Unexpected failure; `details` carries the exception type. |
+| `internal_error` | Unexpected failure; `details` carries the exception type, and the traceback follows the line. |
 
-`option` names the offending option when there is one. `message` keeps the
-existing Chinese CLI wording. Usage errors caught by the CLI parser (an
-unknown option, a missing required option or argument) exit 2 before rsplot
-runs and write no sidecar; the exit code is the only signal.
+`option` names the offending option when there is one. The message keeps the
+existing Chinese CLI wording on a single line. Usage errors caught by the CLI
+parser (an unknown option, a missing required option or argument) exit 2
+before rsplot runs, with the parser's own message instead of the error line.
 
 ## Versioning
 
-Additive changes (new optional keys, new flag codes, new layer ids) keep
-`rsplot.result/2`. Removing or renaming a key, or changing a meaning, bumps
-the version. Tests validate every sidecar against the shipped schema.
+There is no format number. Each release ships the schema that describes the
+sidecars it writes, and `rsplot_version` in every sidecar names that release.
+Tests validate every sidecar against the shipped schema.

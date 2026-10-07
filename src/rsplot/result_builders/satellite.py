@@ -1,4 +1,4 @@
-"""The ``satellite`` grid layer of an ``rsplot.result/2`` sidecar."""
+"""The ``satellite`` grid layer of a result sidecar."""
 
 from __future__ import annotations
 

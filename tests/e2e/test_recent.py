@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from raster_support import schema_errors
+from raster_support import assert_failed, schema_errors
 from recent_support import RecentWorkspace
 
 
@@ -43,24 +43,13 @@ class RecentE2E(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         payload = self.workspace.payload()
         self.assertEqual(schema_errors(payload), [])
-        self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["command"], "recent")
         return payload
 
     def assert_rejected(self, result, message, code, option=None):
-        self.assertNotEqual(
-            result.returncode, 0, result.stdout + result.stderr
+        return assert_failed(
+            self, self.workspace, result, message, code, option
         )
-        self.assertIn(message, result.stdout + result.stderr)
-        self.assertEqual(
-            sorted(p.name for p in self.workspace.output.parent.iterdir()),
-            [self.workspace.output.name],
-        )
-        payload = self.workspace.payload()
-        self.assertEqual(schema_errors(payload), [])
-        self.assertEqual(payload["status"], "error")
-        self.assertEqual(payload["error"]["code"], code)
-        self.assertEqual(payload["error"].get("option"), option)
 
     def table(self, payload):
         with open(series(payload)["data"], encoding="utf-8") as handle:

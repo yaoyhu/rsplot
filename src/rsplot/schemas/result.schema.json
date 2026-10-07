@@ -1,12 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://git.lug.ustc.edu.cn/yaoyhu/rsplot/schemas/result-2.schema.json",
-  "title": "rsplot result sidecar, schema rsplot.result/2",
-  "description": "One envelope for every rsplot command. Written next to the image (or alone for recent) and also on failure. See docs/result-schema.md.",
+  "$id": "https://git.lug.ustc.edu.cn/yaoyhu/rsplot/schemas/result.schema.json",
+  "title": "rsplot result sidecar",
+  "description": "One envelope for every rsplot command, written only on success: next to the image, or alone for recent. Failures write no sidecar. rsplot_version identifies the producer; there is no separate format number. See docs/result-schema.md.",
   "type": "object",
   "required": [
-    "schema",
-    "status",
     "command",
     "rsplot_version",
     "generated_at",
@@ -16,13 +14,10 @@
     "relations",
     "quality",
     "render",
-    "artifacts",
-    "error"
+    "artifacts"
   ],
   "additionalProperties": false,
   "properties": {
-    "schema": {"const": "rsplot.result/2"},
-    "status": {"enum": ["ok", "error"]},
     "command": {
       "enum": [
         "raster",
@@ -43,46 +38,21 @@
     "request": {"$ref": "#/$defs/request"},
     "region": {
       "oneOf": [{"$ref": "#/$defs/region"}, {"type": "null"}],
-      "description": "Null only when the command targets one station (trend station mode) or failed before resolving a region."
+      "description": "Null only when the command targets one station (trend station mode)."
     },
     "layers": {
       "type": "array",
+      "minItems": 1,
       "items": {"$ref": "#/$defs/layer"}
     },
     "relations": {"$ref": "#/$defs/relations"},
     "quality": {"$ref": "#/$defs/quality"},
     "render": {
       "oneOf": [{"$ref": "#/$defs/render"}, {"type": "null"}],
-      "description": "Null for recent (no image) and for failed runs."
+      "description": "Null for recent (no image)."
     },
-    "artifacts": {"$ref": "#/$defs/artifacts"},
-    "error": {
-      "oneOf": [{"$ref": "#/$defs/error"}, {"type": "null"}]
-    }
+    "artifacts": {"$ref": "#/$defs/artifacts"}
   },
-  "allOf": [
-    {
-      "if": {"properties": {"status": {"const": "ok"}}},
-      "then": {
-        "properties": {
-          "error": {"type": "null"},
-          "layers": {"minItems": 1}
-        }
-      }
-    },
-    {
-      "if": {"properties": {"status": {"const": "error"}}},
-      "then": {
-        "properties": {
-          "error": {"$ref": "#/$defs/error"},
-          "render": {"type": "null"},
-          "artifacts": {
-            "properties": {"image": {"type": "null"}, "data": {"maxItems": 0}}
-          }
-        }
-      }
-    }
-  ],
   "$defs": {
     "nullableNumber": {"type": ["number", "null"]},
     "compactDate": {"type": "string", "pattern": "^[0-9]{8}$"},
@@ -525,8 +495,8 @@
       "additionalProperties": false,
       "properties": {
         "grade": {
-          "enum": ["good", "limited", "unreliable", "failed"],
-          "description": "Worst flag severity: none/info -> good, warning -> limited, critical -> unreliable; failed for status=error."
+          "enum": ["good", "limited", "unreliable"],
+          "description": "Worst flag severity: none/info -> good, warning -> limited, critical -> unreliable."
         },
         "flags": {
           "type": "array",
@@ -607,33 +577,7 @@
           }
         }
       }
-    },
-
-    "error": {
-      "type": "object",
-      "required": ["code", "message"],
-      "additionalProperties": false,
-      "properties": {
-        "code": {
-          "enum": [
-            "invalid_argument",
-            "invalid_time",
-            "region_not_found",
-            "region_ambiguous",
-            "data_not_configured",
-            "data_not_found",
-            "no_valid_data",
-            "read_failed",
-            "internal_error"
-          ]
-        },
-        "message": {"type": "string"},
-        "option": {
-          "type": "string",
-          "description": "The offending option or argument, when there is one."
-        },
-        "details": {"type": "object"}
-      }
     }
+
   }
 }

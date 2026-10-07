@@ -58,7 +58,7 @@ class RasterRun:
     grid: np.ndarray
     region: RegionInfo
     plot_options: dict[str, Any]
-    # Inputs for the rsplot.result/2 satellite layer.
+    # Inputs for the sidecar satellite layer.
     satellite: SatelliteInputs | None = None
     resolved: dict[str, Any] = field(default_factory=dict)
     render: dict[str, Any] = field(default_factory=dict)
@@ -69,10 +69,7 @@ def run_raster(**kwargs: Any) -> None:
     from rsplot.commands.sidecar import run_with_sidecar
 
     run_with_sidecar(
-        command="raster",
         kwargs=kwargs,
-        options=RASTER_OPTIONS,
-        positionals={"region": kwargs["region"], "date": kwargs["date_arg"]},
         emit=lambda created: _emit_raster(kwargs, created),
     )
 
@@ -617,7 +614,7 @@ def prepare_raster(
         colorbar_label=prod_info.colorbar_label,
     )
 
-    # --- rsplot.result/2 inputs -------------------------------------------
+    # --- sidecar inputs ---------------------------------------------------
     stat_grid = prepared.values if statistics_grid is None else statistics_grid
     counted = region_grid_mask(prepared.lon, prepared.lat, info.geometry)
     china = sensor == "gems"

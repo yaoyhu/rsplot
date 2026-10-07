@@ -60,13 +60,7 @@ def run_recent(**kwargs: Any) -> None:
     from rsplot.commands.sidecar import run_with_sidecar
 
     run_with_sidecar(
-        command="recent",
         kwargs=kwargs,
-        options=RECENT_OPTIONS,
-        positionals={
-            "region": kwargs["region"],
-            "end_date": kwargs["end_date"],
-        },
         emit=lambda created: _emit_recent(created, **kwargs),
     )
 

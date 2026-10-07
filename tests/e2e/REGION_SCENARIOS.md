@@ -17,7 +17,8 @@ Fixtures add provinces 双名省, 北京市, 重庆市, 广西壮族自治区,
 楚雄彝族自治州, 黔东南苗族侗族自治州 and 海南藏族自治州 over the fixture
 swath box, next to the base FixtureProvince /
 FixtureCity boundaries. Every sidecar must validate against the schema; a
-rejection exits 1 and writes only an error sidecar.
+rejection exits 1, prints one `rsplot error <code>` line and writes no
+file.
 
 | Scenario | Given | When | Then |
 | --- | --- | --- | --- |

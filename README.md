@@ -3,7 +3,7 @@
 `rsplot` is a command-line tool for agents to analyze multi-source
 spatiotemporal remote-sensing and air-quality data: TROPOMI and GEMS
 satellite retrievals, national monitoring stations and ERA5. Each command
-writes a machine-readable `rsplot.result/2` JSON result with statistics,
+writes a machine-readable JSON result with statistics,
 quality flags and data files, plus a map for inspection. It provides a
 small, stable CLI surface for
 [tianpu-agent](https://git.lug.ustc.edu.cn/yaoyhu/tianpu-agent).
@@ -215,22 +215,23 @@ province. Counties and townships are written with their city, e.g.
 `合肥/蜀山`. `中国`/`China` and the key regions (`长三角`/`YRD`, `京津冀`/`BTH`,
 `珠三角`/`PRD`, `成渝`/`SCB`) are also accepted.
 
-### Result sidecars (`rsplot.result/2`)
+### Result sidecars
 
-Every command writes the agent-oriented sidecar specified in
+Every successful command writes the agent-oriented sidecar specified in
 [docs/result-schema.md](docs/result-schema.md) and validated by the shipped
-JSON Schema `src/rsplot/schemas/result-2.schema.json`.
+JSON Schema `src/rsplot/schemas/result.schema.json`. `rsplot_version` names
+the release that wrote it; there is no separate format number.
 
 ```bash
 rsplot raster 合肥 20260919 --product no2 --days 7 --output out/hefei_no2_week.png
 # out/hefei_no2_week.png            image
-# out/hefei_no2_week.json           sidecar (schema rsplot.result/2)
+# out/hefei_no2_week.json           sidecar
 # out/hefei_no2_week.satellite.nc   statistical grid: value, counted, valid_days
 ```
 
 | Question an agent asks | Where to read it |
 | --- | --- |
-| Did it work? | `status`; on failure `error.code` and `error.message` |
+| Did it work? | Exit 0 and a sidecar; on failure exit 1 and one `rsplot error <code>` line on stderr |
 | How far can I trust it? | `quality.grade` (`good`, `limited`, `unreliable`) and `quality.flags` |
 | What was measured, in which unit? | `layers[0].quantity` (`unit` and `scale`) |
 | Over which time? | `layers[0].time`, including `days` for windows |
@@ -240,8 +241,10 @@ rsplot raster 合肥 20260919 --product no2 --days 7 --output out/hefei_no2_week
 | Full values | the NetCDF in `layers[0].data` / `artifacts.data` |
 | How to reproduce it | `request.argv` and `request.resolved` (value and source of every parameter) |
 
-A failed run exits 1 and writes the same envelope with `status: "error"`
-and no PNG or data file. For example, the real Hefei 7-day NO2 window above
+A failed run exits 1, prints one line such as
+`rsplot error region_ambiguous: … {"region": "吉林", "candidates": ["吉林省", "吉林市"]}`
+on stderr, and leaves no PNG, JSON or data file. For example, the real
+Hefei 7-day NO2 window above
 covers only 2.9 % of the city's cells and is graded `unreliable` with
 `very_low_coverage` and `few_valid_days`.
 
@@ -254,7 +257,7 @@ in configuration but are unused.
 00–23 are rejected with exit code 1 before configuration or data access.
 The command reads only the requested hour; it never selects the latest hour
 or falls back to another file when that hour is missing. Existing date-only
-`station` calls must supply an explicit hour. Its `rsplot.result/2` sidecar
+`station` calls must supply an explicit hour. Its sidecar
 has one `station` layer (statistics over in-region stations, exceedances,
 per-district rows, and AQI bands in `categories` for AQI) and a
 `<name>.station.csv` listing every station read around the region with
@@ -330,7 +333,7 @@ Satellite columns and station concentrations keep independent colorbars and
 units; the map shows spatial juxtaposition, not a column-to-surface
 conversion.
 
-The `rsplot.result/2` sidecar has two layers. `satellite` is the same layer
+The sidecar has two layers. `satellite` is the same layer
 `raster` writes, with its period in `time` (TROPOMI dates are UTC filename
 dates, GEMS days are China-time days). `station` holds the station hour in
 `time.at`, statistics over in-region stations, exceedances against the
@@ -433,7 +436,7 @@ uv run rsplot radius 1379A 202609071245 --km 5 \
   then zero and statistical summaries null. Coverage is a center count,
   not a fraction of polygon area.
 
-A PNG, an `rsplot.result/2` sidecar, `<name>.satellite.nc` and
+A PNG, a sidecar, `<name>.satellite.nc` and
 `<name>.station.csv` are saved (under `/tmp` by default). The region has
 `kind: station_radius` and a `radius` block: `center_station`, centre
 coordinates, `km` (the centre-to-side distance), `side_length_km` (twice

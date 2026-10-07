@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -305,9 +306,59 @@ def schema_errors(payload: dict) -> list[str]:
 
     import rsplot
 
-    path = Path(rsplot.__file__).parent / "schemas" / "result-2.schema.json"
+    path = Path(rsplot.__file__).parent / "schemas" / "result.schema.json"
     validator = Draft202012Validator(json.loads(path.read_text("utf-8")))
     return [
         f"{list(error.path)}: {error.message}"
         for error in validator.iter_errors(payload)
     ]
+
+
+ERROR_LINE = re.compile(
+    r"^rsplot error (?P<code>[a-z_]+)(?: (?P<option>--[a-z0-9-]+))?: "
+    r"(?P<rest>.*)$"
+)
+# Passed as `option` when a scenario does not care which option is named.
+ANY_OPTION = object()
+
+
+def error_line(stderr: str) -> dict:
+    """Parse the single `rsplot error <code>[ <option>]: ...` stderr line."""
+    lines = [
+        line
+        for line in stderr.splitlines()
+        if line.startswith("rsplot error ")
+    ]
+    if len(lines) != 1:
+        raise AssertionError(
+            f"expected one error line, got {lines!r}:\n{stderr}"
+        )
+    match = ERROR_LINE.match(lines[0])
+    if match is None:
+        raise AssertionError(f"malformed error line: {lines[0]!r}")
+    message, details = match["rest"], {}
+    start = message.rfind(" {")
+    if start >= 0 and message.endswith("}"):
+        details = json.loads(message[start + 1 :])
+        message = message[:start]
+    return {
+        "code": match["code"],
+        "option": match["option"],
+        "message": message,
+        "details": details,
+    }
+
+
+def assert_failed(case, workspace, result, message, code, option=ANY_OPTION):
+    """Check a rejected run: exit 1, one error line, no files left behind."""
+    output = result.stdout + result.stderr
+    case.assertEqual(result.returncode, 1, output)
+    case.assertIn(message, result.stderr)
+    error = error_line(result.stderr)
+    case.assertEqual(error["code"], code, output)
+    if option is not ANY_OPTION:
+        case.assertEqual(error["option"], option, output)
+    folder = workspace.output.parent
+    left = sorted(p.name for p in folder.iterdir()) if folder.exists() else []
+    case.assertEqual(left, [])
+    return error

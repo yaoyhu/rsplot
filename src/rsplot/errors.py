@@ -1,10 +1,10 @@
-"""Expected failures with machine-readable codes for result sidecars."""
+"""Expected failures with machine-readable codes for the stderr error line."""
 
 from __future__ import annotations
 
 from typing import Any
 
-# Codes accepted by the rsplot.result/2 schema's ``error.code``.
+# Codes printed as ``rsplot error <code>`` (see docs/result-schema.md).
 ERROR_CODES = (
     "invalid_argument",
     "invalid_time",

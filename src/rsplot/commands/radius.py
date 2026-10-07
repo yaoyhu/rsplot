@@ -92,13 +92,7 @@ def run_radius(**kwargs: Any) -> None:
     from rsplot.commands.sidecar import run_with_sidecar
 
     run_with_sidecar(
-        command="radius",
         kwargs=kwargs,
-        options=RADIUS_OPTIONS,
-        positionals={
-            "station_id": kwargs["station_id"],
-            "date": kwargs["date_arg"],
-        },
         emit=lambda created: _emit_radius(created, **kwargs),
     )
 

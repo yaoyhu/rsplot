@@ -4,9 +4,10 @@ Tier: E2E. Run the installed CLI in a subprocess against temporary ERA5 and
 station NetCDF, GeoJSON and TOML files, with `--basemap none`. Read the saved
 PNG, JSON and data files; do not replace any rsplot function.
 
-Every sidecar, successful or not, must validate against the shipped schema
-`rsplot.result/2`. A rejected request exits nonzero, writes no PNG or data
-file, and writes only an error sidecar with the stated `error.code`.
+Every sidecar must validate against the shipped schema
+`src/rsplot/schemas/result.schema.json`. A rejected request exits 1, prints
+one `rsplot error <code>` line on stderr with the stated code (and option),
+and leaves no PNG, JSON or data file.
 
 Unless a scenario says otherwise, the request hour is 2026010113 China time,
 which is the ERA5 UTC hour 2026010105. ERA5 fixtures are uniform 293.15 K

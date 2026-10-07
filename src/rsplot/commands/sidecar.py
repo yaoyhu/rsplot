@@ -1,13 +1,16 @@
-"""Run a command that writes an ``rsplot.result/2`` sidecar.
+"""Run a command that writes a result sidecar only when it succeeds.
 
-Successful runs write the image, data files and sidecar. Any failure removes
-what was already written and, when ``--output`` is known, writes an error
-sidecar instead, so an agent always finds one JSON describing the outcome.
+Successful runs write the image, data files and sidecar. A failure removes
+what the run already wrote, plus any sidecar an earlier run left at the same
+path, prints one ``rsplot error <code>[ <option>]: <message>[ <details>]``
+line on stderr and exits 1.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+import json
+import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -33,21 +36,29 @@ def coded_error(error: Exception) -> RsplotError:
     )
 
 
+def error_line(error: RsplotError) -> str:
+    """Format the single stderr line that reports a failure."""
+    option = f" {error.option}" if error.option else ""
+    message = " ".join(str(error).split())
+    details = (
+        " " + json.dumps(error.details, ensure_ascii=False, default=str)
+        if error.details
+        else ""
+    )
+    return f"rsplot error {error.code}{option}: {message}{details}"
+
+
 def run_with_sidecar(
     *,
-    command: str,
     kwargs: dict[str, Any],
-    options: Mapping[str, tuple[str, ...]],
-    positionals: Mapping[str, Any],
     emit: Callable[[list[Path]], None],
 ) -> None:
-    """Call ``emit(created)``; on failure clean up and write an error sidecar.
+    """Call ``emit(created)``; on failure clean up and report one error line.
 
     ``emit`` appends every file it writes to ``created`` before writing it.
-    ``options`` maps keyword arguments to their CLI spellings so the error
-    sidecar can record which values the caller supplied.
     """
-    console = kwargs["console"]
+    from rsplot.result_builders.envelope import sidecar_path
+
     output = kwargs.get("output")
     created: list[Path] = []
     try:
@@ -58,48 +69,9 @@ def run_with_sidecar(
         coded = coded_error(error)
         for path in created:
             path.unlink(missing_ok=True)
-        console.print(f"[red]{coded}[/red]")
         if output is not None:
-            _write_error_sidecar(
-                command, coded, kwargs, options, positionals, output
-            )
+            Path(sidecar_path(output)).unlink(missing_ok=True)
+        print(error_line(coded), file=sys.stderr, flush=True)
         if coded.code == "internal_error":
             raise
         raise typer.Exit(1) from error
-
-
-def _write_error_sidecar(
-    command: str,
-    error: RsplotError,
-    kwargs: dict[str, Any],
-    options: Mapping[str, tuple[str, ...]],
-    positionals: Mapping[str, Any],
-    output: str,
-) -> None:
-    from rsplot.result_builders.envelope import (
-        error_envelope,
-        option_given,
-        request_block,
-        resolved,
-        sidecar_path,
-        write_sidecar,
-    )
-
-    given = {
-        key: resolved(kwargs[key], "cli")
-        for key, names in options.items()
-        if option_given(*names)
-    }
-    given.update(
-        {key: resolved(value, "cli") for key, value in positionals.items()}
-    )
-    sidecar = str(Path(sidecar_path(output)).resolve())
-    write_sidecar(
-        error_envelope(
-            command=command,
-            request=request_block(given),
-            error=error,
-            sidecar=sidecar,
-        ),
-        sidecar,
-    )

@@ -1,4 +1,4 @@
-"""Shared ``rsplot.result/2`` envelope; see docs/result-schema.md."""
+"""Shared result-sidecar envelope; see docs/result-schema.md."""
 
 from __future__ import annotations
 
@@ -14,10 +14,8 @@ import numpy as np
 from rsplot.stats import basic_stats, round_finite
 
 if TYPE_CHECKING:
-    from rsplot.errors import RsplotError
     from rsplot.geo.boundaries import RegionInfo
 
-SCHEMA = "rsplot.result/2"
 STAT_KEYS = ("mean", "std", "min", "p10", "p25", "median", "p75", "p90")
 SEVERITY_GRADE = {"info": 0, "warning": 1, "critical": 2}
 GRADES = ("good", "limited", "unreliable")
@@ -227,8 +225,6 @@ def success_envelope(
     radius: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
-        "schema": SCHEMA,
-        "status": "ok",
         "command": command,
         "rsplot_version": rsplot_version(),
         "generated_at": datetime.now().astimezone().isoformat("T", "seconds"),
@@ -239,36 +235,6 @@ def success_envelope(
         "quality": quality_block(flags),
         "render": render,
         "artifacts": artifacts,
-        "error": None,
-    }
-
-
-def error_envelope(
-    *,
-    command: str,
-    request: dict,
-    error: RsplotError,
-    sidecar: str,
-) -> dict[str, Any]:
-    payload: dict[str, Any] = {"code": error.code, "message": str(error)}
-    if error.option:
-        payload["option"] = error.option
-    if error.details:
-        payload["details"] = error.details
-    return {
-        "schema": SCHEMA,
-        "status": "error",
-        "command": command,
-        "rsplot_version": rsplot_version(),
-        "generated_at": datetime.now().astimezone().isoformat("T", "seconds"),
-        "request": request,
-        "region": None,
-        "layers": [],
-        "relations": {},
-        "quality": {"grade": "failed", "flags": []},
-        "render": None,
-        "artifacts": {"image": None, "sidecar": sidecar, "data": []},
-        "error": payload,
     }
 
 

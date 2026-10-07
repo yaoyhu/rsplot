@@ -10,7 +10,7 @@ import numpy as np
 from fnr_support import FnrWorkspace
 from netCDF4 import Dataset
 from PIL import Image
-from raster_support import schema_errors
+from raster_support import assert_failed, schema_errors
 
 
 def layer(payload: dict, layer_id: str) -> dict:
@@ -38,7 +38,6 @@ class FnrE2E(unittest.TestCase):
             self.assertGreater(np.count_nonzero(np.ptp(rgb, axis=2) > 30), 500)
         payload = self.workspace.payload()
         self.assertEqual(schema_errors(payload), [])
-        self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["command"], "fnr")
         self.assertEqual(
             [item["id"] for item in payload["layers"]], ["no2", "hcho", "fnr"]
@@ -46,19 +45,9 @@ class FnrE2E(unittest.TestCase):
         return payload
 
     def assert_rejected(self, result, message, code, option=None):
-        self.assertNotEqual(
-            result.returncode, 0, result.stdout + result.stderr
+        return assert_failed(
+            self, self.workspace, result, message, code, option
         )
-        self.assertIn(message, result.stdout + result.stderr)
-        self.assertEqual(
-            sorted(p.name for p in self.workspace.output.parent.iterdir()),
-            [self.workspace.sidecar.name],
-        )
-        payload = self.workspace.payload()
-        self.assertEqual(schema_errors(payload), [])
-        self.assertEqual(payload["status"], "error")
-        self.assertEqual(payload["error"]["code"], code)
-        self.assertEqual(payload["error"].get("option"), option)
 
     def test_user_maps_the_fnr_regime(self):
         """Given NO2 2 and HCHO 6, when mapping, then FNR is 3."""

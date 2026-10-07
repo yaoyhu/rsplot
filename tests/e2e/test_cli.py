@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from raster_support import RasterWorkspace
+from raster_support import RasterWorkspace, assert_failed
 
 ENABLED = (
     "raster",
@@ -450,15 +450,51 @@ class CliE2E(unittest.TestCase):
         """Given no no2 folder in config, when mapping, then say so."""
         del self.workspace.data_dirs["no2"]
         self.workspace.write_config()
+        error = assert_failed(
+            self,
+            self.workspace,
+            self.workspace.raster("20260101"),
+            "[paths.data_dirs].no2",
+            "data_not_configured",
+            None,
+        )
+        self.assertEqual(error["details"], {"config_key": "no2"})
+        self.assertNotIn("option", error["message"])
+
+    def test_user_reads_a_failure_from_one_error_line(self):
+        """Given --days 0, when mapping, then one line names code and option."""
+        self.workspace.write_swath("20260101", 4)
+        result = self.workspace.raster("20260101", "--days", "0")
+        error = assert_failed(
+            self,
+            self.workspace,
+            result,
+            "--days",
+            "invalid_argument",
+            "--days",
+        )
+        self.assertEqual(error["message"], "--days 必须 >= 1。")
+
+    def test_user_keeps_no_stale_sidecar_after_a_failure(self):
+        """Given an earlier map, when the same output fails, then no JSON."""
+        self.workspace.write_swath("20260101", 4)
+        first = self.workspace.raster("20260101")
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        failed = self.workspace.raster("20260101", "--days", "0")
+        self.assertEqual(failed.returncode, 1, failed.stdout + failed.stderr)
+        self.assertFalse(self.workspace.sidecar.exists())
+
+    def test_user_finds_no_format_number_in_a_sidecar(self):
+        """Given a map, when reading its sidecar, then only the release."""
+        self.workspace.write_swath("20260101", 4)
         result = self.workspace.raster("20260101")
-        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         payload = self.workspace.payload()
         self.assertEqual(
-            [payload["status"], payload["error"]["code"]],
-            ["error", "data_not_configured"],
+            [key in payload for key in ("schema", "status", "error")],
+            [False, False, False],
         )
-        self.assertIn("[paths.data_dirs].no2", payload["error"]["message"])
-        self.assertNotIn("option", payload["error"]["message"])
+        self.assertIn("rsplot_version", payload)
 
     def test_user_cannot_run_the_disabled_reconstruct_command(self):
         """Given the CLI, when running reconstruct, then report no such command."""

@@ -6,10 +6,11 @@ the saved PNG, JSON and data files; do not replace any rsplot function.
 Expected numeric values below are chosen by the fixtures, independently of
 rsplot's implementation.
 
-Every sidecar, successful or not, must validate against the shipped schema
-`rsplot.result/2`. A successful overlay has two layers, `satellite` and
-`station`. A rejected request exits nonzero, writes no PNG or data file, and
-writes only an error sidecar with the stated `error.code`.
+Every sidecar must validate against the shipped schema
+`src/rsplot/schemas/result.schema.json`. A successful overlay has two
+layers, `satellite` and `station`. A rejected request exits 1, prints one
+`rsplot error <code>` line on stderr with the stated code (and option), and
+leaves no PNG, JSON or data file.
 
 TROPOMI requests use DATE `20260101`, `--station-datetime 2026010113` and
 `--station-var NO2` unless a scenario says otherwise; there is no

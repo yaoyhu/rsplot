@@ -4,10 +4,11 @@ Tier: E2E. Run the installed CLI in a subprocess against temporary TROPOMI
 NO2 and HCHO NetCDF, GeoJSON and TOML files, with `--basemap none`. Read the
 saved PNG, JSON and NetCDF files; do not replace any rsplot function.
 
-Every sidecar, successful or not, must validate against the shipped schema
-`rsplot.result/2`. A successful map has `no2`, `hcho` and `fnr` grid layers.
-A rejected request exits nonzero, writes no PNG or data file, and writes only
-an error sidecar with the stated `error.code`.
+Every sidecar must validate against the shipped schema
+`src/rsplot/schemas/result.schema.json`. A successful map has `no2`, `hcho`
+and `fnr` grid layers. A rejected request exits 1, prints one `rsplot error
+<code>` line on stderr with the stated code (and option), and leaves no PNG,
+JSON or data file.
 
 Unless a scenario says otherwise, Jan 1–3 have uniform NO2 2 and HCHO 6
 (×10¹⁵ molec/cm²) over `FixtureCity` (16 grid cells at 0.25°), and requests

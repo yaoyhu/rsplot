@@ -4,10 +4,11 @@ Tier: E2E. Run the installed CLI in a subprocess against temporary station
 NetCDF, GeoJSON and TOML files, with `--basemap none`. Read the saved PNG,
 JSON and CSV; do not replace any rsplot function.
 
-Every sidecar, successful or not, must validate against the shipped schema
-`rsplot.result/2`. A successful map has one `station` layer and no
-relations. A rejected request exits nonzero, writes no PNG or data file, and
-writes only an error sidecar with the stated `error.code`.
+Every sidecar must validate against the shipped schema
+`src/rsplot/schemas/result.schema.json`. A successful map has one `station`
+layer and no relations. A rejected request exits 1, prints one `rsplot error
+<code>` line on stderr with the stated code (and option), and leaves no PNG,
+JSON or data file.
 
 The station file for Jan 1 13:00 places two stations inside `FixtureCity`
 (value 40 and 80 for every variable) and one in the adjacent `EastCity`

@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 from netCDF4 import Dataset
 from PIL import Image
-from raster_support import RasterWorkspace, schema_errors
+from raster_support import RasterWorkspace, assert_failed, schema_errors
 
 SUPPORT_KEYS = ("valid", "total", "fraction")
 
@@ -38,7 +38,6 @@ class RasterE2E(unittest.TestCase):
             self.assertGreater(np.count_nonzero(np.ptp(rgb, axis=2) > 30), 500)
         payload = self.workspace.payload()
         self.assertEqual(schema_errors(payload), [])
-        self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["command"], "raster")
         self.assertEqual(
             payload["artifacts"]["image"], str(self.workspace.output)
@@ -49,20 +48,7 @@ class RasterE2E(unittest.TestCase):
         return payload
 
     def assert_rejected(self, result, message, code):
-        self.assertNotEqual(
-            result.returncode, 0, result.stdout + result.stderr
-        )
-        self.assertIn(message, result.stdout + result.stderr)
-        self.assertFalse(self.workspace.output.exists())
-        self.assertEqual(
-            sorted(p.name for p in self.workspace.output.parent.iterdir()),
-            [self.workspace.sidecar.name],
-        )
-        payload = self.workspace.payload()
-        self.assertEqual(schema_errors(payload), [])
-        self.assertEqual(payload["status"], "error")
-        self.assertEqual(payload["error"]["code"], code)
-        return payload
+        return assert_failed(self, self.workspace, result, message, code)
 
     def two_days(self):
         self.workspace.write_swath("20260101", 2, orbit=1)
@@ -357,12 +343,12 @@ class RasterE2E(unittest.TestCase):
     def test_user_rejects_competing_window_selectors(self):
         """Given a range, when also supplying --days, then reject ambiguity."""
         self.two_days()
-        payload = self.assert_rejected(
+        error = self.assert_rejected(
             self.workspace.raster("20260101-20260102", "--days", "7"),
             "--days",
             "invalid_argument",
         )
-        self.assertEqual(payload["error"]["option"], "--days")
+        self.assertEqual(error["option"], "--days")
 
     def test_user_rejects_hourly_tropomi_input(self):
         """Given TROPOMI, when supplying an hour, then require a date."""
@@ -410,9 +396,9 @@ class RasterE2E(unittest.TestCase):
         """Given exterior data, when plotting one day, then explain that day."""
         self.workspace.write_swath("20260101", 4, outside=True)
         result = self.workspace.raster("20260101")
-        payload = self.assert_rejected(result, "20260101", "no_valid_data")
-        self.assertNotIn("窗口均值", payload["error"]["message"])
-        self.assertNotIn("--n-min", payload["error"]["message"])
+        error = self.assert_rejected(result, "20260101", "no_valid_data")
+        self.assertNotIn("窗口均值", error["message"])
+        self.assertNotIn("--n-min", error["message"])
 
     def test_user_learns_a_region_does_not_exist(self):
         """Given an unknown region, when plotting, then report region_not_found."""

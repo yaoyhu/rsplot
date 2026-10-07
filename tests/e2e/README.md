@@ -299,3 +299,16 @@ worked). Short names now drop the ethnic groups before 自治区/州/县/旗, wh
 makes 海南 ambiguous (海南省 and 海南藏族自治州) by design. A sweep of every
 real province and city, by full and short name (817 lookups), resolved each
 to itself except the ambiguous 吉林 and 海南.
+
+## Success-only sidecars
+
+Failures no longer write an error JSON, and sidecars carry no `schema` /
+`status` / `error` keys or format number. Every suite's rejection helper now
+uses the shared `raster_support.assert_failed`: exit 1, exactly one
+`rsplot error <code>[ <option>]: ...` stderr line (parsed by
+`error_line`, details included), and no file left in the output folder.
+Three CLI scenarios were added (one error line, no stale sidecar after a
+failure, no format number). Against the unchanged application all
+rejection scenarios failed (no error line), every success scenario failed
+schema validation (the schema file is now `result.schema.json`), and the
+new CLI scenarios failed.

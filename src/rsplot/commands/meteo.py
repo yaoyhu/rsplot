@@ -45,13 +45,7 @@ def run_meteo(**kwargs: Any) -> None:
     from rsplot.commands.sidecar import run_with_sidecar
 
     run_with_sidecar(
-        command="meteo",
         kwargs=kwargs,
-        options=METEO_OPTIONS,
-        positionals={
-            "region": kwargs["region"],
-            "datetime": kwargs["datetime_str"],
-        },
         emit=lambda created: _emit_meteo(created, **kwargs),
     )
 

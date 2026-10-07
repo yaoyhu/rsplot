@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 from netCDF4 import Dataset
 from PIL import Image
-from raster_support import schema_errors
+from raster_support import assert_failed, schema_errors
 from trend_support import TrendWorkspace
 
 
@@ -35,24 +35,13 @@ class TrendE2E(unittest.TestCase):
             self.assertEqual(image.format, "PNG")
         payload = self.workspace.payload()
         self.assertEqual(schema_errors(payload), [])
-        self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["command"], "trend")
         return payload
 
     def assert_rejected(self, result, message, code, option=None):
-        self.assertNotEqual(
-            result.returncode, 0, result.stdout + result.stderr
+        return assert_failed(
+            self, self.workspace, result, message, code, option
         )
-        self.assertIn(message, result.stdout + result.stderr)
-        self.assertEqual(
-            sorted(p.name for p in self.workspace.output.parent.iterdir()),
-            [self.workspace.sidecar.name],
-        )
-        payload = self.workspace.payload()
-        self.assertEqual(schema_errors(payload), [])
-        self.assertEqual(payload["status"], "error")
-        self.assertEqual(payload["error"]["code"], code)
-        self.assertEqual(payload["error"].get("option"), option)
 
     def series_file(self, payload, layer_id):
         return Dataset(layer(payload, layer_id)["data"])

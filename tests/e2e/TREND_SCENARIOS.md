@@ -4,9 +4,10 @@ Tier: E2E. Run the installed CLI in a subprocess against temporary hourly
 station NetCDF, GeoJSON and TOML files. Read the saved PNG, JSON and NetCDF;
 do not replace any rsplot function.
 
-Every sidecar, successful or not, must validate against the shipped schema
-`rsplot.result/2`. A rejected request exits nonzero, writes no PNG or data
-file, and writes only an error sidecar with the stated `error.code`.
+Every sidecar must validate against the shipped schema
+`src/rsplot/schemas/result.schema.json`. A rejected request exits 1, prints
+one `rsplot error <code>` line on stderr with the stated code (and option),
+and leaves no PNG, JSON or data file.
 
 Unless a scenario says otherwise, Jan 1 has 24 hourly files. Inside
 `FixtureCity`, station S001A reads 10 + h and S002A reads 20 + h at hour h;

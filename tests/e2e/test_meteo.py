@@ -10,7 +10,7 @@ import numpy as np
 from meteo_support import MeteoWorkspace
 from netCDF4 import Dataset
 from PIL import Image
-from raster_support import schema_errors
+from raster_support import assert_failed, schema_errors
 
 HOUR = "2026010113"
 UTC = "2026010105"
@@ -32,25 +32,14 @@ class MeteoE2E(unittest.TestCase):
             self.assertEqual(image.format, "PNG")
         payload = self.workspace.payload()
         self.assertEqual(schema_errors(payload), [])
-        self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["command"], "meteo")
         self.assertEqual([item["id"] for item in payload["layers"]], layer_ids)
         return payload
 
     def assert_rejected(self, result, message, code, option=None):
-        self.assertNotEqual(
-            result.returncode, 0, result.stdout + result.stderr
+        return assert_failed(
+            self, self.workspace, result, message, code, option
         )
-        self.assertIn(message, result.stdout + result.stderr)
-        self.assertEqual(
-            sorted(p.name for p in self.workspace.output.parent.iterdir()),
-            [self.workspace.sidecar.name],
-        )
-        payload = self.workspace.payload()
-        self.assertEqual(schema_errors(payload), [])
-        self.assertEqual(payload["status"], "error")
-        self.assertEqual(payload["error"]["code"], code)
-        self.assertEqual(payload["error"].get("option"), option)
 
     def test_user_maps_temperature(self):
         """Given 293.15 K, when mapping temperature, then mean is 20 °C."""

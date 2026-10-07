@@ -5,11 +5,11 @@ GeoJSON and TOML files, with `--basemap none`. Read the saved PNG, JSON and
 data files; do not replace any rsplot function. Expected numeric values below
 are chosen by the fixtures, independently of rsplot's implementation.
 
-Every sidecar, successful or not, must validate against the shipped schema
-`rsplot.result/2` (`src/rsplot/schemas/result-2.schema.json`). "Mean" and
-other values refer to the `satellite` layer. A rejected request exits
-nonzero, writes no PNG or data file, and writes only an error sidecar with
-the stated `error.code`.
+Every sidecar must validate against the shipped schema
+`src/rsplot/schemas/result.schema.json`. "Mean" and other values refer to
+the `satellite` layer. A rejected request exits 1, prints one `rsplot error
+<code>` line on stderr with the stated code (and option), and leaves no PNG,
+JSON or data file.
 
 | Scenario | Given | When | Then |
 | --- | --- | --- | --- |

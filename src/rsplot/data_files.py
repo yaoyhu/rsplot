@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 
-from rsplot.result_builders.envelope import SCHEMA
+from rsplot.result_builders.envelope import rsplot_version
 
 
 def data_path(output: str, layer: str, suffix: str) -> Path:
@@ -55,7 +55,7 @@ def write_grid_netcdf(
     path.parent.mkdir(parents=True, exist_ok=True)
     with Dataset(path, "w", format="NETCDF4") as dataset:
         # setncattr: netCDF4 reserves some Python attribute names.
-        dataset.setncattr("schema", SCHEMA)
+        dataset.setncattr("rsplot_version", rsplot_version())
         dataset.setncattr("layer", layer)
         for key, value in attrs.items():
             if value is not None:
@@ -215,7 +215,7 @@ def write_series_netcdf(
     matrix = np.atleast_2d(np.asarray(values, dtype=np.float32))
     path.parent.mkdir(parents=True, exist_ok=True)
     with Dataset(path, "w", format="NETCDF4") as dataset:
-        dataset.setncattr("schema", SCHEMA)
+        dataset.setncattr("rsplot_version", rsplot_version())
         dataset.setncattr("layer", layer)
         for key, value in attrs.items():
             if value is not None:
