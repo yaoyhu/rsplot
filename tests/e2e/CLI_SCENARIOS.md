@@ -11,6 +11,8 @@ option with exit status 2 before rsplot runs, so no sidecar is written.
 Options have long names only (CLI rule 2). Nothing that selects data is
 implicit (CLI rule 3): `--output` is required everywhere, `--product` for
 the satellite maps, `--var` for station and trend, and `--days` for recent.
+Regions are named, never levelled: there is no `--level` option (see
+REGION_SCENARIOS.md).
 
 | Scenario | Given | When | Then |
 | --- | --- | --- | --- |
@@ -53,3 +55,10 @@ the satellite maps, `--var` for station and trend, and `--days` for recent.
 | user must give recent a day count | CLI is installed | Run `recent` without `--days` | Exit 2, "Missing option" naming `--days`, no output |
 | user must give fnr an output | CLI is installed | Run `fnr` without `--output` | Exit 2, "Missing option" naming `--output`, no output |
 | user must give meteo an output | CLI is installed | Run `meteo` without `--output` | Exit 2, "Missing option" naming `--output`, no output |
+| user cannot force the raster region level | CLI is installed | Run `raster ... --level city` | Exit 2, "No such option", no output |
+| user cannot force the overlay region level | CLI is installed | Run `overlay ... --level city` | Exit 2, "No such option", no output |
+| user cannot force the station region level | CLI is installed | Run `station ... --level city` | Exit 2, "No such option", no output |
+| user cannot force the trend region level | CLI is installed | Run `trend ... --level city` | Exit 2, "No such option", no output |
+| user cannot force the recent region level | CLI is installed | Run `recent ... --level city` | Exit 2, "No such option", no output |
+| user cannot force the fnr region level | CLI is installed | Run `fnr ... --level city` | Exit 2, "No such option", no output |
+| user cannot force the meteo region level | CLI is installed | Run `meteo ... --level city` | Exit 2, "No such option", no output |

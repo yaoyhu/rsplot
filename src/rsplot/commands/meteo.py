@@ -27,7 +27,6 @@ METEO_OPTIONS = {
     "temp_level": ("--temp-level",),
     "wind_level": ("--wind-level",),
     "station_var": ("--station-var",),
-    "level": ("--level",),
     "output": ("--output",),
     "dpi": ("--dpi",),
     "basemap": ("--basemap",),
@@ -65,7 +64,6 @@ def _emit_meteo(
     temp_level: str | None,
     wind_level: str | None,
     station_var: str | None,
-    level: str | None,
     output: str,
     dpi: int | None,
     basemap: str | None,
@@ -183,7 +181,7 @@ def _emit_meteo(
     setup_fonts(cfg.font_dir)
     console.print(f"[bold]解析区域:[/bold] {region}")
     try:
-        info = resolve_region(region, cfg, level_override=level)
+        info = resolve_region(region, cfg)
     except RsplotError:
         raise
     except ValueError as error:
@@ -528,7 +526,7 @@ def _emit_meteo(
         "station_var": (
             resolved(station_var, "cli") if station_var is not None else None
         ),
-        "level": source_of("level", info.level, "built_in"),
+        "level": resolved(info.level, "built_in", "from region"),
         "data_dir": resolved(use_data_dir, "config"),
         "station_data_dir": (
             resolved(str(use_station_dir), "config")

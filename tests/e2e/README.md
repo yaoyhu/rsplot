@@ -280,3 +280,14 @@ hour count, and counted exceedances against the hourly NO2 limit 200); the
 missing-day and no-files scenarios already held and now guard the rewrite.
 Each day is now the mean of all available hours; exceedances use the daily
 limit.
+
+## Region names
+
+`--level` only worked around the resolver: on the real boundary files
+`吉林市` resolved to 吉林省, and `吉林` silently became the province. The 6
+scenarios in [REGION_SCENARIOS.md](REGION_SCENARIOS.md) plus 7 CLI
+scenarios rejecting `--level` were written first; against the unchanged
+application the 3 resolution scenarios (full city name, ambiguous short
+name, Beijing as a city) and all 7 `--level` scenarios failed. Names now
+resolve without guessing (new error code `region_ambiguous`), with
+北京/上海/天津 as cities and 重庆 as a province, and `--level` is removed.

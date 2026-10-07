@@ -31,7 +31,6 @@ FNR_OPTIONS = {
     "voc_threshold": ("--voc-threshold",),
     "nox_threshold": ("--nox-threshold",),
     "display_max": ("--display-max",),
-    "level": ("--level",),
     "output": ("--output",),
     "dpi": ("--dpi",),
     "res": ("--res",),
@@ -69,7 +68,6 @@ def _emit_fnr(
     voc_threshold: float,
     nox_threshold: float,
     display_max: float,
-    level: str | None,
     output: str,
     dpi: int | None,
     res: float | None,
@@ -164,7 +162,7 @@ def _emit_fnr(
 
     console.print(f"[bold]解析区域:[/bold] {region}")
     try:
-        info = resolve_region(region, cfg, level_override=level)
+        info = resolve_region(region, cfg)
     except RsplotError:
         raise
     except ValueError as error:
@@ -568,7 +566,7 @@ def _emit_fnr(
             "nox_threshold", use_nox_threshold, "built_in"
         ),
         "display_max": source_of("display_max", use_display_max, "built_in"),
-        "level": source_of("level", info.level, "built_in"),
+        "level": resolved(info.level, "built_in", "from region"),
         "no2_dir": resolved(str(use_no2_dir), "config"),
         "hcho_dir": resolved(str(use_hcho_dir), "config"),
         "output": source_of("output", output, "built_in"),

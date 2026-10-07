@@ -26,7 +26,6 @@ TREND_OPTIONS = {
     "view": ("--view",),
     "focus_station_ids": ("--focus-station",),
     "threshold": ("--threshold",),
-    "level": ("--level",),
     "output": ("--output",),
     "dpi": ("--dpi",),
     "title": ("--title",),
@@ -60,7 +59,6 @@ def _emit_trend(
     view: str,
     focus_station_ids: list[str] | None,
     threshold: float | None,
-    level: str | None,
     output: str,
     dpi: int | None,
     title: str | None,
@@ -112,12 +110,6 @@ def _emit_trend(
             "--focus-station 仅用于 --region 区域趋势",
             option="--focus-station",
         )
-    if not region_mode and level is not None:
-        raise RsplotError(
-            "invalid_argument",
-            "--level 仅用于 --region 区域趋势",
-            option="--level",
-        )
     if threshold is not None and (
         not math.isfinite(threshold) or threshold < 0
     ):
@@ -153,7 +145,7 @@ def _emit_trend(
     info = None
     if region_mode:
         try:
-            info = resolve_region(target, cfg, level_override=level)
+            info = resolve_region(target, cfg)
         except RsplotError:
             raise
         except ValueError as error:
@@ -329,7 +321,7 @@ def _emit_trend(
             else resolved(use_threshold, "built_in", standard)
         ),
         "level": (
-            source_of("level", info.level, "built_in")
+            resolved(info.level, "built_in", "from region")
             if info is not None
             else None
         ),

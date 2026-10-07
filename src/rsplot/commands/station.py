@@ -23,7 +23,6 @@ if TYPE_CHECKING:
 # Keyword argument -> CLI spellings, for recording where values came from.
 STATION_OPTIONS = {
     "var": ("--var",),
-    "level": ("--level",),
     "output": ("--output",),
     "dpi": ("--dpi",),
     "basemap": ("--basemap",),
@@ -53,7 +52,6 @@ def _emit_station(
     region: str,
     datetime_str: str,
     var: str,
-    level: str | None,
     output: str,
     dpi: int | None,
     basemap: str | None,
@@ -121,7 +119,7 @@ def _emit_station(
 
     console.print(f"[bold]解析区域:[/bold] {region}")
     try:
-        info = resolve_region(region, cfg, level_override=level)
+        info = resolve_region(region, cfg)
     except RsplotError:
         raise
     except ValueError as error:
@@ -250,7 +248,7 @@ def _emit_station(
                 "region": resolved(region, "cli"),
                 "datetime": resolved(datetime_str, "cli"),
                 "var": source("var", var, "built_in"),
-                "level": source("level", info.level, "built_in"),
+                "level": resolved(info.level, "built_in", "from region"),
                 "data_dir": resolved(str(use_data_dir), "config"),
                 "output": source("output", output, "built_in"),
                 "dpi": source("dpi", use_dpi, "built_in"),

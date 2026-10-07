@@ -28,7 +28,6 @@ OVERLAY_OPTIONS = {
     "n_min": ("--n-min",),
     "station_datetime": ("--station-datetime",),
     "station_var": ("--station-var",),
-    "level": ("--level",),
     "output": ("--output",),
     "dpi": ("--dpi",),
     "res": ("--res",),
@@ -130,7 +129,6 @@ def _emit_overlay(
     n_min: int | None = None,
     station_datetime: str | None = None,
     station_var: str,
-    level: str | None,
     output: str,
     dpi: int | None,
     res: float | None,
@@ -188,7 +186,7 @@ def _emit_overlay(
         )
 
     try:
-        info = resolve_regions(region, cfg, level_override=level)
+        info = resolve_regions(region, cfg)
     except RsplotError:
         raise
     except ValueError as error:
@@ -238,7 +236,6 @@ def _emit_overlay(
         processing=processing,
         days=days,
         n_min=n_min,
-        level=level,
         output=output,
         dpi=dpi,
         res=res,

@@ -51,7 +51,7 @@ magnitude is encoded by arrow length and a reference arrow; wind has no
 colorbar. Its `DATETIME` is China standard time by default and is converted
 internally to the matching ERA5 UTC archive hour. It must be `YYYYMMDDHH` in
 every mode; date-only input is rejected and no latest station hour is ever
-chosen. `--level` retains the repository-wide administrative-level meaning.
+chosen.
 Its `rsplot.result/2` sidecar has `temperature` (grid), `wind` (vector_grid,
 resultant direction and components in `vector_summary`) and `station`
 layers as requested, each with a data file (`<name>.wind.nc` holds `value`
@@ -135,8 +135,16 @@ introduce new code that violates them.
    `--title`, `--basemap`, `--smooth`, and wind styling only change the
    image. The JSON records the values actually used, and they never change
    coverage or valid-cell counts. Options that change the science (`--res`,
-   `--qa`, `--cf`, `--level`, `--n-min`, FNR thresholds) are kept and
-   recorded.
+   `--qa`, `--cf`, `--n-min`, FNR thresholds) are kept and recorded.
+9. **Regions are named, never levelled.** Names are Chinese only (plus
+   `中国`/`China` and the key-region keys such as `YRD`); there is no
+   `--level` option and no pinyin. `geo.boundaries.resolve_region` matches
+   a full name at its own level (`吉林市` → city, `吉林省` → province),
+   rejects a short name that fits different places at two levels (`吉林`)
+   with `region_ambiguous` and `details.candidates`, and fixes the
+   municipalities: 北京市, 上海市, 天津市 are cities, 重庆市 is a province.
+   Counties are written `城市/区县`. `resolve_region(level_override=...)`
+   remains only for the disabled `forecast`/`reconstruct` modules.
 
 The disabled `forecast` and `reconstruct` commands are out of scope for this
 refactor.

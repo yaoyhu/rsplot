@@ -177,6 +177,7 @@ no data files, and writes the envelope with `status: "error"`, `quality.grade:
 | `invalid_argument` | Bad or conflicting option values. |
 | `invalid_time` | Malformed or impossible date/hour, or a time form the command does not accept. |
 | `region_not_found` | Region name or station ID does not resolve. |
+| `region_ambiguous` | A short region name fits different places at two levels (e.g. 吉林: 吉林省 and 吉林市); `details.candidates` lists the full names to use. |
 | `data_not_configured` | No configured data root for the requested product. |
 | `data_not_found` | The requested file, day, scan or hour does not exist. |
 | `no_valid_data` | Data was read but nothing valid falls in the region. |

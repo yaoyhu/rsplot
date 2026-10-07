@@ -96,11 +96,6 @@ def raster(
             "均以窗口天数为上限。"
         ),
     ),
-    level: str | None = typer.Option(
-        None,
-        "--level",
-        help="强制指定级别: country / key_region / province / city / county",
-    ),
     res: float | None = typer.Option(
         None,
         "--res",
@@ -151,7 +146,6 @@ def raster(
         processing=processing,
         days=days,
         n_min=n_min,
-        level=level,
         output=output,
         dpi=dpi,
         res=res,
@@ -317,11 +311,6 @@ def meteo(
         "--station-var",
         help="叠加国控站点变量；必须同时指定 --wind-level",
     ),
-    level: str | None = typer.Option(
-        None,
-        "--level",
-        help="强制指定行政区级别: country/key_region/province/city/county",
-    ),
     # --- Plotting ---
     dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
     basemap: str | None = typer.Option(
@@ -382,7 +371,6 @@ def meteo(
         temp_level=temp_level,
         wind_level=wind_level,
         station_var=station_var,
-        level=level,
         output=output,
         dpi=dpi,
         basemap=basemap,
@@ -418,11 +406,6 @@ def station(
         help="输出文件路径",
     ),
     # --- Data selection and processing ---
-    level: str | None = typer.Option(
-        None,
-        "--level",
-        help="强制指定级别: country / key_region / province / city / county",
-    ),
     # --- Plotting ---
     dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
     basemap: str | None = typer.Option(
@@ -447,7 +430,6 @@ def station(
         region=region,
         datetime_str=datetime_str,
         var=var,
-        level=level,
         output=output,
         dpi=dpi,
         basemap=basemap,
@@ -494,11 +476,6 @@ def trend(
         min=0.0,
         help="覆盖变量默认超标阈值",
     ),
-    level: str | None = typer.Option(
-        None,
-        "--level",
-        help="区域模式强制级别: country / key_region / province / city / county",
-    ),
     # --- Plotting ---
     dpi: int | None = typer.Option(300, "--dpi", help="输出 DPI"),
     view: str = typer.Option(
@@ -533,7 +510,6 @@ def trend(
         view=view,
         focus_station_ids=focus_station,
         threshold=threshold,
-        level=level,
         output=output,
         dpi=dpi,
         title=title,
@@ -604,11 +580,6 @@ def overlay(
             "不会自动选择最新小时。"
         ),
     ),
-    level: str | None = typer.Option(
-        None,
-        "--level",
-        help="强制指定级别: country / key_region / province / city / county",
-    ),
     res: float | None = typer.Option(
         None,
         "--res",
@@ -666,7 +637,6 @@ def overlay(
         sensor=sensor,
         processing=processing,
         station_var=station_var,
-        level=level,
         output=output,
         dpi=dpi,
         res=res,
@@ -725,11 +695,6 @@ def recent(
         "--var",
         help="source=station 时必填的变量名: AQI, PM2.5, PM10, NO2, O3, SO2, CO...",
     ),
-    level: str | None = typer.Option(
-        None,
-        "--level",
-        help="强制指定级别: country / key_region / province / city / county",
-    ),
     res: float | None = typer.Option(
         None,
         "--res",
@@ -763,7 +728,6 @@ def recent(
         sensor=sensor,
         processing=processing,
         var=var,
-        level=level,
         output=output,
         res=res,
         qa=qa,
@@ -820,11 +784,6 @@ def fnr(
         "--nox-threshold",
         help="NOx-limited 分级阈值：FNR 大于该值判为 NOx-limited",
     ),
-    level: str | None = typer.Option(
-        None,
-        "--level",
-        help="强制指定级别: country / key_region / province / city / county",
-    ),
     res: float | None = typer.Option(None, "--res", help="网格分辨率 (度)"),
     qa: float | None = typer.Option(
         0.5,
@@ -877,7 +836,6 @@ def fnr(
         voc_threshold=voc_threshold,
         nox_threshold=nox_threshold,
         display_max=display_max,
-        level=level,
         output=output,
         dpi=dpi,
         res=res,

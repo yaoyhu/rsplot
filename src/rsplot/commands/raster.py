@@ -35,7 +35,6 @@ RASTER_OPTIONS = {
     "product": ("--product",),
     "days": ("--days",),
     "n_min": ("--n-min",),
-    "level": ("--level",),
     "output": ("--output",),
     "dpi": ("--dpi",),
     "res": ("--res",),
@@ -228,7 +227,6 @@ def prepare_raster(
     processing: str | None = None,
     days: int | None,
     n_min: int | None,
-    level: str | None,
     output: str,
     dpi: int | None,
     res: float | None,
@@ -314,7 +312,7 @@ def prepare_raster(
         info = region
     else:
         try:
-            info = resolve_regions(region, cfg, level_override=level)
+            info = resolve_regions(region, cfg)
         except RsplotError:
             raise
         except ValueError as error:
@@ -764,7 +762,7 @@ def prepare_raster(
             if window_mode
             else None
         ),
-        "level": _source("level", info.level, "built_in", "from region"),
+        "level": resolved(info.level, "built_in", "from region"),
         "data_dir": resolved(str(use_data_dir), "config"),
         "res": res_entry,
         "smooth": smooth_entry,

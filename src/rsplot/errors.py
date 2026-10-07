@@ -9,6 +9,7 @@ ERROR_CODES = (
     "invalid_argument",
     "invalid_time",
     "region_not_found",
+    "region_ambiguous",
     "data_not_configured",
     "data_not_found",
     "no_valid_data",

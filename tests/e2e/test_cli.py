@@ -256,6 +256,48 @@ class CliE2E(unittest.TestCase):
             "2m",
         )
 
+    def test_user_cannot_force_the_raster_region_level(self):
+        """Given raster, when passing --level, then reject the option."""
+        self.assert_no_such_option(
+            "raster", "FixtureCity", "20260101", "--level", "city"
+        )
+
+    def test_user_cannot_force_the_overlay_region_level(self):
+        """Given overlay, when passing --level, then reject the option."""
+        self.assert_no_such_option(
+            "overlay", "FixtureCity", "20260101", "--level", "city"
+        )
+
+    def test_user_cannot_force_the_station_region_level(self):
+        """Given station, when passing --level, then reject the option."""
+        self.assert_no_such_option(
+            "station", "FixtureCity", "2026010113", "--level", "city"
+        )
+
+    def test_user_cannot_force_the_trend_region_level(self):
+        """Given trend, when passing --level, then reject the option."""
+        self.assert_no_such_option(
+            "trend", "FixtureCity", "20260101", "--region", "--level", "city"
+        )
+
+    def test_user_cannot_force_the_recent_region_level(self):
+        """Given recent, when passing --level, then reject the option."""
+        self.assert_no_such_option(
+            "recent", "FixtureCity", "20260101", "--level", "city"
+        )
+
+    def test_user_cannot_force_the_fnr_region_level(self):
+        """Given fnr, when passing --level, then reject the option."""
+        self.assert_no_such_option(
+            "fnr", "FixtureCity", "20260101", "--level", "city"
+        )
+
+    def test_user_cannot_force_the_meteo_region_level(self):
+        """Given meteo, when passing --level, then reject the option."""
+        self.assert_no_such_option(
+            "meteo", "FixtureCity", "2026010113", "--level", "city"
+        )
+
     def test_user_cannot_point_raster_at_a_data_folder(self):
         """Given config paths, when passing --data-dir, then reject it."""
         self.assert_no_such_option(

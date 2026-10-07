@@ -29,7 +29,6 @@ RECENT_OPTIONS = {
     "processing": ("--processing",),
     "product": ("--product",),
     "var": ("--var",),
-    "level": ("--level",),
     "output": ("--output",),
     "res": ("--res",),
     "qa": ("--qa",),
@@ -83,7 +82,6 @@ def _emit_recent(
     sensor: str = "tropomi",
     processing: str | None = None,
     var: str | None,
-    level: str | None,
     output: str,
     res: float | None,
     qa: float | None,
@@ -177,7 +175,7 @@ def _emit_recent(
         )
     console.print(f"[bold]解析区域:[/bold] {region}")
     try:
-        info = resolve_region(region, cfg, level_override=level)
+        info = resolve_region(region, cfg)
     except RsplotError:
         raise
     except ValueError as error:
@@ -202,7 +200,7 @@ def _emit_recent(
         "end_date": resolved(end_date, "cli"),
         "days": source_of("days", days, "built_in"),
         "source": source_of("source", use_source, "built_in"),
-        "level": source_of("level", info.level, "built_in"),
+        "level": resolved(info.level, "built_in", "from region"),
         "output": source_of("output", output, "built_in"),
     }
 

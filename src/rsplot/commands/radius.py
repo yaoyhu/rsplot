@@ -180,7 +180,6 @@ def _emit_radius(
         "processing": None,
         "days": None,
         "n_min": None,
-        "level": None,
         "dpi": 300,
         "res": None,
         "basemap": "none",

@@ -1,7 +1,11 @@
 # rsplot
 
-`rsplot` is an Agent-oriented command-line tool for plotting remote-sensing
-and air-quality data. It provides a small, stable CLI surface for
+`rsplot` is a command-line tool for agents to analyze multi-source
+spatiotemporal remote-sensing and air-quality data: TROPOMI and GEMS
+satellite retrievals, national monitoring stations and ERA5. Each command
+writes a machine-readable `rsplot.result/2` JSON result with statistics,
+quality flags and data files, plus a map for inspection. It provides a
+small, stable CLI surface for
 [tianpu-agent](https://git.lug.ustc.edu.cn/yaoyhu/tianpu-agent).
 
 
@@ -200,6 +204,15 @@ sidecar with the same base name. Nothing that selects data is implied:
 `--product` (satellite maps), `--var` (`station`, `trend`), `--station-var`
 (`overlay`) and the window length (`--days` with a single end date for
 `trend`, `fnr` and `recent`, or a `YYYYMMDD-YYYYMMDD` range) must be given.
+
+Regions are named in Chinese; there is no `--level` option and no pinyin.
+A full name selects its own level (`吉林市` is the city, `吉林省` the
+province). A short name that fits different places at two levels, such as
+`吉林`, is rejected with error code `region_ambiguous` and the candidate
+full names. 北京市, 上海市 and 天津市 are mapped as cities and 重庆市 as a
+province. Counties and townships are written with their city, e.g.
+`合肥/蜀山`. `中国`/`China` and the key regions (`长三角`/`YRD`, `京津冀`/`BTH`,
+`珠三角`/`PRD`, `成渝`/`SCB`) are also accepted.
 
 ### Result sidecars (`rsplot.result/2`)
 

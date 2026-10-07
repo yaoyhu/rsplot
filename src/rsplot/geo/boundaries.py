@@ -21,6 +21,7 @@ from rsplot.config import (
     LevelParams,
     SubdivisionSource,
 )
+from rsplot.errors import RsplotError
 
 if TYPE_CHECKING:
     from shapely.geometry.base import BaseGeometry
@@ -35,6 +36,11 @@ NAME_FIELD = "name"
 
 # 直辖市 — resolved as province but displayed with county-level sub-boundaries
 MUNICIPALITIES = {"北京市", "天津市", "上海市", "重庆市"}
+# Municipalities present in both the province and city files resolve as
+# cities; 重庆市 (and same-name entries such as 香港) stay provinces.
+CITY_MUNICIPALITIES = {"北京市", "天津市", "上海市"}
+# Placeholder features in the boundary files, never a region.
+PLACEHOLDER_NAMES = {"境界线"}
 
 
 @dataclass
@@ -389,6 +395,48 @@ def _resolve_city(
     )
 
 
+def _matched_name(query: str, candidates: gpd.GeoDataFrame) -> str | None:
+    match = _fuzzy_match(query, candidates)
+    if match is None:
+        return None
+    name = match.iloc[0][NAME_FIELD]
+    return None if name in PLACEHOLDER_NAMES else name
+
+
+def _resolve_named_place(
+    name: str,
+    cfg: AppConfig,
+    provinces: gpd.GeoDataFrame,
+    cities: gpd.GeoDataFrame,
+    counties: gpd.GeoDataFrame,
+) -> RegionInfo | None:
+    """Resolve a province or city name without guessing between them.
+
+    A full name selects its own level; a short name matching different
+    places at both levels is rejected with the candidates.
+    """
+    province = _matched_name(name, provinces)
+    city = _matched_name(name, cities)
+    if province is not None and province == city:
+        use_city = province in CITY_MUNICIPALITIES
+    elif province is not None and city is not None:
+        if (province == name) == (city == name):
+            raise RsplotError(
+                "region_ambiguous",
+                f"区域名 '{name}' 同时匹配 {province}（省级）和 "
+                f"{city}（市级），请写全称。",
+                details={"region": name, "candidates": [province, city]},
+            )
+        use_city = city == name
+    elif province is not None or city is not None:
+        use_city = city is not None
+    else:
+        return None
+    if use_city:
+        return _resolve_city(city, cfg, cities, counties)
+    return _resolve_province(province, provinces, cities, counties)
+
+
 def resolve_region(
     name: str,
     cfg: AppConfig,
@@ -424,7 +472,25 @@ def resolve_region(
         if key_region is not None:
             return key_region
 
-    if level_override is None or level_override == "province":
+    if level_override is None:
+        assert provinces is not None
+        named = _resolve_named_place(
+            name,
+            cfg,
+            provinces,
+            load_city_boundaries(geojson_dir),
+            load_county_boundaries(geojson_dir),
+        )
+        if named is not None:
+            return named
+        raise ValueError(
+            f"无法识别区域 '{name}'。请使用中文全称或简称，"
+            "县区写成 城市/区县，如 合肥/蜀山。"
+        )
+
+    # The level filter below serves only the disabled forecast and
+    # reconstruct commands; enabled commands resolve by name alone.
+    if level_override == "province":
         assert provinces is not None
         cities = load_city_boundaries(geojson_dir)
         counties = load_county_boundaries(geojson_dir)
@@ -432,7 +498,7 @@ def resolve_region(
         if province is not None:
             return province
 
-    if level_override is None or level_override == "city":
+    if level_override == "city":
         cities = load_city_boundaries(geojson_dir)
         counties = load_county_boundaries(geojson_dir)
         city = _resolve_city(name, cfg, cities, counties)
