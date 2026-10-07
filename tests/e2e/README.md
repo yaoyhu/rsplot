@@ -291,3 +291,11 @@ application the 3 resolution scenarios (full city name, ambiguous short
 name, Beijing as a city) and all 7 `--level` scenarios failed. Names now
 resolve without guessing (new error code `region_ambiguous`), with
 北京/上海/天津 as cities and 重庆 as a province, and `--level` is removed.
+
+Autonomous areas: short names such as 广西, 新疆 and 宁夏 did not resolve
+(only 自治区 was stripped, leaving 广西壮族). Six scenarios were added; 5
+failed against the unchanged application (海南省 by full name already
+worked). Short names now drop the ethnic groups before 自治区/州/县/旗, which
+makes 海南 ambiguous (海南省 and 海南藏族自治州) by design. A sweep of every
+real province and city, by full and short name (817 lookups), resolved each
+to itself except the ambiguous 吉林 and 海南.

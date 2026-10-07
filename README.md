@@ -208,8 +208,9 @@ sidecar with the same base name. Nothing that selects data is implied:
 Regions are named in Chinese; there is no `--level` option and no pinyin.
 A full name selects its own level (`吉林市` is the city, `吉林省` the
 province). A short name that fits different places at two levels, such as
-`吉林`, is rejected with error code `region_ambiguous` and the candidate
-full names. 北京市, 上海市 and 天津市 are mapped as cities and 重庆市 as a
+`吉林` or `海南` (海南省 and 海南藏族自治州), is rejected with error code
+`region_ambiguous` and the candidate full names. Autonomous areas can be
+named without their ethnic groups: `广西`, `新疆`, `宁夏`, `楚雄`. 北京市, 上海市 and 天津市 are mapped as cities and 重庆市 as a
 province. Counties and townships are written with their city, e.g.
 `合肥/蜀山`. `中国`/`China` and the key regions (`长三角`/`YRD`, `京津冀`/`BTH`,
 `珠三角`/`PRD`, `成渝`/`SCB`) are also accepted.

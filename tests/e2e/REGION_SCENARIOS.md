@@ -9,8 +9,13 @@ name matches its own level; a short name that fits places at two levels is
 rejected, never guessed. 北京市, 上海市 and 天津市 are cities; 重庆市 is a
 province.
 
-Fixtures add provinces 双名省, 北京市 and 重庆市 and cities 双名市, 北京市
-and 重庆市 over the fixture swath box, next to the base FixtureProvince /
+Short names drop the ethnic groups before 自治区/自治州/自治县/自治旗
+(广西壮族自治区 → 广西, 新疆维吾尔自治区 → 新疆).
+
+Fixtures add provinces 双名省, 北京市, 重庆市, 广西壮族自治区,
+新疆维吾尔自治区 and 海南省 and cities 双名市, 北京市, 重庆市,
+楚雄彝族自治州, 黔东南苗族侗族自治州 and 海南藏族自治州 over the fixture
+swath box, next to the base FixtureProvince /
 FixtureCity boundaries. Every sidecar must validate against the schema; a
 rejection exits 1 and writes only an error sidecar.
 
@@ -21,4 +26,10 @@ rejection exits 1 and writes only an error sidecar.
 | user is told a short name is ambiguous | 双名省 and 双名市 | Map 双名 | Rejected with `region_ambiguous`; `details.candidates` is 双名省, 双名市 |
 | user maps Beijing as a city | 北京市 in both files | Map 北京 | Region 北京市, level city |
 | user maps Chongqing as a province | 重庆市 in both files | Map 重庆 | Region 重庆市, level province |
+| user maps Guangxi by its short name | 广西壮族自治区 | Map 广西 | Region 广西壮族自治区, level province |
+| user maps Xinjiang by its short name | 新疆维吾尔自治区 (no 族) | Map 新疆 | Region 新疆维吾尔自治区, level province |
+| user maps an autonomous prefecture by its short name | 楚雄彝族自治州 | Map 楚雄 | Region 楚雄彝族自治州, level city |
+| user maps a prefecture named for two groups | 黔东南苗族侗族自治州 | Map 黔东南 | Region 黔东南苗族侗族自治州, level city |
+| user is told Hainan is ambiguous | 海南省 and 海南藏族自治州 | Map 海南 | Rejected with `region_ambiguous`; candidates 海南省, 海南藏族自治州 |
+| user maps Hainan province by its full name | 海南省 and 海南藏族自治州 | Map 海南省 | Region 海南省, level province |
 | user cannot use a pinyin name | Chinese boundary names | Map shuangming | Rejected with `region_not_found` |

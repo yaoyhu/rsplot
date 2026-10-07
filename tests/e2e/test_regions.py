@@ -58,6 +58,36 @@ class RegionE2E(unittest.TestCase):
         """Given 重庆市 in both files, when mapping 重庆, then a province."""
         self.assertEqual(self.region("重庆"), ["重庆市", "province"])
 
+    def test_user_maps_guangxi_by_its_short_name(self):
+        """Given 广西壮族自治区, when mapping 广西, then get the province."""
+        self.assertEqual(self.region("广西"), ["广西壮族自治区", "province"])
+
+    def test_user_maps_xinjiang_by_its_short_name(self):
+        """Given 新疆维吾尔自治区, when mapping 新疆, then the province."""
+        self.assertEqual(self.region("新疆"), ["新疆维吾尔自治区", "province"])
+
+    def test_user_maps_an_autonomous_prefecture_by_its_short_name(self):
+        """Given 楚雄彝族自治州, when mapping 楚雄, then get the city."""
+        self.assertEqual(self.region("楚雄"), ["楚雄彝族自治州", "city"])
+
+    def test_user_maps_a_prefecture_named_for_two_groups(self):
+        """Given 黔东南苗族侗族自治州, when mapping 黔东南, then get it."""
+        self.assertEqual(
+            self.region("黔东南"), ["黔东南苗族侗族自治州", "city"]
+        )
+
+    def test_user_is_told_hainan_is_ambiguous(self):
+        """Given 海南省 and 海南藏族自治州, when mapping 海南, then reject."""
+        error = self.rejection("海南")
+        self.assertEqual(
+            [error["code"], error["details"]["candidates"]],
+            ["region_ambiguous", ["海南省", "海南藏族自治州"]],
+        )
+
+    def test_user_maps_hainan_province_by_its_full_name(self):
+        """Given both 海南 places, when mapping 海南省, then the province."""
+        self.assertEqual(self.region("海南省"), ["海南省", "province"])
+
     def test_user_cannot_use_a_pinyin_name(self):
         """Given Chinese boundary names, when mapping pinyin, then reject."""
         self.assertEqual(

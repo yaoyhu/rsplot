@@ -143,6 +143,9 @@ introduce new code that violates them.
    rejects a short name that fits different places at two levels (`吉林`)
    with `region_ambiguous` and `details.candidates`, and fixes the
    municipalities: 北京市, 上海市, 天津市 are cities, 重庆市 is a province.
+   Short names drop the ethnic groups before 自治区/州/县/旗 (`_strip_suffix`:
+   广西, 新疆, 宁夏, 楚雄, 黔东南); so `海南` is ambiguous (海南省 and
+   海南藏族自治州), like `吉林`.
    Counties are written `城市/区县`. `resolve_region(level_override=...)`
    remains only for the disabled `forecast`/`reconstruct` modules.
 
