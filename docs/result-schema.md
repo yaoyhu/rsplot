@@ -14,7 +14,7 @@ reproduce it, and where the full data is. Humans read the PNG and stdout.
   - [`overlay-tropomi-day.json`](result-examples/overlay-tropomi-day.json):
     two layers, time matching, colocation, informational flags.
   - [`raster-window-unreliable.json`](result-examples/raster-window-unreliable.json):
-    the real Hefei 7-day window with 2.9 % coverage, graded `unreliable`.
+    a sparse Hefei 7-day window with 2.9 % coverage, graded `unreliable`.
 
   Examples abbreviate long lists (`files`, `by_admin`, `extremes`).
 
@@ -66,7 +66,7 @@ Every layer has the same keys:
 | `id` | Unique name within the sidecar (`satellite`, `station`, `temperature`, `wind`, `no2`, `hcho`, `fnr`, `regional_mean`, ...). |
 | `kind` | `grid`, `points`, `vector_grid` or `series`. |
 | `quantity` | `name`, `unit`, `scale` (stored × scale = value in `unit`), optional display `label`. |
-| `time` | `aggregation` (`scan`, `hourly`, `daily`, `daily_scan_mean`, `window_mean`, `hourly_series`), `at` or `start`/`end`, `timezone`, `basis`, optional `archive_time_utc`, and `days` for windows (`requested`, `found`, `failed`, `n_min`, `valid_days_per_cell`). |
+| `time` | `aggregation` (`scan`, `hourly`, `daily`, `daily_scan_mean`, `window_mean`, `hourly_series`), `at` or `start`/`end`, `timezone`, `basis`, optional `archive_time_utc`, and `days` for windows (`requested`, `found`, `failed`, `n_min`, `valid_days_per_cell`). `n_min` is the minimum valid days that keep a cell: always 1 for `raster`, `overlay` and `radius`, whose window means average each cell's valid days and leave cells without any as nodata; `fnr` records its `--n-min`. |
 | `source` | `sensor`, `processing` (`offl` or `nrti` for TROPOMI, `null` otherwise), `data_root`, `files` (relative to `data_root`, sorted, at most 200), `files_total`, `files_manifest` (absolute path of a CSV of all files when there are more than 200), `failed_files`, `versions`. |
 | `method` | Choices that change values: QA/cloud filters, grid spacing, gap filling, day weighting, smoothing, cell selection/weighting, pixels used. |
 | `coverage` | `valid`, `total`, `fraction` (0–1), `unit` (`cells`, `stations`, `hours`, `vectors`). |
@@ -125,7 +125,7 @@ saying so.
 | `no_valid_data` | critical | A layer has zero valid cells/stations/hours. |
 | `very_low_coverage` | critical | Grid coverage fraction < 0.10. |
 | `low_coverage` | warning | Grid coverage fraction < 0.30. |
-| `few_valid_days` | warning | Window median valid days per cell < `n_min`. |
+| `few_valid_days` | warning | Window median valid days per cell < `n_min` (`fnr` only; never raised when `n_min` is 1). |
 | `missing_days` | warning | A window has failed or missing days. |
 | `failed_files` | warning | Any input file could not be read. |
 | `few_stations` | warning | Fewer than 3 valid stations in a station layer. |

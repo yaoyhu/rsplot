@@ -362,6 +362,60 @@ class CliE2E(unittest.TestCase):
             str(self.workspace.output),
         )
 
+    def test_user_cannot_set_a_raster_valid_day_threshold(self):
+        """Given a window, when passing --n-min to raster, then reject it."""
+        self.assert_no_such_option(
+            "raster",
+            "FixtureCity",
+            "20260102",
+            "--product",
+            "no2",
+            "--days",
+            "2",
+            "--n-min",
+            "1",
+            "--output",
+            str(self.workspace.output),
+        )
+
+    def test_user_cannot_set_an_overlay_valid_day_threshold(self):
+        """Given a window, when passing --n-min to overlay, then reject it."""
+        self.assert_no_such_option(
+            "overlay",
+            "FixtureCity",
+            "20260102",
+            "--product",
+            "no2",
+            "--station-var",
+            "NO2",
+            "--station-datetime",
+            "2026010213",
+            "--days",
+            "2",
+            "--n-min",
+            "1",
+            "--output",
+            str(self.workspace.output),
+        )
+
+    def test_user_cannot_set_a_radius_valid_day_threshold(self):
+        """Given a window, when passing --n-min to radius, then reject it."""
+        self.assert_no_such_option(
+            "radius",
+            "S001A",
+            "20260102",
+            "--km",
+            "10",
+            "--product",
+            "no2",
+            "--days",
+            "2",
+            "--n-min",
+            "1",
+            "--output",
+            str(self.workspace.output),
+        )
+
     def test_user_cannot_point_station_at_a_data_folder(self):
         """Given config paths, when passing --data-dir, then reject it."""
         self.assert_no_such_option(

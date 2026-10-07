@@ -31,7 +31,7 @@ Its result sidecar has one `station` layer built by
 radius) and a station CSV without satellite columns; meteo still uses the
 old `result_builders.station.build_station_result`.
 The `overlay` command's `DATE` selects satellite time exactly as `raster`
-does, including date ranges and `--days`/`--n-min` windows; TROPOMI stays
+does, including date ranges and `--days` windows; TROPOMI stays
 daily. Station observations are one explicit China-time hour: require
 `--station-datetime YYYYMMDDHH` for TROPOMI and for GEMS daily/window means.
 Only a GEMS 12-digit scan matches the nearest station hour automatically.
@@ -99,8 +99,12 @@ introduce new code that violates them.
 4. **Time is explicit.** Hourly inputs are China-time `YYYYMMDDHH`
    (`Asia/Shanghai`). Never auto-select the latest file or hour and never fall
    back to another hour. Satellite dates and windows follow `raster`
-   (`YYYYMMDD`, `YYYYMMDD-YYYYMMDD`, `--days`, `--n-min`, GEMS
-   `YYYYMMDDHHMM`); TROPOMI stays daily. Station observations are always one
+   (`YYYYMMDD`, `YYYYMMDD-YYYYMMDD`, `--days`, GEMS
+   `YYYYMMDDHHMM`); TROPOMI stays daily. A window cell is the equal-weight
+   mean of its valid days (missing days are skipped, not zero) and is kept
+   with one valid day, nodata with none; `raster`, `overlay` and `radius`
+   have no `--n-min` (sidecar `time.days.n_min` is 1), only `fnr` keeps
+   one. Station observations are always one
    concrete hour, never a temporal mean. The one exception is `recent
    --source station`, whose daily value is explicitly the mean of all
    available hours of that day.
@@ -138,7 +142,7 @@ introduce new code that violates them.
    `--title`, `--basemap`, `--smooth`, and wind styling only change the
    image. The JSON records the values actually used, and they never change
    coverage or valid-cell counts. Options that change the science (`--res`,
-   `--qa`, `--cf`, `--n-min`, FNR thresholds) are kept and recorded.
+   `--qa`, `--cf`, FNR `--n-min` and thresholds) are kept and recorded.
 9. **Regions are named, never levelled.** Names are Chinese only (plus
    `中国`/`China` and the key-region keys such as `YRD`); there is no
    `--level` option and no pinyin. `geo.boundaries.resolve_region` matches
@@ -433,7 +437,7 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
   plus metadata; unreadable files yield empty diagnostic batches. Its `read`
   concatenates raw samples for compatibility, **not** equal-scan daily means.
   Use `temporal.read_scan_mean` for GEMS scientific aggregation, then
-  `compute_window_mean` for equal-day means. `--n-min` still counts days.
+  `compute_window_mean` for equal-day means.
 - Default GEMS filtering uses final flag 0, SZA/VZA < 70°, and product-specific
   cloud measure <= `--cf` (0.5). NO2 flags are bit-encoded in the checked v4
   archive; HCHO/O3P differ. Never synthesize TROPOMI QA scores. Explicit

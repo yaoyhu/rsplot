@@ -87,15 +87,6 @@ def raster(
             "不能与日期区间同时使用。省略时 YYYYMMDD 仅处理当天。"
         ),
     ),
-    n_min: int | None = typer.Option(
-        None,
-        "--n-min",
-        help=(
-            "仅窗口模式：每个网格最少有效天数。默认 NO2/O3/O3PR="
-            "max(3, 天数//2)，HCHO=max(3, ceil(天数*0.25))，"
-            "均以窗口天数为上限。"
-        ),
-    ),
     res: float | None = typer.Option(
         None,
         "--res",
@@ -129,7 +120,8 @@ def raster(
     """绘制卫星遥感栅格图。
 
     TROPOMI 单日合并轨道后网格化并填补小空洞；窗口模式先逐日网格化，
-    再按有效天等权平均，不填补空洞。因此 --days 1 与省略 --days 不等价。
+    再对每个网格的有效天等权平均（缺测不计为 0，至少一天有效即保留，
+    全无有效天则留空），不填补空洞。因此 --days 1 与省略 --days 不等价。
 
     示例:
         rsplot raster 北京    20260108 --dpi 300 --output yrd.png  # 单日
@@ -145,7 +137,6 @@ def raster(
         sensor=sensor,
         processing=processing,
         days=days,
-        n_min=n_min,
         output=output,
         dpi=dpi,
         res=res,
@@ -203,14 +194,6 @@ def radius(
         help="时间窗口天数；不指定且 DATE 为单日时走单日路径。"
         "推荐值: 30 (月均，HCHO 首选) / 7 (周均) / 显式区间用 YYYYMMDD-YYYYMMDD",
     ),
-    n_min: int | None = typer.Option(
-        None,
-        "--n-min",
-        help=(
-            "窗口模式下每像元最少有效天数。默认: NO2/O3/O3PR="
-            "max(3, 天数//2), HCHO=max(3, ceil(天数*0.25))"
-        ),
-    ),
     station_var: str | None = typer.Option(
         None,
         "--station-var",
@@ -264,7 +247,6 @@ def radius(
         processing=processing,
         product=product,
         days=days,
-        n_min=n_min,
         output=output,
         dpi=dpi,
         res=res,
@@ -566,11 +548,6 @@ def overlay(
             "不能与日期区间同时使用。"
         ),
     ),
-    n_min: int | None = typer.Option(
-        None,
-        "--n-min",
-        help="仅窗口模式：每个网格最少有效天数，默认规则同 raster。",
-    ),
     station_datetime: str | None = typer.Option(
         None,
         "--station-datetime",
@@ -631,7 +608,6 @@ def overlay(
         region=region,
         date_arg=date_arg,
         days=days,
-        n_min=n_min,
         station_datetime=station_datetime,
         product=product,
         sensor=sensor,

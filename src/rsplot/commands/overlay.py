@@ -25,7 +25,6 @@ OVERLAY_OPTIONS = {
     "processing": ("--processing",),
     "product": ("--product",),
     "days": ("--days",),
-    "n_min": ("--n-min",),
     "station_datetime": ("--station-datetime",),
     "station_var": ("--station-var",),
     "output": ("--output",),
@@ -46,7 +45,6 @@ def resolve_station_hour(
     date_arg: str,
     sensor: str,
     days: int | None,
-    n_min: int | None,
     station_datetime: str | None,
 ) -> tuple[str, dict[str, Any], list[str], bool]:
     """Resolve satellite dates and one station hour; never pick the latest.
@@ -63,11 +61,11 @@ def resolve_station_hour(
             parse_gems_time(date_arg)
         except ValueError as error:
             raise RsplotError("invalid_time", str(error)) from error
-        if days is not None or n_min is not None:
+        if days is not None:
             raise RsplotError(
                 "invalid_argument",
-                "GEMS 单次扫描不能同时使用 --days 或 --n-min。",
-                option="--days" if days is not None else "--n-min",
+                "GEMS 单次扫描不能同时使用 --days。",
+                option="--days",
             )
         dates, window_mode = [date_arg[:8]], False
     else:
@@ -123,7 +121,6 @@ def _emit_overlay(
     sensor: str = "tropomi",
     processing: str | None = None,
     days: int | None = None,
-    n_min: int | None = None,
     station_datetime: str | None = None,
     station_var: str,
     output: str,
@@ -171,7 +168,7 @@ def _emit_overlay(
     sensor = prod_info.sensor
     processing = prod_info.processing
     station_hour, matching, dates, window_mode = resolve_station_hour(
-        date_arg, sensor, days, n_min, station_datetime
+        date_arg, sensor, days, station_datetime
     )
 
     if station_var not in STATION_VAR_META:
@@ -232,7 +229,6 @@ def _emit_overlay(
         sensor=sensor,
         processing=processing,
         days=days,
-        n_min=n_min,
         output=output,
         dpi=dpi,
         res=res,

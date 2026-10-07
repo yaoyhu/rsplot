@@ -34,6 +34,9 @@ REGION_SCENARIOS.md).
 | user cannot point fnr at an HCHO folder | Configured paths | Run `fnr ... --hcho-dir /x` | Exit 2, "No such option", no output |
 | user cannot point meteo at an ERA5 folder | Configured paths | Run `meteo ... --data-dir /x` | Exit 2, "No such option", no output |
 | user cannot point meteo at a station folder | Configured paths | Run `meteo ... --station-data-dir /x` | Exit 2, "No such option", no output |
+| user cannot set a raster valid-day threshold | Configured paths | Run `raster ... --days 2 --n-min 1` | Exit 2, "No such option", no output |
+| user cannot set an overlay valid-day threshold | Configured paths | Run `overlay ... --days 2 --n-min 1` | Exit 2, "No such option", no output |
+| user cannot set a radius valid-day threshold | Configured paths | Run `radius ... --days 2 --n-min 1` | Exit 2, "No such option", no output |
 | user learns a data folder is not configured | Config without `no2` | Map NO2 with `raster` | Exit 1; error line `data_not_configured` naming `[paths.data_dirs].no2` and no CLI option, details `{"config_key": "no2"}` |
 | user sees only long options for raster | CLI is installed | Request `raster --help` | No single-letter option such as `-p`, `-o` |
 | user sees only long options for overlay | CLI is installed | Request `overlay --help` | No single-letter option |

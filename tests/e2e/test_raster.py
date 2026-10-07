@@ -167,7 +167,6 @@ class RasterE2E(unittest.TestCase):
         self.assertEqual(layer["stats"]["mean"], 6)
         self.assertEqual(layer["time"]["start"], "20260101")
         self.assertEqual(layer["time"]["end"], "20260102")
-        self.assertEqual(layer["time"]["days"]["n_min"], 2)
         self.assertEqual(layer["method"]["day_weighting"], "equal_days")
 
     def test_user_includes_both_range_endpoints(self):
@@ -180,12 +179,11 @@ class RasterE2E(unittest.TestCase):
         self.assertEqual(layer["stats"]["mean"], 6)
 
     def test_user_requests_a_one_day_window(self):
-        """Given Jan 1 orbits, when using --days 1, then n-min is clamped to 1."""
+        """Given Jan 1 orbits, when using --days 1, then mean is 3."""
         self.two_days()
         layer = satellite(
             self.assert_plot(self.workspace.raster("20260101", "--days", "1"))
         )
-        self.assertEqual(layer["time"]["days"]["n_min"], 1)
         self.assertEqual(layer["time"]["days"]["requested"], 1)
         self.assertEqual(layer["stats"]["mean"], 3)
 
@@ -232,14 +230,10 @@ class RasterE2E(unittest.TestCase):
         self.assertIn("very_low_coverage", flag_codes(payload))
 
     def test_user_sees_missing_day_diagnostics(self):
-        """Given Jan 1 missing, when permitting one valid day, then report it."""
+        """Given Jan 1 missing, when averaging two days, then report it."""
         self.workspace.write_swath("20260102", 9)
         layer = satellite(
-            self.assert_plot(
-                self.workspace.raster(
-                    "20260102", "--days", "2", "--n-min", "1"
-                )
-            )
+            self.assert_plot(self.workspace.raster("20260102", "--days", "2"))
         )
         self.assertEqual(layer["stats"]["mean"], 9)
         self.assertEqual(layer["time"]["days"]["found"], 1)
@@ -249,19 +243,45 @@ class RasterE2E(unittest.TestCase):
         """Given Jan 1 missing, when averaging two days, then grade limited."""
         self.workspace.write_swath("20260102", 9)
         payload = self.assert_plot(
-            self.workspace.raster("20260102", "--days", "2", "--n-min", "1")
+            self.workspace.raster("20260102", "--days", "2")
         )
         self.assertEqual(flag_codes(payload), ["missing_days"])
         self.assertEqual(payload["quality"]["grade"], "limited")
 
-    def test_user_enforces_minimum_valid_days(self):
-        """Given one missing day, when requiring both, then no map is emitted."""
-        self.workspace.write_swath("20260102", 9)
-        self.assert_rejected(
-            self.workspace.raster("20260102", "--days", "2"),
-            "--n-min",
-            "no_valid_data",
+    def test_user_keeps_cells_with_one_valid_day(self):
+        """Given cells seen on one or two days, when averaging, keep them all."""
+        self.workspace.write_swath("20260101", 2)
+        self.workspace.write_swath("20260102", 18, sparse=True)
+        layer = satellite(
+            self.assert_plot(self.workspace.raster("20260102", "--days", "2"))
         )
+        self.assertEqual(layer["coverage"]["valid"], 16)
+        self.assertEqual(layer["stats"]["mean"], 2.5)
+        self.assertEqual(layer["stats"]["max"], 10)
+        self.assertEqual(
+            [
+                layer["time"]["days"]["valid_days_per_cell"]["min"],
+                layer["time"]["days"]["valid_days_per_cell"]["max"],
+            ],
+            [1, 2],
+        )
+        self.assertEqual(layer["time"]["days"]["n_min"], 1)
+
+    def test_user_keeps_unobserved_cells_empty(self):
+        """Given one cell seen on both days, when averaging, others stay NaN."""
+        self.workspace.write_swath("20260101", 4, sparse=True)
+        self.workspace.write_swath("20260102", 8, sparse=True)
+        layer = satellite(
+            self.assert_plot(self.workspace.raster("20260102", "--days", "2"))
+        )
+        with Dataset(layer["data"]) as dataset:
+            values = dataset["value"][:].filled(np.nan)
+            counted = dataset["counted"][:].astype(bool)
+        self.assertEqual(
+            [layer["coverage"]["valid"], layer["coverage"]["total"]], [1, 16]
+        )
+        self.assertEqual(layer["stats"]["mean"], 6)
+        self.assertEqual(int(np.isnan(values[counted]).sum()), 15)
 
     def test_user_filters_qa_and_clouds(self):
         """Given rejected outliers, when filtering, then only value 2 remains."""
@@ -376,28 +396,19 @@ class RasterE2E(unittest.TestCase):
             "invalid_argument",
         )
 
-    def test_user_rejects_n_min_outside_a_window(self):
-        """Given a single date, when supplying --n-min, then require a window."""
-        self.assert_rejected(
-            self.workspace.raster("20260101", "--n-min", "1"),
-            "--n-min",
-            "invalid_argument",
-        )
-
-    def test_user_rejects_impossible_n_min(self):
-        """Given two days, when requiring three valid days, then reject."""
-        self.assert_rejected(
-            self.workspace.raster("20260102", "--days", "2", "--n-min", "3"),
-            "大于窗口天数",
-            "invalid_argument",
-        )
-
     def test_user_receives_useful_single_day_coverage_guidance(self):
         """Given exterior data, when plotting one day, then explain that day."""
         self.workspace.write_swath("20260101", 4, outside=True)
         result = self.workspace.raster("20260101")
         error = self.assert_rejected(result, "20260101", "no_valid_data")
         self.assertNotIn("窗口均值", error["message"])
+        self.assertNotIn("--days", error["message"])
+
+    def test_user_receives_useful_window_coverage_guidance(self):
+        """Given exterior data, when averaging a window, then cite coverage."""
+        self.workspace.write_swath("20260101", 4, outside=True)
+        result = self.workspace.raster("20260101", "--days", "1")
+        error = self.assert_rejected(result, "窗口", "no_valid_data")
         self.assertNotIn("--n-min", error["message"])
 
     def test_user_learns_a_region_does_not_exist(self):
@@ -506,16 +517,6 @@ class RasterE2E(unittest.TestCase):
         self.assert_rejected(
             self.workspace.raster(
                 "202601011200", "--sensor", "gems", "--days", "1"
-            ),
-            "单次扫描",
-            "invalid_argument",
-        )
-
-    def test_user_rejects_a_scan_valid_day_threshold(self):
-        """Given an exact scan, when requesting valid-day filtering, then reject."""
-        self.assert_rejected(
-            self.workspace.raster(
-                "202601011200", "--sensor", "gems", "--n-min", "1"
             ),
             "单次扫描",
             "invalid_argument",

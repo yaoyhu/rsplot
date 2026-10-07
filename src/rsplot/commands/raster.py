@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -34,7 +33,6 @@ RASTER_OPTIONS = {
     "processing": ("--processing",),
     "product": ("--product",),
     "days": ("--days",),
-    "n_min": ("--n-min",),
     "output": ("--output",),
     "dpi": ("--dpi",),
     "res": ("--res",),
@@ -149,17 +147,6 @@ def _emit_raster(kwargs: dict[str, Any], created: list[Path]) -> None:
     kwargs["console"].print(f"[bold green]✓ 已保存:[/bold green] {image}")
 
 
-def default_raster_n_min(product: str, window_n: int) -> int:
-    """Return a product-aware threshold that fits the requested window."""
-    if window_n < 1:
-        raise ValueError("窗口至少需要 1 天。")
-    if product.lower() == "hcho":
-        preferred = max(3, math.ceil(window_n * 0.25))
-    else:
-        preferred = max(3, window_n // 2)
-    return min(window_n, preferred)
-
-
 def parse_raster_dates(
     date_arg: str,
     days: int | None,
@@ -223,7 +210,6 @@ def prepare_raster(
     sensor: str = "tropomi",
     processing: str | None = None,
     days: int | None,
-    n_min: int | None,
     output: str,
     dpi: int | None,
     res: float | None,
@@ -268,40 +254,17 @@ def prepare_raster(
             scan_time = parse_gems_time(date_arg)
         except ValueError as error:
             raise RsplotError("invalid_time", str(error)) from error
-        if days is not None or n_min is not None:
+        if days is not None:
             raise RsplotError(
                 "invalid_argument",
-                "GEMS 单次扫描不能同时使用 --days 或 --n-min。",
-                option="--days" if days is not None else "--n-min",
+                "GEMS 单次扫描不能同时使用 --days。",
+                option="--days",
             )
     dates, window_mode = parse_raster_dates(
         date_arg[:8] if scan_mode else date_arg, days
     )
 
     window_n = len(dates)
-    use_n_min: int | None = None
-    if n_min is not None and n_min < 1:
-        raise RsplotError(
-            "invalid_argument", "--n-min 必须 >= 1。", option="--n-min"
-        )
-    if not window_mode and n_min is not None:
-        raise RsplotError(
-            "invalid_argument",
-            "--n-min 仅用于日期范围或 --days 窗口。",
-            option="--n-min",
-        )
-    if window_mode:
-        use_n_min = (
-            n_min
-            if n_min is not None
-            else default_raster_n_min(product, window_n)
-        )
-        if use_n_min > window_n:
-            raise RsplotError(
-                "invalid_argument",
-                f"--n-min ({use_n_min}) 大于窗口天数 ({window_n})",
-                option="--n-min",
-            )
 
     setup_fonts(cfg.font_dir)
 
@@ -430,10 +393,9 @@ def prepare_raster(
                 provenance = [swath.metadata]
                 pixels_used = int(swath.n_pixels)
         else:
-            assert use_n_min is not None
             console.print(
                 f"\n[bold]时间窗口:[/bold] {dates[0]} ~ {dates[-1]} "
-                f"({window_n} 天，每像元至少 {use_n_min} 天有效)"
+                f"({window_n} 天，每像元取有效天等权均值)"
             )
             console.print(
                 f"\n[bold]读取数据:[/bold] {use_data_dir} (产品: {product})"
@@ -456,12 +418,11 @@ def prepare_raster(
                 f"({window.n_files_total} 文件, "
                 f"{window.n_broken_total} 损坏)"
             )
-            mean_grid = window.grid.copy()
-            mean_grid[window.n_valid < use_n_min] = np.nan
+            # Each cell averages its valid days; cells with none stay NaN.
             prepared = prepare_existing_grid(
                 window.LON,
                 window.LAT,
-                mean_grid,
+                window.grid,
                 info.geometry,
                 fill_gaps=False,
             )
@@ -506,8 +467,8 @@ def prepare_raster(
     if not np.isfinite(display_grid).any():
         if window_mode:
             message = (
-                "窗口均值全区无有效像元，可能原因：窗口内覆盖不足，"
-                "或 --n-min 太严。可放宽 --n-min / 扩大窗口。"
+                f"{dates[0]}~{dates[-1]} 窗口内目标区域 {info.name} "
+                "无任何有效观测。请扩大窗口或检查区域及质量/云量筛选条件。"
             )
         else:
             message = (
@@ -650,12 +611,13 @@ def prepare_raster(
         }
     days_block = None
     if window_mode:
-        assert use_n_min is not None and valid_days is not None
+        assert valid_days is not None
         days_block = {
             "requested": window_n,
             "found": len(window.dates_found),
             "failed": dict(window.dates_failed),
-            "n_min": use_n_min,
+            # One valid day keeps a cell; there is no stricter threshold.
+            "n_min": 1,
             "valid_days_per_cell": stats_block(
                 valid_days[counted & (valid_days > 0)].astype(float)
             ),
@@ -748,17 +710,6 @@ def prepare_raster(
         ),
         "product": _source("product", product, "built_in"),
         "days": _source("days", days, "built_in") if days else None,
-        "n_min": (
-            _source(
-                "n_min",
-                use_n_min,
-                "product_default",
-                "max(3, days // 2); HCHO max(3, ceil(days * 0.25)); "
-                "capped at days",
-            )
-            if window_mode
-            else None
-        ),
         "level": resolved(info.level, "built_in", "from region"),
         "data_dir": resolved(str(use_data_dir), "config"),
         "res": res_entry,

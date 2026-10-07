@@ -15,7 +15,6 @@
       "processing": {"value": "offl", "source": "built_in"},
       "product": {"value": "no2", "source": "cli"},
       "days": {"value": 7, "source": "cli"},
-      "n_min": {"value": 3, "source": "product_default", "detail": "max(3, days // 2), capped at days"},
       "res": {"value": 0.03, "source": "level_default", "detail": "city"},
       "smooth": {"value": 1.5, "source": "level_default", "detail": "city"},
       "qa": {"value": 0.5, "source": "config"},
@@ -44,8 +43,8 @@
           "requested": 7,
           "found": 7,
           "failed": {},
-          "n_min": 3,
-          "valid_days_per_cell": {"n": 1209, "min": 1, "p10": 1, "p25": 1, "median": 1, "mean": 1.5, "p75": 2, "p90": 2, "max": 6}
+          "n_min": 1,
+          "valid_days_per_cell": {"n": 35, "min": 1, "p10": 1, "p25": 1, "median": 1, "mean": 1.2, "p75": 1, "p90": 2, "max": 2}
         }
       },
       "source": {
@@ -86,13 +85,6 @@
         "layer": "satellite",
         "message": "Only 2.9% of region cells have a valid window mean; regional statistics are not representative.",
         "evidence": {"fraction": 0.029, "threshold": 0.1}
-      },
-      {
-        "code": "few_valid_days",
-        "severity": "warning",
-        "layer": "satellite",
-        "message": "Median valid days per cell (1) is below n_min (3); most cells were removed. Consider a coarser --res or a lower --n-min.",
-        "evidence": {"median_valid_days": 1, "n_min": 3}
       }
     ]
   },

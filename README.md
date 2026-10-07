@@ -291,11 +291,12 @@ Existing TROPOMI smoothing also affects reported statistic values; use
 `--smooth 0` for unsmoothed comparisons. Smoothing never creates valid cells,
 so coverage and valid-cell counts do not depend on `--smooth`. GEMS statistics remain unfilled and unsmoothed.
 
-`--n-min` applies only to windows and counts valid days per cell. Its default
-is `min(N, max(3, N // 2))` for NO2/O3/O3PR and
-`min(N, max(3, ceil(N * 0.25)))` for HCHO. Missing days are recorded in the
-satellite layer's `time.days.failed`; they are not treated as zero-valued
-observations.
+A window keeps every cell with at least one valid day: its value is the
+mean of that cell's valid daily values, each weighted equally. Missing or
+invalid days are skipped, never treated as zero-valued observations, and a
+cell with no valid day stays nodata. There is no minimum-valid-days option;
+`time.days.valid_days_per_cell` in the sidecar shows how many days support
+each cell, and missing days are recorded in `time.days.failed`.
 
 `raster` always saves an image, a same-basename JSON sidecar and a
 `<name>.satellite.nc` data file. Use `-o` for an explicit PNG path; otherwise
@@ -306,7 +307,7 @@ files are saved under `/tmp`.
 `rsplot overlay REGION DATE` draws one satellite layer and one hour of
 national monitoring-station observations on the same map. `DATE` selects
 satellite time exactly as `raster` does, including `YYYYMMDD-YYYYMMDD`,
-`--days N`, `--n-min`, and GEMS `YYYYMMDDHHMM` scans. TROPOMI remains daily:
+`--days N`, and GEMS `YYYYMMDDHHMM` scans. TROPOMI remains daily:
 the orbits for one filename date are merged, and there is no hourly
 TROPOMI selector.
 
@@ -405,7 +406,7 @@ uv run rsplot radius 1379A 202609071245 --km 5 \
 
 - `--km` is required and accepts positive fractional kilometers measured
   from the center to each side, not the full side length. Satellite
-  options (`--sensor`, `--product`, `--days`, `--n-min`, `--res`, `--cf`,
+  options (`--sensor`, `--product`, `--days`, `--res`, `--cf`,
   `--qa`, color limits and smoothing) follow `raster`. Defaults are
   TROPOMI/O3, county product plotting settings, and `--basemap none`.
 - Without `--station-var`, only station IDs and coordinates are read, using
@@ -663,9 +664,8 @@ by `--res`**. GEMS defaults to 0.05° at every administrative level. This is
 numerical grid spacing, not native satellite resolution; finer grids cannot
 recover variation within a native pixel. Daily means
 weight valid scans equally at each grid cell; multi-day means then weight
-valid days equally. A daily cell needs at least one valid scan. Window `--n-min`
-continues to count **days**, using the existing product defaults, and is not
-available for a single scan. These are means of available daytime scans,
+valid days equally. A daily cell needs at least one valid scan, and a window
+cell at least one valid day. These are means of available daytime scans,
 not full 24-hour means. Empty scans and failed files do not contribute zeros.
 
 For GEMS `raster`, `overlay`, and `recent`, **`--res` controls the actual

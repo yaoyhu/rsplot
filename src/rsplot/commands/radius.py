@@ -22,7 +22,6 @@ RADIUS_OPTIONS = {
     "processing": ("--processing",),
     "product": ("--product",),
     "days": ("--days",),
-    "n_min": ("--n-min",),
     "km": ("--km",),
     "station_var": ("--station-var",),
     "station_datetime": ("--station-datetime",),
@@ -173,7 +172,6 @@ def _emit_radius(
         "sensor": "tropomi",
         "processing": None,
         "days": None,
-        "n_min": None,
         "dpi": 300,
         "res": None,
         "basemap": "none",
@@ -199,7 +197,6 @@ def _emit_radius(
             date_arg,
             prod.sensor,
             options["days"],
-            options["n_min"],
             station_datetime,
         )
     else:
