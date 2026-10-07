@@ -16,6 +16,7 @@ from rsplot.readers.guokong import RegionStationSeries, StationSeries
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
+    from matplotlib.figure import Figure
 
 
 _DISPLAY_UNITS = {
@@ -48,7 +49,7 @@ def plot_station_trend(
         for timestamp in series.timestamps
     ]
     width = min(16.0, max(10.0, 8.0 + series.n_hours / 96))
-    fig, ax = plt.subplots(figsize=(width, 5.4), dpi=dpi)
+    fig, ax = plt.subplots(figsize=(width, 5.8), dpi=dpi)
     try:
         show_markers = series.n_hours <= 72
         ax.plot(
@@ -102,13 +103,7 @@ def plot_station_trend(
             fontsize=9,
             color="#555555",
         )
-        ax.legend(loc="best", frameon=False, fontsize=9)
-        fig.subplots_adjust(
-            left=0.09,
-            right=0.98,
-            bottom=0.17,
-            top=0.84,
-        )
+        _place_trend_legend(fig, ax)
 
         path = Path(output)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -243,30 +238,35 @@ def plot_region_station_trend(
             fontsize=9,
             color="#555555",
         )
-        handles, labels = ax.get_legend_handles_labels()
-        fig.legend(
-            handles,
-            labels,
-            loc="upper center",
-            bbox_to_anchor=(0.5, 0.855),
-            ncol=min(6, len(labels)),
-            frameon=False,
-            fontsize=9,
-            columnspacing=1.4,
-            handlelength=2.4,
-        )
-        fig.subplots_adjust(
-            left=0.09,
-            right=0.98,
-            bottom=0.17,
-            top=0.78,
-        )
+        _place_trend_legend(fig, ax)
 
         path = Path(output)
         path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(path, dpi=dpi, bbox_inches="tight")
     finally:
         plt.close(fig)
+
+
+def _place_trend_legend(fig: Figure, ax: Axes) -> None:
+    """Keep station and regional legends between the subtitle and axes."""
+    handles, labels = ax.get_legend_handles_labels()
+    fig.legend(
+        handles,
+        labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.855),
+        ncol=min(6, len(labels)),
+        frameon=False,
+        fontsize=9,
+        columnspacing=1.4,
+        handlelength=2.4,
+    )
+    fig.subplots_adjust(
+        left=0.09,
+        right=0.98,
+        bottom=0.17,
+        top=0.78,
+    )
 
 
 def _background_segments(
