@@ -496,8 +496,8 @@ def prepare_raster(
         if title is None:
             label = " mean" if window_mode else ""
             title = (
-                f"TROPOMI NRTI {product.upper()} - {info.name} "
-                f"({period}{label})"
+                f"TROPOMI NRTI {product.upper()} "
+                f"{period}{label} - {info.name}"
             )
 
     if title is None and sensor == "gems":
@@ -508,15 +508,14 @@ def prepare_raster(
                 f"{date_arg} scan" if scan_mode else f"{date_arg} daily mean"
             )
         )
-        title = f"GEMS {product.upper()} - {info.name} ({period})"
+        title = f"GEMS {product.upper()} {period} - {info.name}"
     if title is None and window_mode:
         title = (
-            f"TROPOMI {product.upper()} - {info.name} "
-            f"({dates[0]}~{dates[-1]}, {window_n}d mean)"
+            f"TROPOMI {product.upper()} "
+            f"{dates[0]}~{dates[-1]}, {window_n}d mean - {info.name}"
         )
     if title is None:
-        # The renderer's own default, recorded so the sidecar states it.
-        title = f"TROPOMI - {info.name}"
+        title = f"TROPOMI {product.upper()} {dates[0]} - {info.name}"
 
     plot_options = dict(
         dpi=use_dpi,

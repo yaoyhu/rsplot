@@ -20,6 +20,7 @@ from rsplot.plotting.map_frame import (
     configure_map_axes,
     create_map_frame,
     finalize_map_figure,
+    set_map_title,
 )
 from rsplot.plotting.station import (
     add_station_colorbar,
@@ -55,6 +56,7 @@ def plot_overlay(
     basemap: bool | None = None,
     tianditu_key: str | None = None,
     title: str | None = None,
+    subtitle: str | None = None,
     output: str | None = None,
     coverage_geometry: BaseGeometry | None = None,
     station_focus: StationFocus | None = None,
@@ -168,7 +170,7 @@ def plot_overlay(
     # Title
     if title is None:
         title = f"{region.name} · raster + stations"
-    ax.set_title(title, fontsize=14)
+    set_map_title(ax, title, subtitle)
 
     # Reserve room on the right for the two inset colorbars.
     finalize_map_figure(

@@ -303,6 +303,35 @@ def configure_map_axes(
         gridlines.ylocator = mticker.MultipleLocator(region.params.grid_step)
 
 
+TITLE_FONTSIZE = 14
+SUBTITLE_FONTSIZE = 10
+SUBTITLE_COLOR = "#555555"
+
+
+def set_map_title(
+    ax: GeoAxes, title: str, subtitle: str | None = None
+) -> None:
+    """Draw the title, with an optional grey subtitle just above the map."""
+    if not subtitle:
+        ax.set_title(title, fontsize=TITLE_FONTSIZE)
+        return
+    gap = 6  # points between the axes, the subtitle and the title
+    ax.annotate(
+        subtitle,
+        xy=(0.5, 1.0),
+        xycoords="axes fraction",
+        xytext=(0, gap),
+        textcoords="offset points",
+        ha="center",
+        va="bottom",
+        fontsize=SUBTITLE_FONTSIZE,
+        color=SUBTITLE_COLOR,
+    )
+    ax.set_title(
+        title, fontsize=TITLE_FONTSIZE, pad=2 * gap + 1.3 * SUBTITLE_FONTSIZE
+    )
+
+
 def finalize_map_figure(
     fig: Figure,
     *,

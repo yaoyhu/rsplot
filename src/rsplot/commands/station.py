@@ -149,11 +149,9 @@ def _emit_station(
     display_var = STATION_VAR_LABELS.get(var, var)
     colorbar_label = f"{display_var} ({unit})" if unit else display_var
     use_title = title
-    if use_title is None and display_var != var:
-        use_title = f"{display_var} - {info.name}"
     if use_title is None:
-        # The renderer's default, recorded so the sidecar states it.
-        use_title = f"{var} - {info.name}"
+        hour_label = f"{resolved_dt[:8]} {resolved_dt[8:]}:00"
+        use_title = f"站点 {var} {hour_label} - {info.name}"
 
     image = str(Path(output).resolve())
     sidecar = sidecar_path(image)

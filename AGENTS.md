@@ -555,7 +555,12 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
 - Use the same markers for center and other stations, retaining hollow
   markers for missing values. Do not add a center ring or lower-right legend.
   Keep satellite and station units/colorbars separate. Daily/window versus hourly time
-  differences are null; titles identify both time bases.
+  differences are null. The default title is `<ID> 周边 <2·km> × <2·km> km ·
+  <city+subdivision of the centre> · <satellite date or range>`; a grey
+  subtitle (`render.subtitle`) names each layer's time without repeating
+  the title date, e.g. `TROPOMI NO2 日均 ｜ 站点 NO2 13:00`, adding the
+  station date only when it differs (`radius_titles`). `--title` replaces
+  both, and the subtitle is then null.
 - Radius's sidecar has region `kind: station_radius` with a
   `radius` block (centre, km, side length, administrative context), the
   `raster` satellite layer, and a `station` layer that is `location` without

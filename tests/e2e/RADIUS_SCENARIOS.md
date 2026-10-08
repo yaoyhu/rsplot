@@ -19,7 +19,13 @@ on Jan 1 contain 2 and 4.
 | Scenario | Given | When | Then |
 | --- | --- | --- | --- |
 | user maps a square around a station with values | Two orbits and the station file | Map with --station-var NO2 --station-datetime 2026010113 | A colored PNG; region kind `station_radius` centred on C001A with km 20 and side 40 km; satellite mean 3; station mean 60 from 2 stations at 2026010113 |
-| user reads a compact radius title | Two orbits and an explicit station hour | Map with NO2 | The saved render title names the satellite day and station hour without timezone wording |
+| user reads the radius title | Two orbits and the Jan 1 13:00 station file | Map Jan 1 with NO2 at 2026010113 | Large title `C001A 周边 40 × 40 km · FixtureCityFixtureCounty · 2026-01-01`: centre, square side, the centre's city and county, and the date once |
+| user reads the radius subtitle | Same | Same | Grey subtitle `TROPOMI NO2 日均 ｜ 站点 NO2 13:00`: each layer without repeating the title date |
+| user reads a window subtitle | Orbits on Jan 1 and Jan 2 and the Jan 2 13:00 station file | Map 20260101-20260102 with NO2 at 2026010213 | Title ends `2026-01-01 ~ 01-02`; subtitle `TROPOMI NO2 2 天均值 ｜ 站点 NO2 01-02 13:00` |
+| user reads a GEMS scan subtitle | A UTC 04:00 NO2 scan and the Jan 1 12:00 station file | Map local 202601011200 with NO2 | Subtitle `GEMS NO2 12:00 扫描 ｜ 站点 NO2 12:00` |
+| user reads a locations-only subtitle | Two orbits and the Jan 1 13:00 station file | Map Jan 1 with --station-datetime 2026010113 and no --station-var | Subtitle `TROPOMI NO2 日均 ｜ 站点位置 13:00` |
+| user sees the station date when it differs | Two orbits on Jan 1 and the Jan 2 13:00 station file | Map Jan 1 with NO2 at 2026010213 | Subtitle `TROPOMI NO2 日均 ｜ 站点 NO2 01-02 13:00` |
+| user replaces the radius title | Two orbits and the Jan 1 13:00 station file | Map with NO2 and --title 'My map' | Title `My map` and no subtitle |
 | user maps station locations only | One orbit and the station file | Map with --station-datetime 2026010113 and no --station-var | Station layer quantity `location` with 2 stations and no values; no time matching, no colocation, no station flags |
 | user reads the radius station table | Same as the first scenario | Map with NO2 | The station CSV lists C001A and N002A only, with `is_center` 1 and 0, `distance_km` 0 for the centre and about 7 for the neighbour, and east/north offsets `dx_km`, `dy_km` |
 | user sees satellite values at stations | Same as the first scenario | Map with NO2 | Colocation has 2 pairs, no Spearman correlation, incomparable units |

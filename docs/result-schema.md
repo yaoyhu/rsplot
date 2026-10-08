@@ -57,7 +57,7 @@ file, and that release's shipped schema describes it.
 | `layers` | One entry per data layer (below); never empty. |
 | `relations` | How layers relate: `time_matching` and `colocation`. `{}` for single-layer results. |
 | `quality` | `flags` (below); `[]` when no condition was met. |
-| `render` | Image settings actually used, per layer id. |
+| `render` | Image settings actually used: `title`, radius's grey `subtitle` (null when `--title` replaces both), and per layer id. |
 | `artifacts` | `image`, `sidecar`, and every `data` file with format, content, shape/rows and size in bytes. All paths are absolute. |
 
 ## Layers

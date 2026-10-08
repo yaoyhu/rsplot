@@ -504,6 +504,10 @@
         "dpi": {"type": "integer"},
         "basemap": {"enum": ["satellite", "none"]},
         "title": {"type": "string"},
+        "subtitle": {
+          "type": ["string", "null"],
+          "description": "Grey line under the title (radius); null when --title replaces both."
+        },
         "layers": {
           "type": "object",
           "description": "Layer id -> display settings actually used (cmap, vmin, vmax, extend, display smoothing, display grid shape, ...). Never affects statistics.",

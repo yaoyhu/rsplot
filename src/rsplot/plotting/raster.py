@@ -22,6 +22,7 @@ from rsplot.plotting.map_frame import (
     create_map_frame,
     figure_size_for_level,
     finalize_map_figure,
+    set_map_title,
 )
 
 if TYPE_CHECKING:
@@ -45,6 +46,7 @@ def plot_raster(
     basemap: bool | None = None,
     tianditu_key: str | None = None,
     title: str | None = None,
+    subtitle: str | None = None,
     output: str | None = None,
     coverage_geometry: BaseGeometry | None = None,
     station_focus: StationFocus | None = None,
@@ -102,7 +104,7 @@ def plot_raster(
     # Title
     if title is None:
         title = f"TROPOMI - {region.name}"
-    ax.set_title(title, fontsize=14)
+    set_map_title(ax, title, subtitle)
 
     finalize_map_figure(fig, dpi=dpi, output=output)
 

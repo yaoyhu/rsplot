@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -67,6 +66,67 @@ def location_snapshot_hour(
             "invalid_time", str(error), option="--station-datetime"
         ) from error
     return station_datetime
+
+
+def _day(stamp: str, *, year: bool = True) -> str:
+    """Format ``YYYYMMDD...`` as ``YYYY-MM-DD``, or ``MM-DD`` without year."""
+    day = f"{stamp[4:6]}-{stamp[6:8]}"
+    return f"{stamp[:4]}-{day}" if year else day
+
+
+def center_place(context: dict[str, Any]) -> str:
+    """The centre's city and the subdivision containing it, e.g. 北京市西城区."""
+    unit = next(
+        (u for u in context["subdivisions"] if u["contains_center"]), None
+    )
+    if unit is not None:
+        return f"{unit['city']}{unit['name']}"
+    return "".join(context["center_cities"][:1])
+
+
+def radius_titles(
+    *,
+    station_id: str,
+    km: float,
+    place: str,
+    source: str,
+    date_arg: str,
+    dates: list[str],
+    window_mode: bool,
+    gems: bool,
+    station_var: str | None,
+    station_hour: str,
+) -> tuple[str, str]:
+    """Title (where and when) and grey subtitle (each layer's time).
+
+    The satellite date appears once, in the title; the subtitle repeats a
+    date only where the station hour falls on another day.
+    """
+    first, last = dates[0], dates[-1]
+    if not window_mode:
+        period = _day(first)
+    else:
+        period = f"{_day(first)} ~ {_day(last, year=first[:4] != last[:4])}"
+    side = f"{2 * km:g}"
+    title = " · ".join(
+        part
+        for part in (f"{station_id} 周边 {side} × {side} km", place, period)
+        if part
+    )
+
+    if window_mode:
+        aggregation = f"{len(dates)} 天均值"
+    elif len(date_arg) == 12:
+        aggregation = f"{date_arg[8:10]}:{date_arg[10:]} 扫描"
+    else:
+        aggregation = "有效扫描均值" if gems else "日均"
+    day, hour = station_hour[:8], f"{station_hour[8:]}:00"
+    if not window_mode and day == first:
+        when = hour
+    else:
+        when = f"{_day(day, year=day[:4] != last[:4])} {hour}"
+    station = f"站点 {station_var}" if station_var else "站点位置"
+    return title, f"{source} {aggregation} ｜ {station} {when}"
 
 
 def run_radius(**kwargs: Any) -> None:
@@ -243,35 +303,20 @@ def _emit_radius(
         n_valid=int(np.isfinite(values[selected]).sum()),
     )
     source_label = prod.sensor.upper() + (" NRTI" if prod.processing else "")
+    context = administrative_context(info, lon, lat)
+    subtitle = None
     if options["title"] is None:
-        pretty_period = (
-            f"{dates[0][:4]}-{dates[0][4:6]}-{dates[0][6:]} ~ "
-            f"{dates[-1][:4]}-{dates[-1][4:6]}-{dates[-1][6:]}"
-            if window_mode
-            else datetime.strptime(
-                date_arg, "%Y%m%d%H%M" if len(date_arg) == 12 else "%Y%m%d"
-            ).strftime("%Y-%m-%d %H:%M" if len(date_arg) == 12 else "%Y-%m-%d")
-        )
-        station_hour = datetime.strptime(
-            locations.datetime, "%Y%m%d%H"
-        ).strftime("%Y-%m-%d %H:%M")
-        aggregation = (
-            "窗口均值"
-            if window_mode
-            else "扫描"
-            if prod.sensor == "gems" and len(date_arg) == 12
-            else "当日有效扫描均值"
-            if prod.sensor == "gems"
-            else "单日"
-        )
-        station_label = (
-            f"站点 {station_var} · {station_hour}"
-            if station_var
-            else f"站点位置快照 · {station_hour}"
-        )
-        options["title"] = (
-            f"{info.name}\n{source_label} {options['product'].upper()} "
-            f"· {pretty_period} {aggregation}\n{station_label}"
+        options["title"], subtitle = radius_titles(
+            station_id=station_id,
+            km=km,
+            place=center_place(context),
+            source=f"{source_label} {options['product'].upper()}",
+            date_arg=date_arg,
+            dates=dates,
+            window_mode=window_mode,
+            gems=prod.sensor == "gems",
+            station_var=station_var,
+            station_hour=locations.datetime,
         )
     console.print(
         f"[bold]站点快照:[/bold] {locations.datetime}，"
@@ -414,7 +459,11 @@ def _emit_radius(
 
     created.append(Path(image))
     focus = StationFocus(data, station_id, km, station_var is None)
-    plot_options = {**run.plot_options, "station_focus": focus}
+    plot_options = {
+        **run.plot_options,
+        "subtitle": subtitle,
+        "station_focus": focus,
+    }
     if station_var is None:
         plot_raster(run.lon, run.lat, run.grid, info, **plot_options)
     else:
@@ -448,7 +497,12 @@ def _emit_radius(
         layers=[satellite_layer, station_layer],
         relations=relations,
         flags=satellite_flags + station_flags,
-        render={"image": image, **run.render, "layers": render_layers},
+        render={
+            "image": image,
+            **run.render,
+            "subtitle": subtitle,
+            "layers": render_layers,
+        },
         artifacts={
             "image": image,
             "sidecar": sidecar,
@@ -462,7 +516,7 @@ def _emit_radius(
             "projection": "station_centered_WGS84_AEQD",
             "center_lon": lon,
             "center_lat": lat,
-            "administrative_context": administrative_context(info, lon, lat),
+            "administrative_context": context,
         },
     )
     created.append(Path(sidecar))

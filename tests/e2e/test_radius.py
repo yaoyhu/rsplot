@@ -78,15 +78,94 @@ class RadiusE2E(unittest.TestCase):
         self.assertEqual(station["coverage"]["total"], 2)
         self.assertEqual(station["stats"]["mean"], 60)
 
-    def test_user_reads_a_compact_radius_title(self):
-        """Given a day and hour, when mapping, then show compact dates."""
+    def test_user_reads_the_radius_title(self):
+        """Given a day and hour, when mapping, then place and date once."""
         self.standard_inputs()
         payload = self.assert_plot(self.workspace.radius("20260101", *VALUES))
         self.assertEqual(
             payload["render"]["title"],
-            "C001A 上下左右各 20 km\n"
-            "TROPOMI NO2 · 2026-01-01 单日\n"
-            "站点 NO2 · 2026-01-01 13:00",
+            "C001A 周边 40 × 40 km · FixtureCityFixtureCounty · 2026-01-01",
+        )
+
+    def test_user_reads_the_radius_subtitle(self):
+        """Given a day and hour, when mapping, then name each layer's time."""
+        self.standard_inputs()
+        payload = self.assert_plot(self.workspace.radius("20260101", *VALUES))
+        self.assertEqual(
+            payload["render"]["subtitle"], "TROPOMI NO2 日均 ｜ 站点 NO2 13:00"
+        )
+
+    def test_user_reads_a_window_subtitle(self):
+        """Given a two-day window, when mapping, then date the station hour."""
+        self.standard_inputs()
+        self.workspace.write_swath("20260102", 6)
+        self.workspace.write_radius_stations("2026010213")
+        payload = self.assert_plot(
+            self.workspace.radius(
+                "20260101-20260102",
+                "--station-var",
+                "NO2",
+                "--station-datetime",
+                "2026010213",
+            )
+        )
+        self.assertEqual(
+            [payload["render"]["title"], payload["render"]["subtitle"]],
+            [
+                "C001A 周边 40 × 40 km · FixtureCityFixtureCounty · 2026-01-01 ~ 01-02",
+                "TROPOMI NO2 2 天均值 ｜ 站点 NO2 01-02 13:00",
+            ],
+        )
+
+    def test_user_reads_a_gems_scan_subtitle(self):
+        """Given a noon scan, when mapping, then show the scan time."""
+        self.workspace.write_gems_scan("202601010400", 2)
+        self.workspace.write_radius_stations("2026010112")
+        payload = self.assert_plot(
+            self.workspace.radius(
+                "202601011200", "--sensor", "gems", "--station-var", "NO2"
+            )
+        )
+        self.assertEqual(
+            payload["render"]["subtitle"],
+            "GEMS NO2 12:00 扫描 ｜ 站点 NO2 12:00",
+        )
+
+    def test_user_reads_a_locations_only_subtitle(self):
+        """Given no station variable, when mapping, then say locations."""
+        self.standard_inputs()
+        payload = self.assert_plot(self.workspace.radius("20260101", *HOUR))
+        self.assertEqual(
+            payload["render"]["subtitle"], "TROPOMI NO2 日均 ｜ 站点位置 13:00"
+        )
+
+    def test_user_sees_the_station_date_when_it_differs(self):
+        """Given a next-day station hour, when mapping, then date it."""
+        self.standard_inputs()
+        self.workspace.write_radius_stations("2026010213")
+        payload = self.assert_plot(
+            self.workspace.radius(
+                "20260101",
+                "--station-var",
+                "NO2",
+                "--station-datetime",
+                "2026010213",
+            )
+        )
+        self.assertEqual(
+            payload["render"]["subtitle"],
+            "TROPOMI NO2 日均 ｜ 站点 NO2 01-02 13:00",
+        )
+
+    def test_user_replaces_the_radius_title(self):
+        """Given --title, when mapping, then use it alone."""
+        self.standard_inputs()
+        payload = self.assert_plot(
+            self.workspace.radius("20260101", *VALUES, "--title", "My map")
+        )
+        self.assertEqual(
+            [payload["render"]["title"], payload["render"].get("subtitle")],
+            ["My map", None],
         )
 
     def test_user_maps_station_locations_only(self):
