@@ -130,7 +130,7 @@ def resolve_station_file(data_dir: str, datetime_str: str) -> Path:
         if path is None:
             raise FileNotFoundError(
                 f"未找到 {datetime_str} 当天的站点数据文件: {pattern}\n"
-                f"请检查日期和 --data-dir 路径。"
+                "请检查日期和配置 [paths.data_dirs].guokong 路径。"
             )
         datetime_str = path.stem
     else:
@@ -195,7 +195,7 @@ def read_stations(
     except FileNotFoundError as e:
         raise FileNotFoundError(
             f"未找到站点数据文件: {path}\n"
-            f"请检查 datetime 参数和 --data-dir 路径。"
+            "请检查日期时间和配置 [paths.data_dirs].guokong 路径。"
         ) from e
 
     try:

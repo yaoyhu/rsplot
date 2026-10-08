@@ -585,8 +585,8 @@ def resolve_region(
         )
 
     raise ValueError(
-        f"无法识别区域 '{name}'。请检查名称是否正确，"
-        "或使用 --level 指定级别 (key_region/province/city/county)。"
+        f"无法识别区域 '{name}'。请使用中文行政区名称或重点区域名，"
+        "区县写作 城市/区县，如 合肥/蜀山。"
     )
 
 

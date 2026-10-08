@@ -22,7 +22,7 @@ _SPEC = TropomiReaderSpec(
     value_name=VALUE_NAME,
     unit_conversion=UNIT_CONVERSION,
     progress_description="[cyan]读取 O3PR 轨道...",
-    not_found_message="未找到匹配文件:\n  {patterns}\n请检查 --data-dir 和 --date 参数。",
+    not_found_message="未找到匹配文件:\n  {patterns}\n请检查配置 [paths.data_dirs] 中的数据目录和日期。",
     no_valid_data_message="{date} 当天 O3PR 无有效数据覆盖目标区域 {extent}。\n共扫描 {n_files} 个文件，损坏 {n_broken} 个。",
 )
 
