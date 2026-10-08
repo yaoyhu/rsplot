@@ -36,7 +36,7 @@ def location_snapshot_hour(
     days: int | None,
     station_datetime: str | None,
 ) -> str:
-    """Hour whose station coordinates are drawn when no variable is shown."""
+    """Explicit hour whose station coordinates are drawn without values."""
     from rsplot.readers.gems import parse_gems_time
     from rsplot.temporal import adapt_hourly_time
 
@@ -52,17 +52,21 @@ def location_snapshot_hour(
                 "GEMS 单次扫描不能同时使用 --days。",
                 option="--days",
             )
-    dates, _ = parse_raster_dates(
-        date_arg[:8] if scan_mode else date_arg, days
-    )
-    if station_datetime is not None:
-        try:
-            adapt_hourly_time(station_datetime, label="--station-datetime ")
-        except ValueError as error:
-            raise RsplotError(
-                "invalid_time", str(error), option="--station-datetime"
-            ) from error
-    return station_datetime or dates[-1]
+    parse_raster_dates(date_arg[:8] if scan_mode else date_arg, days)
+    if station_datetime is None:
+        raise RsplotError(
+            "invalid_argument",
+            "只标站点位置时，必须通过 --station-datetime YYYYMMDDHH "
+            "指定站点坐标所用的小时；不会自动选择。",
+            option="--station-datetime",
+        )
+    try:
+        adapt_hourly_time(station_datetime, label="--station-datetime ")
+    except ValueError as error:
+        raise RsplotError(
+            "invalid_time", str(error), option="--station-datetime"
+        ) from error
+    return station_datetime
 
 
 def run_radius(**kwargs: Any) -> None:

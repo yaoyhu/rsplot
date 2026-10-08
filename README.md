@@ -391,11 +391,12 @@ and county/township names remain visible across administrative borders;
 configured city-specific township layers are reused.
 
 ```bash
-# GEMS daily satellite mean, station locations only
+# GEMS daily satellite mean, station locations from one explicit hour
 uv run rsplot radius 1379A 20260907 --km 5 \
-  --sensor gems --product no2 --output /tmp/radius_positions.png
+  --sensor gems --product no2 --station-datetime 2026090713 \
+  --output /tmp/radius_positions.png
 
-# The same satellite mean plus ONE station observation hour (China time)
+# The same satellite mean plus ONE station observation hour
 uv run rsplot radius 1379A 20260907 --km 5 \
   --sensor gems --product no2 \
   --station-var NO2 --station-datetime 2026090713 \
@@ -412,9 +413,9 @@ uv run rsplot radius 1379A 202609071245 --km 5 \
   options (`--sensor`, `--product`, `--days`, `--res`, `--cf`,
   `--qa`, color limits and smoothing) follow `raster`. Defaults are
   TROPOMI/O3, county product plotting settings, and `--basemap none`.
-- Without `--station-var`, only station IDs and coordinates are read, using
-  the latest location snapshot on the requested end date unless
-  `--station-datetime YYYYMMDDHH` is supplied. No pollutant field is needed.
+- Without `--station-var`, only station IDs and coordinates are read, from
+  the hour given by the required `--station-datetime YYYYMMDDHH`; rsplot
+  never picks the latest hour. No pollutant field is needed.
 - With `--station-var`, daily/window satellite maps require an explicit
   station hour. GEMS exact scans automatically match the nearest hour,
   with half-hour ties rounded forward; an explicit hour overrides this.

@@ -28,6 +28,8 @@ on Jan 1 contain 2 and 4.
 | user records the administrative context | Same as the first scenario | Map with NO2 | `region.radius.administrative_context.center_cities` is `["FixtureCity"]` |
 | user matches a GEMS scan to the nearest station hour | A UTC 04:00 NO2 scan and the Jan 1 12:00 station file | Map local 202601011200 with --station-var NO2 | Station hour 2026010112; time matching by nominal scan time, 0 minutes |
 | user names the station hour for a daily mean with values | The station file | Map with --station-var NO2 and no --station-datetime | Rejected with `invalid_argument` on option --station-datetime |
+| user names the station hour for station locations | Two orbits and the Jan 1 13:00 station file | Map Jan 1 with no --station-var and no --station-datetime | Rejected with `invalid_argument` on option --station-datetime; no latest hour is chosen |
+| user names the station hour for locations beside a GEMS scan | A UTC 04:00 NO2 scan and the Jan 1 12:00 station file | Map local 202601011200 with no --station-var and no --station-datetime | Rejected with `invalid_argument` on option --station-datetime |
 | user learns the centre station is unknown | The station file | Map station `ZZZ9A` | Rejected with `region_not_found`, naming ZZZ9A |
 | user rejects a non-positive square | The station file | Map with --km 0 | Rejected with `invalid_argument` on option --km |
 | user learns the station variable is unknown | The station file | Map with --station-var XYZ | Rejected with `invalid_argument` on option --station-var |

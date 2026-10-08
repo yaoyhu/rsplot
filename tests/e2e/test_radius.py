@@ -195,6 +195,29 @@ class RadiusE2E(unittest.TestCase):
             "--station-datetime",
         )
 
+    def test_user_names_the_station_hour_for_station_locations(self):
+        """Given locations only, when omitting the hour, then reject."""
+        self.standard_inputs()
+        self.assert_rejected(
+            self.workspace.radius("20260101"),
+            "--station-datetime",
+            "invalid_argument",
+            "--station-datetime",
+        )
+
+    def test_user_names_the_station_hour_for_locations_beside_a_gems_scan(
+        self,
+    ):
+        """Given a scan and locations only, when omitting the hour, reject."""
+        self.workspace.write_gems_scan("202601010400", 2)
+        self.workspace.write_radius_stations("2026010112")
+        self.assert_rejected(
+            self.workspace.radius("202601011200", "--sensor", "gems"),
+            "--station-datetime",
+            "invalid_argument",
+            "--station-datetime",
+        )
+
     def test_user_learns_the_center_station_is_unknown(self):
         """Given an unknown station, when mapping, then report it."""
         self.standard_inputs()

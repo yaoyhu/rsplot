@@ -544,7 +544,9 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
   non-administrative area; administrative context must not clip the square.
   JSON records `radius.shape=square` and `radius.side_length_km`.
 - `--station-var` is optional. Locations-only mode uses
-  `read_station_locations` and requires no pollutant field. Coordinates
+  `read_station_locations` and requires no pollutant field, but it requires
+  `--station-datetime` for every satellite time, GEMS scans included; it
+  never falls back to the latest hour of the end date. Coordinates
   and observations in variable mode come from the same station hour.
 - Station observations are always one concrete China-time hour, never a
   temporal mean. Daily/window satellite requests with a station variable

@@ -202,7 +202,7 @@ def radius(
     station_datetime: str | None = typer.Option(
         None,
         "--station-datetime",
-        help="站点小时 YYYYMMDDHH；日均/窗口叠加变量时必填，GEMS 扫描默认匹配最近整点",
+        help="站点小时 YYYYMMDDHH；只标位置或日均/窗口叠加变量时必填，GEMS 扫描叠加变量时默认匹配最近整点",
     ),
     res: float | None = typer.Option(
         None,
