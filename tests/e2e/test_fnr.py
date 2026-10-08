@@ -73,6 +73,23 @@ class FnrE2E(unittest.TestCase):
             ["window_mean", "20260101", "20260103", "calendar_day"],
         )
 
+    def test_user_gets_unsmoothed_fnr_statistics(self):
+        """Given an NO2 gradient, when smoothing, then FNR stats hold."""
+        self.workspace.write_days(2, 6, gradient=True)
+        plain = layer(self.assert_plot(self.workspace.fnr("20260103")), "fnr")
+        payload = self.assert_plot(
+            self.workspace.fnr("20260103", "--smooth", "1.5")
+        )
+        smoothed = layer(payload, "fnr")
+        self.assertEqual(
+            [plain["stats"], plain["categories"]],
+            [smoothed["stats"], smoothed["categories"]],
+        )
+        self.assertEqual(
+            payload["render"]["layers"]["fnr"]["display_smoothing_sigma"], 1.5
+        )
+        self.assertNotIn("smoothing_sigma", smoothed["method"])
+
     def test_user_counts_cells_per_regime(self):
         """Given FNR 3, when mapping, then every cell is NOx-limited."""
         self.workspace.write_days(2, 6)

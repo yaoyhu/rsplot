@@ -71,7 +71,7 @@ Every layer has the same keys:
 | `quantity` | `name`, `unit`, `scale` (stored × scale = value in `unit`), optional display `label`. |
 | `time` | `aggregation` (`scan`, `hourly`, `daily`, `daily_scan_mean`, `window_mean`, `hourly_series`), `at` or `start`/`end`, `basis` (`calendar_day`, `nominal_scan_time`, `station_hour`, `era5_hour`); every time is China time and no time zone is named; and `days` for windows (`requested`, `found`, `failed`, `n_min`, `valid_days_per_cell`). `n_min` is the minimum valid days that keep a cell: always 1 for `raster`, `overlay` and `radius`, whose window means average each cell's valid days and leave cells without any as nodata; `fnr` records its `--n-min`. |
 | `source` | `sensor`, `processing` (`offl` or `nrti` for TROPOMI, `null` otherwise), `data_root`, `files_total` (files read; names are not listed), `failed_files` (relative name → reason), `versions`. |
-| `method` | Choices that change values: QA/cloud filters, grid spacing, gap filling, day weighting, smoothing, cell selection/weighting, pixels used. |
+| `method` | Choices that change values: QA/cloud filters, grid spacing, day weighting, cell selection/weighting, pixels used. Gap filling and smoothing are display-only and live in `render.layers`. |
 | `coverage` | `valid`, `total`, `fraction` (0–1), `unit` (`cells`, `stations`, `hours`, `vectors`). |
 | `stats` | `n`, `mean`, `std`, `min`, `p10`, `p25`, `median`, `p75`, `p90`, `max` over the statistical support. |
 | `exceedance` | Station layers with a standard: `threshold`, `operator` (`>`), `standard`, `count`, `fraction`. |
@@ -122,8 +122,9 @@ Only `overlay` and `radius` with a station variable produce colocation.
 `code`, `severity`, `layer` when it concerns one layer, and `evidence`: the
 measured numbers and, for threshold rules, the threshold. There is no prose
 message and no overall grade. Severity follows only from the code below.
-Facts that are already fields (smoothing in `method`, time matching and unit
-comparability in `relations`) are not repeated as flags.
+Facts that are already fields (display gap filling and smoothing in
+`render.layers`, time matching and unit comparability in `relations`) are not
+repeated as flags.
 
 | Code | Severity | Raised when | Evidence |
 | --- | --- | --- | --- |

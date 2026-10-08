@@ -103,10 +103,8 @@ def prepare_swath_grid(
     read_extent: tuple[float, float, float, float],
     resolution: float,
     geometry: BaseGeometry,
-    *,
-    smooth_sigma: float | None = None,
 ) -> PreparedGrid:
-    """Grid a swath and apply the standard raster preparation sequence."""
+    """Grid a swath into observed cells only; filling is display-only."""
     lon, lat, raw = grid_data(
         swath_lon,
         swath_lat,
@@ -119,8 +117,7 @@ def prepare_swath_grid(
         lat,
         raw,
         geometry,
-        fill_gaps=True,
-        smooth_sigma=smooth_sigma,
+        fill_gaps=False,
     )
 
 

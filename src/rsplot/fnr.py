@@ -31,7 +31,6 @@ import numpy as np
 from rich.console import Console
 
 from rsplot.geo.gridding import (
-    fill_nan_gaps,
     mask_to_region,
     region_grid_mask,
     smooth_grid,
@@ -115,11 +114,9 @@ class FnrResult:
 
     LON: np.ndarray
     LAT: np.ndarray
-    fnr: np.ndarray  # HCHO_mean / NO2_mean, masked
+    fnr: np.ndarray  # HCHO_mean / NO2_mean, masked, unsmoothed
     hcho_mean: np.ndarray  # raw masked mean, 10^15 molec/cm²
     no2_mean: np.ndarray  # raw masked mean, 10^15 molec/cm²
-    hcho_mean_filled: np.ndarray  # small-gap-filled diagnostic field
-    no2_mean_filled: np.ndarray  # small-gap-filled diagnostic field
     n_valid_hcho: np.ndarray  # int count of valid days per pixel
     n_valid_no2: np.ndarray  # same for NO2
     dates_requested: list[str]
@@ -150,7 +147,6 @@ def compute_fnr(
     raster_dir_no2: str,
     raster_dir_hcho: str,
     no2_min_column: float = NO2_MIN_COLUMN,
-    smooth_sigma: float | None = None,
     console: Console | None = None,
 ) -> FnrResult:
     """Read NO2 + HCHO over a date window and compute per-pixel FNR.
@@ -158,7 +154,8 @@ def compute_fnr(
     Each daily swath/grid is first binned onto the same target grid, then
     the two time-stacks are averaged and divided. Pixels with fewer than
     ``n_min`` valid days in *either* product, or with mean NO2 below
-    ``no2_min_column``, are masked to NaN.
+    ``no2_min_column``, are masked to NaN. Nothing is filled or smoothed;
+    smoothing is display-only (:func:`smooth_fnr_for_display`).
     """
     if console is None:
         console = Console()
@@ -224,9 +221,6 @@ def compute_fnr(
     with np.errstate(divide="ignore", invalid="ignore"):
         fnr[valid] = hcho_win.grid[valid] / no2_win.grid[valid]
 
-    # Keep raw mean fields for JSON statistics, and separately prepare
-    # small-gap-filled diagnostic fields for users who want a less holey
-    # view of the underlying columns. The FNR field itself is never filled.
     region_mask = region_grid_mask(LON, LAT, region.geometry)
     hcho_raw = mask_to_region(
         LON,
@@ -242,41 +236,10 @@ def compute_fnr(
         region.geometry,
         region_mask=region_mask,
     )
-    hcho_filled = fill_nan_gaps(LON, LAT, hcho_win.grid)
-    no2_filled = fill_nan_gaps(LON, LAT, no2_win.grid)
-
     # --- Mask to region boundary ---
     fnr = mask_to_region(
         LON, LAT, fnr, region.geometry, region_mask=region_mask
     )
-    hcho_filled = mask_to_region(
-        LON,
-        LAT,
-        hcho_filled,
-        region.geometry,
-        region_mask=region_mask,
-    )
-    no2_filled = mask_to_region(
-        LON,
-        LAT,
-        no2_filled,
-        region.geometry,
-        region_mask=region_mask,
-    )
-
-    if smooth_sigma is not None:
-        fnr_valid_mask = np.isfinite(fnr)
-        fnr = smooth_grid(
-            fnr,
-            region.geometry,
-            LON,
-            LAT,
-            sigma=smooth_sigma,
-            region_mask=region_mask,
-        )
-        # smooth_grid interpolates over NaNs before convolution. Restore the
-        # scientific validity mask so smoothing cannot create new FNR pixels.
-        fnr[~fnr_valid_mask] = np.nan
 
     return FnrResult(
         processing=processing,
@@ -287,8 +250,6 @@ def compute_fnr(
         fnr=fnr,
         hcho_mean=hcho_raw,
         no2_mean=no2_raw,
-        hcho_mean_filled=hcho_filled,
-        no2_mean_filled=no2_filled,
         n_valid_hcho=hcho_win.n_valid,
         n_valid_no2=no2_win.n_valid,
         dates_requested=list(dates),
@@ -305,6 +266,23 @@ def compute_fnr(
             "final_valid": np.isfinite(fnr),
         },
     )
+
+
+def smooth_fnr_for_display(
+    fnr: np.ndarray,
+    region: RegionInfo,
+    LON: np.ndarray,
+    LAT: np.ndarray,
+    sigma: float | None,
+) -> np.ndarray:
+    """Smooth FNR for the image only, keeping its valid-cell mask."""
+    if sigma is None:
+        return fnr
+    smoothed = smooth_grid(fnr, region.geometry, LON, LAT, sigma=sigma)
+    # smooth_grid interpolates over NaNs before convolution. Restore the
+    # validity mask so smoothing cannot create new FNR pixels.
+    smoothed[~np.isfinite(fnr)] = np.nan
+    return smoothed
 
 
 # ---------------------------------------------------------------------------

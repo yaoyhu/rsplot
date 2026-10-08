@@ -184,7 +184,7 @@ def prepare_raster(
 ) -> RasterRun:
     """Prepare a satellite layer for an administrative or supplied geometry."""
     from rsplot.geo.boundaries import RegionInfo, resolve_regions
-    from rsplot.geo.gridding import region_grid_mask
+    from rsplot.geo.gridding import fill_nan_gaps, region_grid_mask
     from rsplot.geo.processing import (
         buffered_extent,
         prepare_display_grid,
@@ -295,7 +295,6 @@ def prepare_raster(
     reader.cloud_fraction_max = cf
     if sensor == "gems":
         console.print(f"  → GEMS 目标网格 {use_res}°（分析与显示）")
-    scientific_valid_mask: np.ndarray | None = None
     provenance: list[dict[str, Any]] = []
     pixels_used = 0
     valid_days: np.ndarray | None = None
@@ -324,7 +323,6 @@ def prepare_raster(
                     info.geometry,
                     fill_gaps=False,
                 )
-                scientific_valid_mask = np.isfinite(prepared.values)
                 provenance = [batch.metadata]
                 pixels_used = int(batch.n_pixels)
             else:
@@ -347,7 +345,6 @@ def prepare_raster(
                     use_res,
                     info.geometry,
                 )
-                scientific_valid_mask = np.isfinite(prepared.values)
                 provenance = [swath.metadata]
                 pixels_used = int(swath.n_pixels)
         else:
@@ -384,7 +381,6 @@ def prepare_raster(
                 info.geometry,
                 fill_gaps=False,
             )
-            scientific_valid_mask = np.isfinite(prepared.values)
             provenance = list(window.daily_metadata.values())
             pixels_used = int(window.n_pixels_total)
             valid_days = window.n_valid
@@ -395,8 +391,15 @@ def prepare_raster(
         # Readers raise ValueError when nothing valid survives filtering.
         raise RsplotError("no_valid_data", str(error)) from error
 
+    # Statistics keep observed cells only. A TROPOMI day fills small gaps
+    # for the image alone; windows and GEMS draw observed cells.
     display_source = prepared.unmasked_values
-    statistics_grid = prepared.values.copy() if sensor == "gems" else None
+    display_gap_fill = "none"
+    if sensor != "gems" and not window_mode:
+        display_source = fill_nan_gaps(
+            prepared.lon, prepared.lat, display_source
+        )
+        display_gap_fill = "nearest_within_3_cells"
     display_lon, display_lat = prepared.lon, prepared.lat
     display_support = None
     if sensor == "gems":
@@ -435,33 +438,8 @@ def prepare_raster(
             )
         raise RsplotError("no_valid_data", message)
 
-    if (
-        sensor != "gems"
-        and use_smooth is not None
-        and np.isfinite(prepared.values).any()
-    ):
-        console.print(f"  → 高斯平滑 sigma={use_smooth}")
-        prepared = prepare_existing_grid(
-            prepared.lon,
-            prepared.lat,
-            prepared.values,
-            info.geometry,
-            fill_gaps=False,
-            smooth_sigma=use_smooth,
-        )
-        if scientific_valid_mask is not None:
-            restored = np.where(
-                scientific_valid_mask,
-                prepared.values,
-                np.nan,
-            )
-            prepared = prepare_existing_grid(
-                prepared.lon,
-                prepared.lat,
-                restored,
-                info.geometry,
-                fill_gaps=False,
-            )
+    if use_smooth is not None:
+        console.print(f"  → 显示高斯平滑 sigma={use_smooth}")
     console.print(
         f"  → 网格 {prepared.values.shape}, "
         f"区域内覆盖率 {prepared.coverage_pct:.1f}% "
@@ -531,7 +509,6 @@ def prepare_raster(
     )
 
     # --- sidecar inputs ---------------------------------------------------
-    stat_grid = prepared.values if statistics_grid is None else statistics_grid
     counted = region_grid_mask(prepared.lon, prepared.lat, info.geometry)
     china = sensor == "gems"
     if scan_mode:
@@ -590,16 +567,9 @@ def prepare_raster(
                     if "footprint_source" in scan
                 }
             ),
-            gap_fill="none",
-            smoothing_sigma=0,
         )
     else:
-        method.update(
-            qa_min_exclusive=use_qa,
-            gap_fill="none" if window_mode else "nearest_within_3_cells",
-            smoothing_sigma=use_smooth or 0,
-            smoothing_affects="values_not_coverage",
-        )
+        method.update(qa_min_exclusive=use_qa)
         if processing == "nrti":
             dedup = [m for m in provenance if "deduplication" in m]
             method["deduplication"] = (
@@ -615,7 +585,7 @@ def prepare_raster(
         prod_info=prod_info,
         lon=prepared.lon,
         lat=prepared.lat,
-        grid=stat_grid,
+        grid=prepared.values,
         counted=counted,
         time=time,
         data_root=str(use_data_dir),
@@ -643,6 +613,7 @@ def prepare_raster(
                 "vmin": use_vmin,
                 "vmax": use_vmax,
                 "range_method": RANGE_METHOD[vrange_source],
+                "display_gap_fill": display_gap_fill,
                 "display_smoothing_sigma": use_smooth or 0,
                 "display_grid_shape": list(display_grid.shape),
                 "display_selection": display_policy["selection"],

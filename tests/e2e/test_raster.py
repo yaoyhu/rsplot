@@ -197,15 +197,31 @@ class RasterE2E(unittest.TestCase):
         self.assertEqual(layer["time"]["days"]["requested"], 1)
         self.assertEqual(layer["stats"]["mean"], 3)
 
-    def test_user_distinguishes_gap_filling(self):
-        """Given sparse input, when selecting a window, then holes remain."""
+    def test_user_counts_only_observed_cells_on_a_single_day(self):
+        """Given one observed cell, when plotting a day, then count 1 cell."""
         self.workspace.write_swath("20260101", 4, sparse=True)
         daily = satellite(self.assert_plot(self.workspace.raster("20260101")))
-        window = satellite(
-            self.assert_plot(self.workspace.raster("20260101", "--days", "1"))
+        self.assertEqual(daily["coverage"]["valid"], 1)
+
+    def test_user_loads_only_observed_cells(self):
+        """Given one observed cell, when plotting, then the file holds 1."""
+        self.workspace.write_swath("20260101", 4, sparse=True)
+        layer = satellite(self.assert_plot(self.workspace.raster("20260101")))
+        with Dataset(layer["data"]) as dataset:
+            values = dataset["value"][:].filled(np.nan)
+            counted = dataset["counted"][:].astype(bool)
+        self.assertEqual(int(np.isfinite(values[counted]).sum()), 1)
+
+    def test_user_sees_gaps_filled_only_in_the_image(self):
+        """Given one observed cell, when plotting, then only display fills."""
+        self.workspace.write_swath("20260101", 4, sparse=True)
+        payload = self.assert_plot(self.workspace.raster("20260101"))
+        display = payload["render"]["layers"]["satellite"]
+        self.assertEqual(display["display_gap_fill"], "nearest_within_3_cells")
+        self.assertGreater(
+            display["display_valid_cells"],
+            satellite(payload)["coverage"]["valid"],
         )
-        self.assertEqual(window["coverage"]["valid"], 1)
-        self.assertGreater(daily["coverage"]["valid"], 1)
 
     def test_user_keeps_observed_support_while_smoothing(self):
         """Given one observed cell, when smoothing, then support is unchanged."""
@@ -221,13 +237,44 @@ class RasterE2E(unittest.TestCase):
             [smoothed["coverage"][key] for key in SUPPORT_KEYS],
         )
 
-    def test_user_reads_smoothing_from_the_method(self):
-        """Given smoothing, when plotting, then the method records it."""
+    def test_user_gets_unsmoothed_daily_statistics(self):
+        """Given a gradient, when smoothing a day, then stats are unchanged."""
+        self.workspace.write_swath("20260101", 4, gradient=True)
+        plain = satellite(self.assert_plot(self.workspace.raster("20260101")))
+        smoothed = satellite(
+            self.assert_plot(
+                self.workspace.raster("20260101", "--smooth", "1.5")
+            )
+        )
+        self.assertEqual(plain["stats"], smoothed["stats"])
+
+    def test_user_gets_unsmoothed_window_statistics(self):
+        """Given a gradient, when smoothing a window, then stats hold."""
+        self.workspace.write_swath("20260101", 4, gradient=True)
+        plain = satellite(
+            self.assert_plot(self.workspace.raster("20260101", "--days", "1"))
+        )
+        smoothed = satellite(
+            self.assert_plot(
+                self.workspace.raster(
+                    "20260101", "--days", "1", "--smooth", "1.5"
+                )
+            )
+        )
+        self.assertEqual(plain["stats"], smoothed["stats"])
+
+    def test_user_reads_smoothing_from_the_display_settings(self):
+        """Given smoothing, when plotting, then render records it."""
         self.workspace.write_swath("20260101", 4)
         payload = self.assert_plot(
             self.workspace.raster("20260101", "--smooth", "1")
         )
-        self.assertEqual(satellite(payload)["method"]["smoothing_sigma"], 1)
+        self.assertEqual(
+            payload["render"]["layers"]["satellite"]["display_smoothing_sigma"],
+            1,
+        )
+        self.assertNotIn("smoothing_sigma", satellite(payload)["method"])
+        self.assertNotIn("gap_fill", satellite(payload)["method"])
         self.assertEqual(flag_codes(payload), [])
 
     def test_user_is_warned_when_coverage_is_too_low(self):

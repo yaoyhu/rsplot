@@ -8,10 +8,12 @@ from raster_support import RasterWorkspace
 class FnrWorkspace(RasterWorkspace):
     """NO2 and HCHO swaths in one archive, mapped as an FNR window."""
 
-    def write_days(self, no2: float, hcho: float, days=(1, 2, 3)) -> None:
+    def write_days(
+        self, no2: float, hcho: float, days=(1, 2, 3), *, gradient=False
+    ) -> None:
         for day in days:
             date = f"202601{day:02d}"
-            self.write_swath(date, no2, product="no2")
+            self.write_swath(date, no2, product="no2", gradient=gradient)
             self.write_swath(date, hcho, product="hcho")
 
     def fnr(

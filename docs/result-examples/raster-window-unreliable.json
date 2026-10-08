@@ -59,10 +59,7 @@
         "cloud_fraction_max": 0.5,
         "grid_deg": 0.03,
         "pixels_used": 13563,
-        "gap_fill": "none_in_window_mode",
         "day_weighting": "equal_days",
-        "smoothing_sigma": 1.5,
-        "smoothing_affects": "values_not_coverage",
         "cell_selection": "center_strictly_inside",
         "cell_weighting": "equal"
       },
@@ -114,7 +111,9 @@
       "satellite": {
         "cmap": "rsplot_22",
         "vmin": 0.0,
-        "vmax": 20.0
+        "vmax": 20.0,
+        "display_gap_fill": "none",
+        "display_smoothing_sigma": 1.5
       }
     }
   },

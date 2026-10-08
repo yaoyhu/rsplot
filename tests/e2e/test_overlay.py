@@ -101,6 +101,16 @@ class OverlayE2E(unittest.TestCase):
             ],
         )
 
+    def test_user_pairs_stations_only_with_observed_cells(self):
+        """Given S001A in a display-filled cell, when overlaying, no pair."""
+        self.workspace.write_swath("20260101", 4, sparse=True)
+        self.workspace.write_stations("2026010113")
+        payload = self.assert_plot(
+            self.workspace.overlay("20260101", "--smooth", "0")
+        )
+        self.assertEqual(payload["relations"]["colocation"]["pairs"], 0)
+        self.assertEqual(self.station_rows(payload)[0]["satellite_value"], "")
+
     def test_user_must_name_the_station_variable(self):
         """Given stations, when omitting --station-var, then exit 2."""
         self.workspace.write_swath("20260101", 4)

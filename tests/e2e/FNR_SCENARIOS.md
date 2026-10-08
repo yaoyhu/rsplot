@@ -17,6 +17,7 @@ cover the 3 days ending Jan 3 with the default n-min of 3, so FNR is 3.
 | Scenario | Given | When | Then |
 | --- | --- | --- | --- |
 | user maps the FNR regime | Three days of NO2 2 and HCHO 6 | Map FNR | A colored PNG; layers `no2` (mean 2), `hcho` (mean 6) and `fnr` (mean 3, unit 1) over a Jan 1–3 window mean of calendar days; FNR covers 16 of 16 cells |
+| user gets unsmoothed FNR statistics | Three days of NO2 rising 2, 3, 4, 5 west to east and HCHO 6 | Map with --smooth 0 and --smooth 1.5 | Identical `fnr` `stats` and `categories`; `render.layers.fnr.display_smoothing_sigma` is 1.5 and `fnr.method` has no smoothing key |
 | user counts cells per regime | Same inputs | Map FNR | `fnr.categories` has 16 `nox_limited`, 0 `transition`, 0 `voc_limited` |
 | user changes regime thresholds | Same inputs | Map with --voc-threshold 4 --nox-threshold 5 --display-max 6 | `fnr.categories` has 16 `voc_limited`; render records the thresholds |
 | user loads the FNR grids | Same inputs | Map FNR | Three NetCDF files; the FNR file's mean over counted cells is 3 with 3 valid days per cell |

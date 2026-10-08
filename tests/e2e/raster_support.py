@@ -153,6 +153,7 @@ class RasterWorkspace:
         cloud: float = 0.1,
         sparse: bool = False,
         outside: bool = False,
+        gradient: bool = False,
     ) -> Path:
         token, variable, conversion = PRODUCTS[product]
         stream = "NRTI" if nrti else "OFFL"
@@ -168,6 +169,8 @@ class RasterWorkspace:
         if outside:
             lon[:] = 118.875
             lat[:] = 32.875
+        # A gradient adds 0, 1, 2, 3 west to east, so smoothing changes it.
+        columns = value + (np.arange(4) if gradient else np.zeros(4))
         quality = np.full((4, 4), qa)
         if sparse:
             quality[:] = 0
@@ -182,7 +185,7 @@ class RasterWorkspace:
             fields = {
                 "longitude": lon,
                 "latitude": lat,
-                variable: np.full((4, 4), value / conversion),
+                variable: np.tile(columns / conversion, (4, 1)),
                 "qa_value": quality,
             }
             for key, values in fields.items():

@@ -22,6 +22,7 @@ product-to-station-variable default. Station fixtures place two stations inside
 | --- | --- | --- | --- |
 | user overlays one TROPOMI day with stations | Two NO2 orbits on Jan 1 contain 2 and 4; the Jan 1 13:00 station file has two in-region stations | Overlay Jan 1 with station hour 2026010113 | A colored PNG; satellite daily Jan 1 mean 3 from 2 files; station hour 2026010113 with mean 60 from 2 stations |
 | user keeps observed satellite support while smoothing | One observed NO2 cell in a region too large for gap filling to cover | Overlay with --smooth 0 and --smooth 1.5 | Satellite valid cells, total cells and coverage fraction are identical |
+| user pairs stations only with observed cells | One observed NO2 cell; S001A sits two cells away, inside the image's gap fill | Overlay Jan 1 | Colocation has 0 pairs and the CSV gives S001A no satellite value |
 | user must name the station variable | TROPOMI NO2 and a station file | Overlay without --station-var | Exit 2 reporting the missing --station-var; no output |
 | user cannot use the old station option | TROPOMI NO2 and a station file | Overlay with --var NO2 | Exit 2, "No such option"; no output |
 | user overlays a GEMS HCHO scan with MDA8 ozone | A GEMS HCHO scan and the matched station hour | Overlay the scan with --station-var O3_8h_24h | Station quantity is O3_8h_24h |

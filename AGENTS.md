@@ -373,8 +373,9 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
   they should not read source data. Keep Cartopy transforms explicit and close
   figures after saving.
 - For FNR, preserve the scientific masking rules: mean NO2 and HCHO are
-  computed separately over the window, FNR is divided afterward, and smoothing
-  must not create new valid FNR pixels. Its result sidecar has
+  computed separately over the window, FNR is divided afterward, and
+  smoothing is display-only (`fnr.smooth_fnr_for_display`, which must not
+  create new valid FNR pixels). Its result sidecar has
   `no2`, `hcho` (built with `build_satellite_layer`, `coverage_checks=False`)
   and `fnr` grid layers, each with a `<name>.<layer>.nc`; `fnr` carries
   regime counts in `categories`, masking rules and `mask_counts` in `method`,
@@ -474,11 +475,11 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
   projection so holes and islands remain correct.
 - Statistics use strictly interior grid centers and equal cell weights;
   boundary centers are excluded. Coverage counts centers, not polygon area.
-  Preserve existing product-specific statistical preprocessing, including
-  unfilled/unsmoothed GEMS statistics. Never pass a display grid as statistics.
-  TROPOMI statistical smoothing may change values but must restore the
-  pre-smoothing valid mask in single-day and window modes; smoothing must
-  never create valid cells or change coverage.
+  Statistics, coverage, extremes, colocation and data files use observed
+  cells only, for every satellite layer: gap filling and smoothing are
+  display-only. Never pass a display grid as statistics. A single TROPOMI day
+  fills small gaps in the display source alone (`display_gap_fill`);
+  display smoothing must never create valid cells.
 - Satellite layers record statistics selection in `method`
   (`cell_selection`, `cell_weighting`) and display selection in
   `render.layers.satellite` (`display_selection`, `display_clip`,

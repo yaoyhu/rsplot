@@ -24,9 +24,13 @@ JSON or data file.
 | user averages days equally | Jan 1 has two orbits valued 2 and 4; Jan 2 has one valued 9 | Select Jan 2 with --days 2 | Window Jan 1–Jan 2, equal-day weighting, mean 6, not the pooled-pixel mean 5 |
 | user includes both range endpoints | Same two-day archive | Select Jan 1–Jan 2 | Two days found and mean 6 |
 | user requests a one-day window | Jan 1 has two orbits valued 2 and 4 | Select Jan 1 with --days 1 | One requested day, mean 3 |
-| user distinguishes gap filling | Only one grid cell has observations in a larger region | Compare single day with --days 1 | Single day fills nearby holes; window retains observed-cell support (1 valid cell) |
+| user counts only observed cells on a single day | Only one grid cell has observations in a larger region | Plot that day | Coverage has 1 valid cell, as with --days 1 |
+| user loads only observed cells | Same sparse day | Plot that day | The data file holds 1 finite value over counted cells |
+| user sees gaps filled only in the image | Same sparse day | Plot that day | `render.layers.satellite.display_gap_fill` is `nearest_within_3_cells` and the image draws more cells than `coverage.valid` |
 | user keeps observed support while smoothing | One observed NO2 cell in a region too large for gap filling to cover | Plot one TROPOMI day with --smooth 0 and --smooth 1.5 | Valid cells, total cells and coverage fraction are identical; smoothing creates no observed cells |
-| user reads smoothing from the method | Uniform NO2 input | Plot with --smooth 1 | `method.smoothing_sigma` is 1 and there is no flag |
+| user gets unsmoothed daily statistics | NO2 rises 4, 5, 6, 7 west to east | Plot one day with --smooth 0 and --smooth 1.5 | Identical `stats` |
+| user gets unsmoothed window statistics | Same gradient | Plot --days 1 with --smooth 0 and --smooth 1.5 | Identical `stats` |
+| user reads smoothing from the display settings | Uniform NO2 input | Plot with --smooth 1 | `render.layers.satellite.display_smoothing_sigma` is 1, `method` has no smoothing or gap-fill key, and there is no flag |
 | user is warned when coverage is too low | One observed cell of 16 region cells | Plot a one-day window | `quality` is exactly one flag: `very_low_coverage`, critical, layer satellite, evidence valid 1, total 16, fraction 0.062, threshold 0.1; no grade and no message |
 | user sees missing-day diagnostics | Jan 1 is missing, Jan 2 has value 9 | Request two days | Mean 9, one found day, Jan 1 listed under the window's failed days |
 | user is warned about missing days | Same incomplete archive | Request two days | The only flag is `missing_days` (warning, satellite) with evidence requested 2, found 1 and Jan 1 under failed; no message |

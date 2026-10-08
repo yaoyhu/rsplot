@@ -63,6 +63,7 @@ def _emit_fnr(
     from rsplot.fnr import (
         compute_fnr,
         regime_percentages,
+        smooth_fnr_for_display,
         validate_fnr_thresholds,
     )
     from rsplot.geo.boundaries import resolve_regions
@@ -195,7 +196,6 @@ def _emit_fnr(
             raster_dir_hcho=use_hcho_dir,
             processing=processing,
             no2_min_column=no2_min,
-            smooth_sigma=use_smooth,
             console=console,
         )
     except (RsplotError, OSError):
@@ -268,9 +268,7 @@ def _emit_fnr(
         "qa_min_exclusive": use_qa,
         "cloud_fraction_max": cf,
         "grid_deg": use_res,
-        "gap_fill": "none",
         "day_weighting": "equal_days",
-        "smoothing_sigma": 0,
         "cell_selection": "center_strictly_inside",
         "cell_weighting": "equal",
     }
@@ -453,8 +451,6 @@ def _emit_fnr(
             "no2_min_column": no2_min,
             "no2_min_unit": "1e15 molec/cm2",
             "hcho_min_column": 0,
-            "smoothing_sigma": use_smooth or 0,
-            "smoothing_affects": "values_not_coverage",
             "regime_thresholds": {
                 "voc_limited_below": use_voc_threshold,
                 "nox_limited_above": use_nox_threshold,
@@ -505,7 +501,7 @@ def _emit_fnr(
     plot_fnr(
         lon,
         lat,
-        fnr_out.fnr,
+        smooth_fnr_for_display(fnr_out.fnr, info, lon, lat, use_smooth),
         info,
         dpi=use_dpi,
         basemap=use_basemap,

@@ -202,7 +202,9 @@ rsplot fnr 合肥 20260114 --days 7 --voc-threshold 0.8 --nox-threshold 1.8 \
   --display-max 5 --output fnr_hefei_sensitivity.png
 ```
 
-`--output` is required. `rsplot` writes the image to that path and a JSON
+`--output` is required and must name a `.png` file (case-insensitive),
+not a directory. Invalid output paths are rejected before reading data or
+writing artifacts. `rsplot` writes the image to that exact path and a JSON
 sidecar with the same base name. Nothing that selects data is implied:
 `--product` (satellite maps), `--var` (`station`, `trend`), `--station-var`
 (`overlay`) and the window length (`--days` with a single end date for
@@ -287,13 +289,14 @@ eligible. `--processing nrti` restricts selection to NRTI and deduplicates
 overlapping observations using orbit, observation time and ground-pixel ID.
 
 TROPOMI processing filters QA/clouds and invalid values, converts units, and
-averages pixels in each target grid cell. Single-day mode fills small grid
-gaps. Window mode first grids each day without filling gaps, then averages
-valid daily values with equal day weights. Thus `--days 1` is an explicit
-one-day window and can have different coverage from omitting `--days`.
-Existing TROPOMI smoothing also affects reported statistic values; use
-`--smooth 0` for unsmoothed comparisons. Smoothing never creates valid cells,
-so coverage and valid-cell counts do not depend on `--smooth`. GEMS statistics remain unfilled and unsmoothed.
+averages pixels in each target grid cell. Window mode grids each day, then
+averages valid daily values with equal day weights. Statistics, coverage,
+extremes, station colocation and the `.satellite.nc` data file use observed
+cells only, for every sensor and time mode. Gap filling and smoothing are
+display-only: a single TROPOMI day fills small gaps (nearest neighbour
+within 3 cells) in the image alone, and `--smooth` never changes a number in
+the sidecar. `render.layers.satellite` records `display_gap_fill` and
+`display_smoothing_sigma`.
 
 A window keeps every cell with at least one valid day: its value is the
 mean of that cell's valid daily values, each weighted equally. Missing or
@@ -520,8 +523,7 @@ Single-region inputs retain their existing output contract.
   centers exactly on the boundary are excluded. Each valid selected cell has
   equal weight. Coverage is the valid selected-cell count divided by the
   total selected-cell count, not the percentage of colored land area.
-  Existing product-specific gap-filling and statistical smoothing behavior
-  remains unchanged; GEMS statistics remain unfilled and unsmoothed.
+  Statistics use the observed grid: no gap filling and no smoothing.
 
 `raster` records the statistics rules in the satellite layer's `method`
 (`cell_selection`, `cell_weighting`) and the display rules in
