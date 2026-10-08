@@ -138,14 +138,49 @@ def resolve_station_file(data_dir: str, datetime_str: str) -> Path:
     else:
         path = root / f"{datetime_str}.nc"
         if not path.exists():
+            before, after = nearest_station_hours(root, datetime_str)
             raise RsplotError(
                 "data_not_found",
-                f"未找到站点数据文件: {path}\n"
-                "请检查日期时间和配置 [paths.data_dirs].guokong 路径。",
-                details={"path": str(path)},
+                f"未找到站点数据文件: {path}；"
+                f"{NEAREST_HOURS} 小时内最近可用: 之前 {before or '无'}，"
+                f"之后 {after or '无'}。",
+                details={
+                    "path": str(path),
+                    "nearest_before": before,
+                    "nearest_after": after,
+                    "search_hours": NEAREST_HOURS,
+                },
             )
 
     return path
+
+
+# How far either side of a missing hour to look for available files.
+NEAREST_HOURS = 48
+
+
+def nearest_station_hours(
+    root: Path, datetime_str: str
+) -> tuple[str | None, str | None]:
+    """Nearest existing hourly files before and after a missing hour.
+
+    Probes exact ``YYYYMMDDHH.nc`` paths hour by hour rather than listing
+    the archive, which holds ~100k files. Reports only; never selects.
+    """
+    from datetime import datetime, timedelta
+
+    hour = datetime.strptime(datetime_str, "%Y%m%d%H")
+
+    def nearest(step: int) -> str | None:
+        for offset in range(1, NEAREST_HOURS + 1):
+            stamp = (hour + timedelta(hours=step * offset)).strftime(
+                "%Y%m%d%H"
+            )
+            if (root / f"{stamp}.nc").exists():
+                return stamp
+        return None
+
+    return nearest(-1), nearest(1)
 
 
 @dataclass(frozen=True)

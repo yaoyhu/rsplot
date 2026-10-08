@@ -31,6 +31,7 @@ outside.
 | user styles temperature only when drawn | Wind | Map with --wind-level 10m --cmap viridis | Rejected with `invalid_argument` on option --cmap |
 | user learns the ERA5 hour is missing | ERA5 for another hour | Map with --temp-level 2m | Rejected with `data_not_found` |
 | user learns the station hour is missing | Wind only | Map with --wind-level 10m --station-var NO2 | Rejected with `data_not_found`, naming 2026010113 |
+| user learns the nearest ERA5 hours | No ERA5 file for the requested UTC day; the previous day's file holds 23:00 UTC | Map 2026010113 with --temp-level 2m | Rejected with `data_not_found`; `details.nearest_before` 2026010107 (China time) and `nearest_after` null |
 | user learns an ERA5 file is unreadable | The 2 m temperature file for the day is not NetCDF | Map with --temp-level 2m | Rejected with `read_failed`; `details.path` names that file |
 | user learns the region does not exist | 2 m temperature | Map region Atlantis | Rejected with `region_not_found` |
 | user maps weather across two regions | Temperature and wind | Map `FixtureCity,EastCity` with --temp-level 2m --wind-level 10m | `region.members` names both; `temperature` `by_member` FixtureCity n 25 and EastCity n 15 (cells on the shared border count for both), mean 20; `wind` `by_member` the same counts, mean 5 |

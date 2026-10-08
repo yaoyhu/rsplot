@@ -21,6 +21,7 @@ from rsplot.result_builders.envelope import (
     stats_block,
     subdivision_level,
 )
+from rsplot.result_builders.provenance import input_fingerprint
 
 if TYPE_CHECKING:
     from rsplot.geo.boundaries import RegionInfo
@@ -159,6 +160,7 @@ def build_satellite_layer(
             "files_total": len(files),
             "failed_files": failed,
             "versions": versions,
+            **input_fingerprint(inputs.data_root, [*files, *failed]),
         },
         "method": inputs.method,
         "coverage": coverage,

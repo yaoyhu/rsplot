@@ -153,6 +153,24 @@ class StationE2E(unittest.TestCase):
             "data_not_found",
         )
 
+    def test_user_learns_the_nearest_available_hours(self):
+        """Given 11:00 and 16:00, when mapping 13:00, then name both."""
+        self.workspace.write_stations("2026010111")
+        self.workspace.write_stations("2026010116")
+        (self.workspace.stations / "2026010113.nc").unlink()
+        error = self.assert_rejected(
+            self.workspace.station("2026010113"),
+            "2026010113",
+            "data_not_found",
+        )
+        self.assertEqual(
+            [
+                error["details"]["nearest_before"],
+                error["details"]["nearest_after"],
+            ],
+            ["2026010111", "2026010116"],
+        )
+
     def test_user_learns_a_station_file_is_unreadable(self):
         """Given a corrupt hour file, when mapping, then report read_failed."""
         corrupt = self.workspace.stations / "2026010113.nc"

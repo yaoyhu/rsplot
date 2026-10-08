@@ -34,4 +34,6 @@ file.
 | user maps a prefecture named for two groups | 黔东南苗族侗族自治州 | Map 黔东南 | Region 黔东南苗族侗族自治州, level city |
 | user is told Hainan is ambiguous | 海南省 and 海南藏族自治州 | Map 海南 | Rejected with `region_ambiguous`; candidates 海南省, 海南藏族自治州 |
 | user maps Hainan province by its full name | 海南省 and 海南藏族自治州 | Map 海南省 | Region 海南省, level province |
+| user gets a suggestion for a misspelled name | 安徽省 and 安庆市 | Map 安微 | Rejected with `region_not_found`; `details.suggestions` is 安徽省, 安庆市, province first |
+| user gets a suggestion for a misspelled county's city | FixtureCity with FixtureCounty | Map FixtureCiti/FixtureCounty | Rejected with `region_not_found`; the first suggestion is FixtureCity |
 | user cannot use a pinyin name | Chinese boundary names | Map shuangming | Rejected with `region_not_found` |

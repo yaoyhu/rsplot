@@ -25,6 +25,8 @@ from rsplot.config import (
 from rsplot.errors import RsplotError
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from shapely.geometry.base import BaseGeometry
 
 
@@ -349,7 +351,12 @@ def _resolve_qualified_county(
     city_name, county_name = name.split("/", 1)
     city_match = _fuzzy_match(city_name, cities)
     if city_match is None:
-        raise ValueError(f"无法识别城市 '{city_name}'。")
+        suggestions = suggest_region_names(city_name, [cities])
+        raise RsplotError(
+            "region_not_found",
+            f"无法识别城市 '{city_name}'。{_did_you_mean(suggestions)}",
+            details={"region": name, "suggestions": suggestions},
+        )
     canonical_city_name = city_match.iloc[0][NAME_FIELD]
     city_geometry = unary_union(city_match.geometry)
     configured = _city_subdivisions(
@@ -522,6 +529,42 @@ def _resolve_named_place(
     return _resolve_province(province, provinces, cities, counties)
 
 
+def suggest_region_names(
+    query: str,
+    frames: list[gpd.GeoDataFrame],
+    extra: Iterable[str] = (),
+    *,
+    limit: int = 5,
+) -> list[str]:
+    """Close full names for a misspelled region, most similar first.
+
+    Compares both the full and the suffix-stripped names, so 安微 finds
+    安徽省. Ties keep the order of ``frames`` (provinces before cities),
+    then the extra names (key regions).
+    """
+    from difflib import SequenceMatcher
+
+    stripped = _strip_suffix(query)
+    groups = [frame[NAME_FIELD].tolist() for frame in frames] + [list(extra)]
+    scored: dict[str, tuple[float, int]] = {}
+    for rank, names in enumerate(groups):
+        for full in names:
+            if full in PLACEHOLDER_NAMES or full in scored:
+                continue
+            score = max(
+                SequenceMatcher(None, query, full).ratio(),
+                SequenceMatcher(None, stripped, _strip_suffix(full)).ratio(),
+            )
+            if score >= 0.5:
+                scored[full] = (-score, rank)
+    ranked = sorted(scored, key=lambda full: (*scored[full], full))
+    return ranked[:limit]
+
+
+def _did_you_mean(suggestions: list[str]) -> str:
+    return f"是否指: {'、'.join(suggestions)}？" if suggestions else ""
+
+
 def resolve_region(
     name: str,
     cfg: AppConfig,
@@ -568,9 +611,16 @@ def resolve_region(
         )
         if named is not None:
             return named
-        raise ValueError(
-            f"无法识别区域 '{name}'。请使用中文全称或简称，"
-            "县区写成 城市/区县，如 合肥/蜀山。"
+        suggestions = suggest_region_names(
+            name,
+            [provinces, load_city_boundaries(geojson_dir)],
+            cfg.key_regions,
+        )
+        raise RsplotError(
+            "region_not_found",
+            f"无法识别区域 '{name}'。{_did_you_mean(suggestions)}"
+            "请使用中文全称或简称，县区写成 城市/区县，如 合肥/蜀山。",
+            details={"region": name, "suggestions": suggestions},
         )
 
     # The level filter below serves only the disabled forecast and

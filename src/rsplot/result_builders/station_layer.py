@@ -13,6 +13,7 @@ from rsplot.result_builders.envelope import (
     flag,
     stats_block,
 )
+from rsplot.result_builders.provenance import input_fingerprint
 from rsplot.result_builders.station import (
     aqi_distribution,
     attribute_stations_to_areas,
@@ -223,6 +224,7 @@ def build_station_layer(
             "data_root": inputs.data_root,
             "files_total": 1,
             "failed_files": {},
+            **input_fingerprint(inputs.data_root, [f"{inputs.hour}.nc"]),
         },
         "method": {
             "region_selection": "point_inside_region",

@@ -129,10 +129,16 @@ def read_era5_grid(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, str]:
     """Read one exact UTC hour from a standard ERA5 lat/lon grid."""
     if not path.exists():
+        before, after = nearest_era5_hours(path, data_datetime)
         raise RsplotError(
             "data_not_found",
-            f"未找到 {field_label}文件: {path}",
-            details={"path": str(path)},
+            f"未找到 {field_label}文件: {path}；{_nearest_label(before, after)}",
+            details={
+                "path": str(path),
+                "nearest_before": before,
+                "nearest_after": after,
+                "search_hours": NEAREST_HOURS,
+            },
         )
 
     with open_netcdf(path) as ds:
@@ -153,10 +159,18 @@ def read_era5_grid(
         time_indices = np.flatnonzero(times == target)
         if len(time_indices) == 0:
             target_label = data_datetime.strftime("%Y-%m-%d %H:%M UTC")
+            before, after = nearest_era5_hours(path, data_datetime)
             raise RsplotError(
                 "data_not_found",
-                f"{field_label}文件 {path} 中没有时次 {target_label}。",
-                details={"path": str(path), "time_utc": target_label},
+                f"{field_label}文件 {path} 中没有时次 {target_label}；"
+                + _nearest_label(before, after),
+                details={
+                    "path": str(path),
+                    "time_utc": target_label,
+                    "nearest_before": before,
+                    "nearest_after": after,
+                    "search_hours": NEAREST_HOURS,
+                },
             )
 
         lon_raw = np.asarray(ds["longitude"].values, dtype=float)
@@ -201,6 +215,76 @@ def read_era5_grid(
         lat_values[lat_order],
     )
     return lon, lat, values, unit
+
+
+# How far either side of a missing hour to look for available ERA5 hours.
+# ERA5 normally arrives about five days late, so a 48-hour window would
+# find nothing for a recent request.
+NEAREST_HOURS = 240
+
+
+def nearest_era5_hours(
+    path: Path, data_datetime: datetime
+) -> tuple[str | None, str | None]:
+    """Nearest available hours, as CLI ``YYYYMMDDHH``, around a missing one.
+
+    ERA5 keeps one file per UTC day, so this probes the same layout day by
+    day outward and reads the time axis of the nearest existing file in
+    each direction only. Reports only; never selects.
+    """
+    from datetime import timedelta
+
+    day = data_datetime.strftime("%Y%m%d")
+    parts = path.parts
+    if day not in parts:
+        return None, None
+    index = len(parts) - 1 - parts[::-1].index(day)
+    target = np.datetime64(data_datetime.replace(tzinfo=None), "ns")
+    window = np.timedelta64(NEAREST_HOURS, "h")
+
+    def day_times(offset: int) -> np.ndarray | None:
+        stamp = (data_datetime + timedelta(days=offset)).strftime("%Y%m%d")
+        candidate = Path(*parts[:index], stamp, *parts[index + 1 :])
+        if not candidate.exists():
+            return None
+        try:
+            with open_netcdf(candidate) as ds:
+                name = next((n for n in TIME_NAMES if n in ds.variables), None)
+                if name is None:
+                    return None
+                times = np.asarray(ds[name].values).astype("datetime64[ns]")
+        except RsplotError:
+            return None
+        return times[(times != target) & (abs(times - target) <= window)]
+
+    def nearest(step: int) -> str | None:
+        for distance in range(NEAREST_HOURS // 24 + 1):
+            times = day_times(step * distance)
+            if times is None:
+                continue
+            side = times[times < target] if step < 0 else times[times > target]
+            if len(side):
+                return _cli_hour(side.max() if step < 0 else side.min())
+        return None
+
+    return nearest(-1), nearest(1)
+
+
+def _cli_hour(utc: np.datetime64) -> str:
+    """Format a UTC archive time as the China-time CLI ``YYYYMMDDHH``."""
+    from zoneinfo import ZoneInfo
+
+    moment = utc.astype("datetime64[s]").item().replace(tzinfo=ZoneInfo("UTC"))
+    return moment.astimezone(ZoneInfo(DEFAULT_INPUT_TIMEZONE)).strftime(
+        "%Y%m%d%H"
+    )
+
+
+def _nearest_label(before: str | None, after: str | None) -> str:
+    return (
+        f"{NEAREST_HOURS // 24} 天内最近可用 DATETIME: 之前 {before or '无'}，"
+        f"之后 {after or '无'}。"
+    )
 
 
 def _temperature_path(

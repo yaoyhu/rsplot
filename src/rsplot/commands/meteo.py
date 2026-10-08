@@ -17,6 +17,7 @@ from rsplot.commands.common import (
 )
 from rsplot.config import AppConfig
 from rsplot.errors import RsplotError
+from rsplot.result_builders.provenance import input_fingerprint
 
 if TYPE_CHECKING:
     from rich.console import Console
@@ -554,6 +555,7 @@ def _era5_grid_layer(
             "data_root": data_root,
             "files_total": len(files),
             "failed_files": {},
+            **input_fingerprint(data_root, files),
         },
         "method": method,
         "coverage": coverage,

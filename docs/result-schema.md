@@ -70,7 +70,7 @@ Every layer has the same keys:
 | `kind` | `grid`, `points`, `vector_grid` or `series`. |
 | `quantity` | `name`, `unit`, `scale` (stored × scale = value in `unit`), optional display `label`. |
 | `time` | `aggregation` (`scan`, `hourly`, `daily`, `daily_scan_mean`, `window_mean`, `hourly_series`), `at` or `start`/`end`, `basis` (`calendar_day`, `nominal_scan_time`, `station_hour`, `era5_hour`); every time is China time and no time zone is named; and `days` for windows (`requested`, `found`, `failed`, `n_min`, `valid_days_per_cell`). `n_min` is the minimum valid days that keep a cell: always 1 for `raster`, `overlay` and `radius`, whose window means average each cell's valid days and leave cells without any as nodata; `fnr` records its `--n-min`. |
-| `source` | `sensor`, `processing` (`offl` or `nrti` for TROPOMI, `null` otherwise), `data_root`, `files_total` (files read; names are not listed), `failed_files` (relative name → reason), `versions`. |
+| `source` | `sensor`, `processing` (`offl` or `nrti` for TROPOMI, `null` otherwise), `data_root`, `files_total` (files read; names are not listed), `failed_files` (relative name → reason), `versions`, `inputs_digest` (`sha256:` over each input's name relative to `data_root`, size and modification time: compare two runs' digests to see whether the same request now reads different files, e.g. an NRTI day that gained granules) and `data_as_of` (latest input modification time, China time `YYYY-MM-DDTHH:MM:SS`). |
 | `method` | Choices that change values: QA/cloud filters, grid spacing, day weighting, cell selection/weighting, pixels used. Gap filling and smoothing are display-only and live in `render.layers`. |
 | `coverage` | `valid`, `total`, `fraction` (0–1), `unit` (`cells`, `stations`, `hours`, `vectors`). |
 | `stats` | `n`, `mean`, `std`, `min`, `p10`, `p25`, `median`, `p75`, `p90`, `max` over the statistical support. |
@@ -182,11 +182,11 @@ the image beside it, even when a run is killed. Codes:
 | --- | --- |
 | `invalid_argument` | Bad or conflicting option values. |
 | `invalid_time` | Malformed or impossible date/hour, or a time form the command does not accept. |
-| `region_not_found` | Region name or station ID does not resolve. |
+| `region_not_found` | Region name or station ID does not resolve; for a region name `details.suggestions` lists up to five close full names (provinces first), possibly empty. |
 | `region_ambiguous` | A short region name fits different places at two levels (e.g. 吉林: 吉林省 and 吉林市); `details.candidates` lists the full names to use. |
 | `config_invalid` | The configuration itself is unusable: `RSPLOT_CONFIG` names a missing file, or a boundary file is missing from `geojson_dir`; `details.path` names it. |
 | `data_not_configured` | No configured data root for the requested product. |
-| `data_not_found` | The requested file, day, scan or hour does not exist; `details.path` names the file or pattern looked for. |
+| `data_not_found` | The requested file, day, scan or hour does not exist; `details.path` names the file or pattern looked for. A missing station or ERA5 hour adds `nearest_before` and `nearest_after` (`YYYYMMDDHH`, or null) within `search_hours` (48 for station hours, 240 for ERA5, which normally arrives about five days late); rsplot reports them but never uses them. |
 | `no_valid_data` | Data was read but nothing valid falls in the region. |
 | `read_failed` | An input file exists but could not be read (corrupt or not NetCDF); `details.path` names it. |
 | `write_failed` | An output file could not be written (option `--output`); `details.path` names it. |

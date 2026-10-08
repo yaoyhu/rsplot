@@ -139,7 +139,8 @@ introduce new code that violates them.
    (`envelope.command_line`, quoting only shell-special arguments); there is
    no per-option provenance block, and values that change the numbers live
    in `layers[].method`. `source` gives `data_root`, `files_total`,
-   `failed_files` and `versions`, never file lists or manifests.
+   `failed_files`, `versions`, `inputs_digest` and `data_as_of`
+   (`result_builders.provenance`), never file lists or manifests.
    `quality.flags` are `{code, severity, layer?, evidence}` with measured
    numbers and the threshold; never add a flag that only restates a field
    (smoothing, time matching, unit comparability). `region.bbox` is the
@@ -155,7 +156,13 @@ introduce new code that violates them.
    Raise the code where the failure happens: readers open NetCDF through
    `readers.netcdf.open_netcdf` (`read_failed`/`data_not_found` with
    `details.path`), `atomic_write` raises `write_failed`, and config and
-   boundary loading raise `config_invalid`. Never name an option a command
+   boundary loading raise `config_invalid`. Help the agent recover: a
+   missing station or ERA5 hour reports `nearest_before`/`nearest_after`
+   by probing exact paths (station hours within 48 hours; ERA5 day files
+   within 10 days, opening only the nearest file each way); never list the
+   100k-file station archive and never pick the hour. An unknown region
+   name reports `details.suggestions`
+   (`geo.boundaries.suggest_region_names`). Never name an option a command
    does not have; E2E `assert_failed` checks every `--option` in the error
    line against that command's help, and `test_cli.py` runs every help
    example, so examples must carry all required options.

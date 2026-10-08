@@ -45,6 +45,16 @@ class RegionE2E(unittest.TestCase):
         error = self.rejection("双名", "region_ambiguous")
         self.assertEqual(error["details"]["candidates"], ["双名省", "双名市"])
 
+    def test_user_gets_a_suggestion_for_a_misspelled_name(self):
+        """Given 安徽省 and 安庆市, when mapping 安微, then suggest both."""
+        error = self.rejection("安微", "region_not_found")
+        self.assertEqual(error["details"]["suggestions"], ["安徽省", "安庆市"])
+
+    def test_user_gets_a_suggestion_for_a_misspelled_countys_city(self):
+        """Given FixtureCity, when its name is misspelled, then suggest it."""
+        error = self.rejection("FixtureCiti/FixtureCounty", "region_not_found")
+        self.assertEqual(error["details"]["suggestions"][0], "FixtureCity")
+
     def test_user_maps_beijing_as_a_city(self):
         """Given 北京市 in both files, when mapping 北京, then a city."""
         self.assertEqual(self.region("北京"), ["北京市", "city"])

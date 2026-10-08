@@ -44,7 +44,9 @@
           "product": [
             "02.09.01"
           ]
-        }
+        },
+        "inputs_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "data_as_of": "2026-09-20T14:05:31"
       },
       "method": {
         "qa_min_exclusive": 0.5,
@@ -130,7 +132,9 @@
         "processing": null,
         "data_root": "/mnt/nas/tianpu/stations",
         "files_total": 1,
-        "failed_files": {}
+        "failed_files": {},
+        "inputs_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "data_as_of": "2026-09-20T14:05:31"
       },
       "method": {
         "region_selection": "point_inside_region"

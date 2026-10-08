@@ -19,6 +19,7 @@ from rsplot.commands.common import (
 )
 from rsplot.config import AppConfig
 from rsplot.errors import RsplotError
+from rsplot.result_builders.provenance import combined_fingerprint
 
 if TYPE_CHECKING:
     from rich.console import Console
@@ -444,6 +445,7 @@ def _emit_fnr(
                 item["source"]["files_total"] for item in layers
             ),
             "failed_files": {},
+            **combined_fingerprint(item["source"] for item in layers),
         },
         "method": {
             "ratio": "hcho_window_mean / no2_window_mean",

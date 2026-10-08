@@ -209,6 +209,25 @@ class MeteoE2E(unittest.TestCase):
             zone_free=False,
         )
 
+    def test_user_learns_the_nearest_era5_hours(self):
+        """Given only the previous UTC day, when mapping, then name its hour."""
+        self.workspace.write_temperature("2025123123")
+        error = assert_failed(
+            self,
+            self.workspace,
+            self.workspace.meteo(HOUR, "--temp-level", "2m"),
+            "ERA5",
+            "data_not_found",
+            zone_free=False,
+        )
+        self.assertEqual(
+            [
+                error["details"]["nearest_before"],
+                error["details"]["nearest_after"],
+            ],
+            ["2026010107", None],
+        )
+
     def test_user_learns_an_era5_file_is_unreadable(self):
         """Given a corrupt ERA5 file, when mapping, then report read_failed."""
         corrupt = self.workspace.temperature_path(UTC)

@@ -26,6 +26,7 @@ The station file for Jan 1 13:00 places two stations inside `FixtureCity`
 | user rejects an impossible hour | Same file | Map 2026010125 | Rejected with `invalid_time` |
 | user learns the variable is unknown | Same file | Map --var XYZ | Rejected with `invalid_argument` on option --var |
 | user never gets another hour | Only the Jan 1 23:00 file exists | Map 2026010113 | Rejected with `data_not_found`, naming 2026010113 |
+| user learns the nearest available hours | Station files for 11:00 and 16:00 only | Map 2026010113 | Rejected with `data_not_found`; `details.nearest_before` 2026010111 and `nearest_after` 2026010116; no hour is chosen for the user |
 | user learns a station file is unreadable | The 13:00 file is not NetCDF | Map 2026010113 | Rejected with `read_failed`; `details.path` names that file and the message carries no library boilerplate |
 | user learns a region does not exist | Same file | Map region Atlantis | Rejected with `region_not_found` |
 | user maps stations across two regions | Same file | Map NO2 for `FixtureCity,EastCity` | `region.members` names both; the station layer counts 3 stations once and has `by_member` FixtureCity n 2 mean 60 and EastCity n 1 mean 999 |

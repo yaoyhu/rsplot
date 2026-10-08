@@ -15,6 +15,7 @@ from rsplot.commands.common import (
 )
 from rsplot.config import AppConfig
 from rsplot.errors import RsplotError
+from rsplot.result_builders.provenance import input_fingerprint
 
 if TYPE_CHECKING:
     from rich.console import Console
@@ -172,6 +173,7 @@ def _emit_trend(
         "data_root": root,
         "files_total": len(trend.source_files),
         "failed_files": failed,
+        **input_fingerprint(root, [*trend.source_files, *failed]),
     }
 
     series_path = data_path(image, "series", ".nc")

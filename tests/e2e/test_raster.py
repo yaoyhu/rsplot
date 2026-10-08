@@ -270,12 +270,40 @@ class RasterE2E(unittest.TestCase):
             self.workspace.raster("20260101", "--smooth", "1")
         )
         self.assertEqual(
-            payload["render"]["layers"]["satellite"]["display_smoothing_sigma"],
+            payload["render"]["layers"]["satellite"][
+                "display_smoothing_sigma"
+            ],
             1,
         )
         self.assertNotIn("smoothing_sigma", satellite(payload)["method"])
         self.assertNotIn("gap_fill", satellite(payload)["method"])
         self.assertEqual(flag_codes(payload), [])
+
+    def test_user_gets_the_same_digest_for_unchanged_inputs(self):
+        """Given one orbit, when plotting twice, then the digest is equal."""
+        self.workspace.write_swath("20260101", 4)
+        first = satellite(self.assert_plot(self.workspace.raster("20260101")))
+        second = satellite(self.assert_plot(self.workspace.raster("20260101")))
+        self.assertEqual(
+            first["source"]["inputs_digest"], second["source"]["inputs_digest"]
+        )
+
+    def test_user_detects_a_day_that_gained_a_granule(self):
+        """Given a new orbit, when plotting again, then the digest changes."""
+        self.workspace.write_swath("20260101", 4, orbit=1)
+        before = satellite(self.assert_plot(self.workspace.raster("20260101")))
+        self.workspace.write_swath("20260101", 4, orbit=2)
+        after = satellite(self.assert_plot(self.workspace.raster("20260101")))
+        self.assertNotEqual(
+            before["source"]["inputs_digest"], after["source"]["inputs_digest"]
+        )
+
+    def test_user_reads_when_the_inputs_last_changed(self):
+        """Given a fixed mtime, when plotting, then data_as_of is China time."""
+        path = self.workspace.write_swath("20260101", 4)
+        os.utime(path, (1767326400, 1767326400))  # 2026-01-02 04:00 UTC
+        layer = satellite(self.assert_plot(self.workspace.raster("20260101")))
+        self.assertEqual(layer["source"]["data_as_of"], "2026-01-02T12:00:00")
 
     def test_user_is_warned_when_coverage_is_too_low(self):
         """Given one valid cell of 16, when plotting, then flag the counts."""

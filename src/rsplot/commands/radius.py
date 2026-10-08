@@ -11,6 +11,7 @@ import numpy as np
 from rsplot.commands.raster import parse_raster_dates, prepare_raster
 from rsplot.config import STATION_VAR_META, AppConfig
 from rsplot.errors import RsplotError
+from rsplot.result_builders.provenance import input_fingerprint
 
 if TYPE_CHECKING:
     from rich.console import Console
@@ -429,6 +430,7 @@ def _emit_radius(
                 "data_root": str(directory),
                 "files_total": 1,
                 "failed_files": {},
+                **input_fingerprint(str(directory), [locations.source_file]),
             },
             "method": {
                 "region_selection": "square_east_north_offsets",

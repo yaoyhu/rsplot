@@ -192,7 +192,13 @@
 
     "source": {
       "type": "object",
-      "required": ["data_root", "files_total", "failed_files"],
+      "required": [
+        "data_root",
+        "files_total",
+        "failed_files",
+        "inputs_digest",
+        "data_as_of"
+      ],
       "additionalProperties": false,
       "properties": {
         "sensor": {"enum": ["tropomi", "gems", "station", "era5"]},
@@ -207,6 +213,16 @@
           "type": "object",
           "additionalProperties": {"type": "string"},
           "description": "Relative file name -> reason."
+        },
+        "inputs_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "Hash over each input's name relative to data_root, size and modification time; changes when the same request reads different files."
+        },
+        "data_as_of": {
+          "type": ["string", "null"],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}$",
+          "description": "Latest modification time among the inputs (China time, no offset); null when no input file exists."
         },
         "versions": {
           "type": "object",

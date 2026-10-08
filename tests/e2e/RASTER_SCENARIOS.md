@@ -31,6 +31,9 @@ JSON or data file.
 | user gets unsmoothed daily statistics | NO2 rises 4, 5, 6, 7 west to east | Plot one day with --smooth 0 and --smooth 1.5 | Identical `stats` |
 | user gets unsmoothed window statistics | Same gradient | Plot --days 1 with --smooth 0 and --smooth 1.5 | Identical `stats` |
 | user reads smoothing from the display settings | Uniform NO2 input | Plot with --smooth 1 | `render.layers.satellite.display_smoothing_sigma` is 1, `method` has no smoothing or gap-fill key, and there is no flag |
+| user gets the same digest for unchanged inputs | One NO2 orbit on Jan 1 | Plot Jan 1 twice | `source.inputs_digest` is identical |
+| user detects a day that gained a granule | One NO2 orbit, then a second orbit arrives | Plot Jan 1 before and after | `source.inputs_digest` differs |
+| user reads when the inputs last changed | The orbit file's modification time is 2026-01-02 04:00:00 UTC | Plot Jan 1 | `source.data_as_of` is 2026-01-02T12:00:00 (China time) |
 | user is warned when coverage is too low | One observed cell of 16 region cells | Plot a one-day window | `quality` is exactly one flag: `very_low_coverage`, critical, layer satellite, evidence valid 1, total 16, fraction 0.062, threshold 0.1; no grade and no message |
 | user sees missing-day diagnostics | Jan 1 is missing, Jan 2 has value 9 | Request two days | Mean 9, one found day, Jan 1 listed under the window's failed days |
 | user is warned about missing days | Same incomplete archive | Request two days | The only flag is `missing_days` (warning, satellite) with evidence requested 2, found 1 and Jan 1 under failed; no message |
