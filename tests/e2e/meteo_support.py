@@ -50,10 +50,11 @@ class MeteoWorkspace(OverlayWorkspace):
             field[:] = np.full((1, len(LATS), len(LONS)), value)
 
     def write_temperature(self, utc: str, kelvin: float = 293.15) -> None:
+        self._write(self.temperature_path(utc), "t2m", utc, kelvin, "K")
+
+    def temperature_path(self, utc: str) -> Path:
         day = self.era5 / utc[:8] / "single_level"
-        self._write(
-            day / "2m_temperature" / "surface.nc", "t2m", utc, kelvin, "K"
-        )
+        return day / "2m_temperature" / "surface.nc"
 
     def write_wind(self, utc: str, u: float = 3.0, v: float = 4.0) -> None:
         day = self.era5 / utc[:8] / "single_level"

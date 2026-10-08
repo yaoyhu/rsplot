@@ -6,6 +6,7 @@ import errno
 import json
 import os
 import re
+import shlex
 import tempfile
 import unittest
 from pathlib import Path
@@ -40,6 +41,30 @@ def open_when_read(fifo: Path, process) -> int:
             if error.errno != errno.ENXIO:
                 raise
     raise AssertionError(f"rsplot exited {process.returncode} unread")
+
+
+def help_examples(help_text: str, command: str) -> list[list[str]]:
+    """Return each ``rsplot <command> ...`` example line of a help text.
+
+    Joins ``\\`` continuations and drops trailing ``# ...`` comments.
+    """
+    lines = [line.strip(" │") for line in help_text.splitlines()]
+    joined = re.sub(r"\\\s*\n\s*", " ", "\n".join(lines))
+    return [
+        shlex.split(line, comments=True)[1:]
+        for line in joined.splitlines()
+        if line.startswith(f"rsplot {command} ")
+    ]
+
+
+def with_output(arguments: list[str], output: Path) -> list[str]:
+    """Point an example's ``--output`` into the test workspace."""
+    return [
+        str(output) if previous == "--output" else argument
+        for previous, argument in zip(
+            ["", *arguments[:-1]], arguments, strict=True
+        )
+    ]
 
 
 class CliE2E(unittest.TestCase):
@@ -374,6 +399,88 @@ class CliE2E(unittest.TestCase):
         writer = open_when_read(swath, process)
         self.addCleanup(os.close, writer)
         self.assertFalse(self.workspace.sidecar.exists())
+
+    def test_user_learns_the_output_cannot_be_written(self):
+        """Given a swath, when output is under /proc, then write_failed."""
+        self.workspace.write_swath("20260101", 4)
+        assert_failed(
+            self,
+            self.workspace,
+            self.workspace.raster(
+                "20260101", "--output", "/proc/rsplot-e2e/map.png"
+            ),
+            "/proc/rsplot-e2e",
+            "write_failed",
+            "--output",
+        )
+
+    def test_user_learns_the_config_file_is_missing(self):
+        """Given a missing config file, when plotting, then config_invalid."""
+        self.workspace.write_swath("20260101", 4)
+        missing = self.workspace.root / "missing.toml"
+        self.workspace.env["RSPLOT_CONFIG"] = str(missing)
+        assert_failed(
+            self,
+            self.workspace,
+            self.workspace.raster("20260101"),
+            str(missing),
+            "config_invalid",
+        )
+
+    def test_user_learns_the_boundary_files_are_missing(self):
+        """Given an empty boundary folder, when plotting, then name a file."""
+        self.workspace.write_swath("20260101", 4)
+        self.workspace.boundaries = self.workspace.root / "no-boundaries"
+        self.workspace.boundaries.mkdir()
+        self.workspace.write_config()
+        assert_failed(
+            self,
+            self.workspace,
+            self.workspace.raster("20260101"),
+            "中国_省.geojson",
+            "config_invalid",
+        )
+
+    def assert_examples_run(self, command: str) -> None:
+        help_text = self.workspace.invoke(command, "--help").stdout
+        examples = help_examples(help_text, command)
+        self.assertNotEqual(examples, [], help_text)
+        for example in examples:
+            result = self.workspace.invoke(
+                *with_output(example, self.workspace.output)
+            )
+            self.assertEqual(
+                result.returncode, 1, f"{example}\n{result.stderr}"
+            )
+            error_line(result.stderr)
+
+    def test_user_can_run_every_raster_example(self):
+        """Given raster help, when running each example, then it parses."""
+        self.assert_examples_run("raster")
+
+    def test_user_can_run_every_radius_example(self):
+        """Given radius help, when running each example, then it parses."""
+        self.assert_examples_run("radius")
+
+    def test_user_can_run_every_overlay_example(self):
+        """Given overlay help, when running each example, then it parses."""
+        self.assert_examples_run("overlay")
+
+    def test_user_can_run_every_station_example(self):
+        """Given station help, when running each example, then it parses."""
+        self.assert_examples_run("station")
+
+    def test_user_can_run_every_trend_example(self):
+        """Given trend help, when running each example, then it parses."""
+        self.assert_examples_run("trend")
+
+    def test_user_can_run_every_meteo_example(self):
+        """Given meteo help, when running each example, then it parses."""
+        self.assert_examples_run("meteo")
+
+    def test_user_can_run_every_fnr_example(self):
+        """Given fnr help, when running each example, then it parses."""
+        self.assert_examples_run("fnr")
 
     def test_user_must_give_raster_a_product(self):
         """Given raster, when omitting --product, then exit 2 naming it."""

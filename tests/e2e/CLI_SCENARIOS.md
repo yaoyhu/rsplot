@@ -32,6 +32,11 @@ the UTC archive hour it looked for.
 | --- | --- | --- | --- |
 | user must supply a valid PNG output | Any enabled command | Pass an empty path, a non-PNG filename or a directory | Exit 1 with one `invalid_argument --output` line before data access; create no artifacts and preserve existing files |
 | user never finds an old sidecar after a killed run | An old sidecar at the output path | Kill a raster run while it reads its data | The old sidecar is gone: a sidecar on disk always describes the image beside it |
+| user learns the output cannot be written | A valid swath | Plot to /proc/rsplot-e2e/map.png | Rejected with `write_failed` on option --output, naming the path |
+| user learns the config file is missing | RSPLOT_CONFIG names a missing file | Plot a valid swath | Rejected with `config_invalid`, naming the file |
+| user learns the boundary files are missing | geojson_dir names an empty folder | Plot a valid swath | Rejected with `config_invalid`, naming the missing boundary file; no traceback |
+| user never sees an error naming a missing option | Every rejection in every suite | Read the error line | Every `--option` it names appears in that command's help |
+| user can run every help example | Each enabled command's help | Run each `rsplot ...` example line, with its --output moved into the workspace | Typer accepts it (no exit 2); it fails only on fixture data with one rsplot error line |
 | user sees only enabled commands | CLI is installed | Request top-level help | Help lists raster, radius, overlay, station, trend, meteo and fnr, and does not list recent, forecast or reconstruct |
 | user cannot run the disabled forecast command | CLI is installed | Run `forecast` with plausible arguments | Nonzero exit reporting no such command |
 | user cannot run the disabled reconstruct command | CLI is installed | Run `reconstruct` with plausible arguments | Nonzero exit reporting no such command |

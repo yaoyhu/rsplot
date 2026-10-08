@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 from netCDF4 import Dataset
 
+from rsplot.errors import RsplotError
 from rsplot.readers.base import BaseReader, SwathData
 
 # Default target-grid spacing, overridable with --res; not native resolution.
@@ -140,9 +141,11 @@ class GemsReader(BaseReader):
                     for _, time in files
                 }
             )
-            raise FileNotFoundError(
+            raise RsplotError(
+                "data_not_found",
                 f"未找到 GEMS {request}；当日可用扫描: "
-                + (", ".join(available) or "无")
+                + (", ".join(available) or "无"),
+                details={"available": available},
             )
         times = [time for _, time in selected]
         if len(set(times)) != len(times):

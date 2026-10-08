@@ -184,14 +184,17 @@ the image beside it, even when a run is killed. Codes:
 | `invalid_time` | Malformed or impossible date/hour, or a time form the command does not accept. |
 | `region_not_found` | Region name or station ID does not resolve. |
 | `region_ambiguous` | A short region name fits different places at two levels (e.g. 吉林: 吉林省 and 吉林市); `details.candidates` lists the full names to use. |
+| `config_invalid` | The configuration itself is unusable: `RSPLOT_CONFIG` names a missing file, or a boundary file is missing from `geojson_dir`; `details.path` names it. |
 | `data_not_configured` | No configured data root for the requested product. |
-| `data_not_found` | The requested file, day, scan or hour does not exist. |
+| `data_not_found` | The requested file, day, scan or hour does not exist; `details.path` names the file or pattern looked for. |
 | `no_valid_data` | Data was read but nothing valid falls in the region. |
-| `read_failed` | Input files exist but could not be read. |
+| `read_failed` | An input file exists but could not be read (corrupt or not NetCDF); `details.path` names it. |
+| `write_failed` | An output file could not be written (option `--output`); `details.path` names it. |
 | `internal_error` | Unexpected failure; `details` carries the exception type, and the traceback follows the line. |
 
-`option` names the offending option when there is one. The message keeps the
-existing Chinese CLI wording on a single line. Usage errors caught by the CLI
+`option` names the offending option when there is one, and every option a
+message names exists on that command (the E2E helpers check this). The
+message keeps the existing Chinese CLI wording on a single line. Usage errors caught by the CLI
 parser (an unknown option, a missing required option or argument) exit 2
 before rsplot runs, with the parser's own message instead of the error line.
 

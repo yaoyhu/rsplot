@@ -22,13 +22,20 @@ from rsplot.errors import RsplotError
 
 
 def coded_error(error: Exception) -> RsplotError:
-    """Map an exception to an rsplot error code."""
+    """Map an exception to an rsplot error code.
+
+    Readers, config and boundary loading and output writing raise their
+    own codes. What is left is an uncoded file failure (``read_failed``,
+    naming the file), an uncoded ValueError or an internal error.
+    """
     if isinstance(error, RsplotError):
         return error
-    if isinstance(error, FileNotFoundError):
-        return RsplotError("data_not_found", str(error))
     if isinstance(error, OSError):
-        return RsplotError("read_failed", str(error))
+        return RsplotError(
+            "read_failed",
+            error.strerror or str(error),
+            details={"path": str(error.filename)} if error.filename else None,
+        )
     if isinstance(error, ValueError):
         return RsplotError("invalid_argument", str(error))
     return RsplotError(

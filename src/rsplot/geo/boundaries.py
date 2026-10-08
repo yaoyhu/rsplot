@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import geopandas as gpd
@@ -174,19 +175,30 @@ def _fuzzy_match(
 # ---------------------------------------------------------------------------
 # GeoJSON loaders (cached)
 # ---------------------------------------------------------------------------
+def _read_boundary_file(path: str) -> gpd.GeoDataFrame:
+    """Read a configured boundary file; a missing one is a config error."""
+    if not Path(path).is_file():
+        raise RsplotError(
+            "config_invalid",
+            f"边界文件不存在: {path}；请检查配置 [paths].geojson_dir。",
+            details={"path": path},
+        )
+    return gpd.read_file(path)
+
+
 @lru_cache(maxsize=1)
 def _load_province(geojson_dir: str) -> gpd.GeoDataFrame:
-    return gpd.read_file(f"{geojson_dir}/中国_省.geojson")
+    return _read_boundary_file(f"{geojson_dir}/中国_省.geojson")
 
 
 @lru_cache(maxsize=1)
 def _load_city(geojson_dir: str) -> gpd.GeoDataFrame:
-    return gpd.read_file(f"{geojson_dir}/中国_市.geojson")
+    return _read_boundary_file(f"{geojson_dir}/中国_市.geojson")
 
 
 @lru_cache(maxsize=1)
 def _load_county(geojson_dir: str) -> gpd.GeoDataFrame:
-    return gpd.read_file(f"{geojson_dir}/中国_县.geojson")
+    return _read_boundary_file(f"{geojson_dir}/中国_县.geojson")
 
 
 @lru_cache(maxsize=16)

@@ -153,6 +153,16 @@ class StationE2E(unittest.TestCase):
             "data_not_found",
         )
 
+    def test_user_learns_a_station_file_is_unreadable(self):
+        """Given a corrupt hour file, when mapping, then report read_failed."""
+        corrupt = self.workspace.stations / "2026010113.nc"
+        corrupt.write_bytes(b"not netcdf" * 100)
+        error = self.assert_rejected(
+            self.workspace.station("2026010113"), "2026010113", "read_failed"
+        )
+        self.assertEqual(error["details"]["path"], str(corrupt))
+        self.assertNotIn("xarray", error["message"])
+
     def test_user_learns_a_region_does_not_exist(self):
         """Given an unknown region, when mapping, then report it."""
         self.assert_rejected(

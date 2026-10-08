@@ -209,6 +209,18 @@ class MeteoE2E(unittest.TestCase):
             zone_free=False,
         )
 
+    def test_user_learns_an_era5_file_is_unreadable(self):
+        """Given a corrupt ERA5 file, when mapping, then report read_failed."""
+        corrupt = self.workspace.temperature_path(UTC)
+        corrupt.parent.mkdir(parents=True)
+        corrupt.write_bytes(b"not netcdf" * 100)
+        error = self.assert_rejected(
+            self.workspace.meteo(HOUR, "--temp-level", "2m"),
+            "surface.nc",
+            "read_failed",
+        )
+        self.assertEqual(error["details"]["path"], str(corrupt))
+
     def test_user_learns_the_station_hour_is_missing(self):
         """Given no station file, when overlaying stations, then report it."""
         self.workspace.write_wind(UTC)

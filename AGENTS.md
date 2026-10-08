@@ -152,6 +152,13 @@ introduce new code that violates them.
    an earlier run left at the same path, writes each file through a
    temporary name (`atomic.atomic_write`) and writes the sidecar last, so
    even a killed run never leaves an old sidecar beside a new image.
+   Raise the code where the failure happens: readers open NetCDF through
+   `readers.netcdf.open_netcdf` (`read_failed`/`data_not_found` with
+   `details.path`), `atomic_write` raises `write_failed`, and config and
+   boundary loading raise `config_invalid`. Never name an option a command
+   does not have; E2E `assert_failed` checks every `--option` in the error
+   line against that command's help, and `test_cli.py` runs every help
+   example, so examples must carry all required options.
 8. **Display options stay.** `--dpi`, `--cmap`, `--vmin`/`--vmax`,
    `--title`, `--basemap`, `--smooth`, and wind styling only change the
    image. The JSON records the values actually used, and they never change

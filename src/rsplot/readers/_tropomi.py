@@ -10,6 +10,7 @@ from typing import ClassVar
 import numpy as np
 from rich.progress import track
 
+from rsplot.errors import RsplotError
 from rsplot.readers.base import (
     BaseReader,
     SwathData,
@@ -96,11 +97,13 @@ class TropomiReader(BaseReader):
             }
         )
         if not files:
-            raise FileNotFoundError(
+            raise RsplotError(
+                "data_not_found",
                 spec.not_found_message.format(
                     date=date,
                     patterns="\n  ".join(patterns),
-                )
+                ),
+                details={"path": patterns[0]},
             )
 
         if self.processing == "nrti":

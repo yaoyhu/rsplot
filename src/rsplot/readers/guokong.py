@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
-import xarray as xr
 
 from rsplot.errors import RsplotError
+from rsplot.readers.netcdf import open_netcdf
 
 if TYPE_CHECKING:
     from shapely.geometry.base import BaseGeometry
@@ -128,13 +128,22 @@ def resolve_station_file(data_dir: str, datetime_str: str) -> Path:
             None,
         )
         if path is None:
-            raise FileNotFoundError(
+            raise RsplotError(
+                "data_not_found",
                 f"未找到 {datetime_str} 当天的站点数据文件: {pattern}\n"
-                "请检查日期和配置 [paths.data_dirs].guokong 路径。"
+                "请检查日期和配置 [paths.data_dirs].guokong 路径。",
+                details={"path": pattern},
             )
         datetime_str = path.stem
     else:
         path = root / f"{datetime_str}.nc"
+        if not path.exists():
+            raise RsplotError(
+                "data_not_found",
+                f"未找到站点数据文件: {path}\n"
+                "请检查日期时间和配置 [paths.data_dirs].guokong 路径。",
+                details={"path": str(path)},
+            )
 
     return path
 
@@ -156,7 +165,7 @@ def read_station_locations(
 ) -> StationLocations:
     """Read locations even when pollutant variables are absent or missing."""
     path = resolve_station_file(data_dir, datetime_str)
-    with xr.open_dataset(path) as ds:
+    with open_netcdf(path) as ds:
         for name in ("id", "lon", "lat"):
             if name not in ds:
                 raise ValueError(f"站点文件缺少 {name}: {path}")
@@ -190,13 +199,7 @@ def read_stations(
     path = resolve_station_file(data_dir, datetime_str)
     datetime_str = path.stem
 
-    try:
-        ds = xr.open_dataset(path)
-    except FileNotFoundError as e:
-        raise FileNotFoundError(
-            f"未找到站点数据文件: {path}\n"
-            "请检查日期时间和配置 [paths.data_dirs].guokong 路径。"
-        ) from e
+    ds = open_netcdf(path)
 
     try:
         lon = ds["lon"].values.astype(float)
@@ -276,7 +279,7 @@ def read_station_series(
             continue
 
         try:
-            with xr.open_dataset(path) as ds:
+            with open_netcdf(path) as ds:
                 opened_files += 1
                 required = ("id", "lon", "lat", var_name)
                 missing_vars = [name for name in required if name not in ds]
@@ -309,9 +312,11 @@ def read_station_series(
             failed_files[timestamp] = str(error).splitlines()[0]
 
     if opened_files == 0:
-        raise FileNotFoundError(
+        raise RsplotError(
+            "data_not_found",
             f"窗口 {dates[0]}~{dates[-1]} 内未找到可读取的站点文件: "
-            f"{root}/YYYYMMDDHH.nc"
+            f"{root}/YYYYMMDDHH.nc",
+            details={"path": f"{root}/YYYYMMDDHH.nc"},
         )
     if canonical_id is None or station_lon is None or station_lat is None:
         if failed_files and not station_missing_hours:
@@ -380,7 +385,7 @@ def read_region_station_series(
 
         existing_files += 1
         try:
-            with xr.open_dataset(path) as ds:
+            with open_netcdf(path) as ds:
                 required = ("id", "lon", "lat", var_name)
                 missing_vars = [name for name in required if name not in ds]
                 if missing_vars:
@@ -420,9 +425,11 @@ def read_region_station_series(
             hourly_values.append({})
 
     if existing_files == 0:
-        raise FileNotFoundError(
+        raise RsplotError(
+            "data_not_found",
             f"窗口 {dates[0]}~{dates[-1]} 内未找到可读取的站点文件: "
-            f"{root}/YYYYMMDDHH.nc"
+            f"{root}/YYYYMMDDHH.nc",
+            details={"path": f"{root}/YYYYMMDDHH.nc"},
         )
     if not source_files:
         examples = "; ".join(

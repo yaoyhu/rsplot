@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
-import xarray as xr
 
 from rsplot.errors import RsplotError
+from rsplot.readers.netcdf import open_netcdf
 from rsplot.temporal import DEFAULT_INPUT_TIMEZONE, adapt_hourly_time
 
 if TYPE_CHECKING:
@@ -129,9 +129,13 @@ def read_era5_grid(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, str]:
     """Read one exact UTC hour from a standard ERA5 lat/lon grid."""
     if not path.exists():
-        raise FileNotFoundError(f"未找到 {field_label}文件: {path}")
+        raise RsplotError(
+            "data_not_found",
+            f"未找到 {field_label}文件: {path}",
+            details={"path": str(path)},
+        )
 
-    with xr.open_dataset(path) as ds:
+    with open_netcdf(path) as ds:
         time_name = next(
             (name for name in TIME_NAMES if name in ds.variables), None
         )

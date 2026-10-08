@@ -119,14 +119,14 @@ def raster(
 ) -> None:
     """绘制卫星遥感栅格图。
 
-    TROPOMI 单日合并轨道后网格化并填补小空洞；窗口模式先逐日网格化，
-    再对每个网格的有效天等权平均（缺测不计为 0，至少一天有效即保留，
-    全无有效天则留空），不填补空洞。因此 --days 1 与省略 --days 不等价。
+    TROPOMI 单日合并轨道后网格化；窗口模式先逐日网格化，再对每个网格的
+    有效天等权平均（缺测不计为 0，至少一天有效即保留，全无有效天则留空）。
+    统计只用有观测的网格；TROPOMI 单日图上的小空洞填补和平滑仅用于显示。
 
     示例:
-        rsplot raster 北京    20260108 --dpi 300 --output yrd.png  # 单日
-        rsplot raster 安徽    20260131 --product hcho --days 30  # 月均（推荐 HCHO）
-        rsplot raster 长三角  20260101-20260131 --product no2  # 显式区间
+        rsplot raster 北京市 20260108 --product no2 --output beijing_no2.png  # 单日
+        rsplot raster 安徽 20260131 --product hcho --days 30 --output anhui_hcho.png  # 30 日窗口
+        rsplot raster 长三角 20260101-20260131 --product no2 --output yrd_no2.png  # 显式区间
     """
     from rsplot.commands.raster import run_raster
 
@@ -234,7 +234,14 @@ def radius(
     cmap: str | None = typer.Option(None, "--cmap", help="Colormap 名称"),
     title: str | None = typer.Option(None, "--title", help="自定义标题"),
 ) -> None:
-    """绘制站点居中、上下左右各延伸指定公里数的正方形卫星图，可叠加指定小时的站点变量。"""
+    """绘制站点居中、上下左右各延伸指定公里数的正方形卫星图，可叠加指定小时的站点变量。
+
+    示例:
+        rsplot radius 1379A 20260414 --km 30 --product no2 \\
+            --station-datetime 2026041413 --output 1379A_no2.png
+        rsplot radius 1379A 20260414 --km 30 --product no2 --station-var NO2 \\
+            --station-datetime 2026041413 --output 1379A_no2_stations.png
+    """
     from rsplot.commands.radius import run_radius
 
     run_radius(
@@ -340,10 +347,10 @@ def meteo(
 
     DATETIME 为 YYYYMMDDHH：
 
-        rsplot meteo 南京 2026051115 --temp-level 2m
-        rsplot meteo 南京 2026051115 --wind-level 850
-        rsplot meteo 南京 2026051115 --temp-level 850 --wind-level 850
-        rsplot meteo 南京 2026051115 --station-var O3 --wind-level 850
+        rsplot meteo 南京 2026051115 --temp-level 2m --output nanjing_t2m.png
+        rsplot meteo 南京 2026051115 --wind-level 850 --output nanjing_wind.png
+        rsplot meteo 南京 2026051115 --temp-level 850 --wind-level 850 --output nanjing_850.png
+        rsplot meteo 南京 2026051115 --station-var O3 --wind-level 850 --output nanjing_o3.png
     """
     from rsplot.commands.meteo import run_meteo
 
@@ -402,9 +409,9 @@ def station(
     时间必须为 YYYYMMDDHH；不接受仅日期或自动选择最新小时。
 
     示例:
-        rsplot station 安徽 2026041415
-        rsplot station 中国 2026041415 --var PM2.5_24h
-        rsplot station YRD 2026041415 --var NO2 --output logs/yrd_no2.png
+        rsplot station 安徽 2026041415 --var AQI --output anhui_aqi.png
+        rsplot station 中国 2026041415 --var PM2.5_24h --output china_pm25.png
+        rsplot station YRD 2026041415 --var NO2 --output yrd_no2.png
     """
     from rsplot.commands.station import run_station
 
@@ -477,9 +484,10 @@ def trend(
     """绘制单站点或区域国控站点小时观测趋势图。
 
     示例:
-        rsplot trend 3347A 20260520 --days 7 --var O3
-        rsplot trend 安徽 20260520 --days 7 --var O3 --region
-        rsplot trend 安徽 20260520 --region --view mean --focus-station 3347A
+        rsplot trend 3347A 20260520 --days 7 --var O3 --output 3347A_o3.png
+        rsplot trend 安徽 20260520 --days 7 --var O3 --region --output anhui_o3.png
+        rsplot trend 安徽 20260514-20260520 --var O3 --region --view mean \\
+            --focus-station 3347A --output anhui_o3_mean.png
     """
     from rsplot.commands.station_trend import run_trend
 
@@ -597,10 +605,12 @@ def overlay(
     DATE 只决定卫星时间；站点始终是一个整点，从不做时间平均。
 
     示例:
-        rsplot overlay YRD  20260208 --product no2 --station-datetime 2026020813
-        rsplot overlay 安徽 20260414 --product o3 --days 7 \\
-            --station-datetime 2026041414
-        rsplot overlay 合肥 202604141200 --sensor gems --product no2
+        rsplot overlay YRD 20260208 --product no2 --station-var NO2 \\
+            --station-datetime 2026020813 --output yrd_no2.png
+        rsplot overlay 安徽 20260414 --product o3 --days 7 --station-var O3 \\
+            --station-datetime 2026041414 --output anhui_o3.png
+        rsplot overlay 合肥 202604141200 --sensor gems --product no2 \\
+            --station-var NO2 --output hefei_gems_no2.png
     """
     from rsplot.commands.overlay import run_overlay
 
@@ -712,9 +722,9 @@ def fnr(
     分级依据 Duncan 2010: FNR<1 VOC-limited, 1~2 过渡, >2 NOx-limited.
 
     示例:
-        rsplot fnr 合肥   20260114                 (7日窗口)
-        rsplot fnr 安徽   20260131 --days 30      (30日窗口)
-        rsplot fnr 长三角 20260101-20260130       (显式范围)
+        rsplot fnr 合肥 20260114 --days 7 --output hefei_fnr.png  # 7 日窗口
+        rsplot fnr 安徽 20260131 --days 30 --output anhui_fnr.png  # 30 日窗口
+        rsplot fnr 长三角 20260101-20260130 --output yrd_fnr.png  # 显式区间
     """
     from rsplot.commands.fnr import run_fnr
 

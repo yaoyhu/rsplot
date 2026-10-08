@@ -390,6 +390,24 @@ def error_line(stderr: str) -> dict:
     }
 
 
+COMMANDS = ("raster", "radius", "overlay", "station", "trend", "meteo", "fnr")
+OPTION = re.compile(r"(?<![\w-])--[a-z][a-z0-9-]*")
+# Options listed by each command's help, read once per test process.
+HELP_OPTIONS: dict[str, set[str]] = {}
+
+
+def unknown_options(workspace, result) -> list[str]:
+    """Options an error line names that its command's help does not list."""
+    command = next((arg for arg in result.args if arg in COMMANDS), None)
+    if command is None:
+        return []
+    if command not in HELP_OPTIONS:
+        help_text = workspace.invoke(command, "--help").stdout
+        HELP_OPTIONS[command] = set(OPTION.findall(help_text))
+    named = set(OPTION.findall(result.stderr))
+    return sorted(named - HELP_OPTIONS[command])
+
+
 def assert_failed(
     case,
     workspace,
@@ -410,6 +428,7 @@ def assert_failed(
     case.assertIn(message, result.stderr)
     error = error_line(result.stderr)
     case.assertEqual(error["code"], code, output)
+    case.assertEqual(unknown_options(workspace, result), [], output)
     if zone_free:
         case.assertEqual(zone_wording(result), [], output)
     if option is not ANY_OPTION:

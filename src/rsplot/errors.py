@@ -10,10 +10,12 @@ ERROR_CODES = (
     "invalid_time",
     "region_not_found",
     "region_ambiguous",
+    "config_invalid",
     "data_not_configured",
     "data_not_found",
     "no_valid_data",
     "read_failed",
+    "write_failed",
     "internal_error",
 )
 

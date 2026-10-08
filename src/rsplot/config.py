@@ -330,8 +330,10 @@ def _config_paths() -> list[Path]:
     if raw := os.environ.get(CONFIG_ENV_VAR):
         path = Path(_normalize_path(raw))
         if not path.exists():
-            raise FileNotFoundError(
-                f"{CONFIG_ENV_VAR} points to a missing config file: {path}"
+            raise RsplotError(
+                "config_invalid",
+                f"{CONFIG_ENV_VAR} points to a missing config file: {path}",
+                details={"path": str(path)},
             )
         try:
             already_loaded = path.resolve() in {p.resolve() for p in paths}
