@@ -13,15 +13,16 @@ for successful runs.
 
 Options have long names only (CLI rule 2). Nothing that selects data is
 implicit (CLI rule 3): `--output` is required everywhere, `--product` for
-the satellite maps, `--var` for station and trend, and `--days` for recent.
+the satellite maps, and `--var` for station and trend.
 Regions are named, never levelled: there is no `--level` option (see
 REGION_SCENARIOS.md).
 
 | Scenario | Given | When | Then |
 | --- | --- | --- | --- |
-| user sees only enabled commands | CLI is installed | Request top-level help | Help lists raster, radius, overlay, station, trend, meteo, recent and fnr, and does not list forecast or reconstruct |
+| user sees only enabled commands | CLI is installed | Request top-level help | Help lists raster, radius, overlay, station, trend, meteo and fnr, and does not list recent, forecast or reconstruct |
 | user cannot run the disabled forecast command | CLI is installed | Run `forecast` with plausible arguments | Nonzero exit reporting no such command |
 | user cannot run the disabled reconstruct command | CLI is installed | Run `reconstruct` with plausible arguments | Nonzero exit reporting no such command |
+| user cannot run the removed recent command | CLI is installed | Run `recent` with arguments it used to accept | Nonzero exit reporting no such command, no output |
 | user cannot point raster at a data folder | Configured paths | Run `raster ... --data-dir /x` | Exit 2, "No such option", no output |
 | user cannot point overlay at a satellite folder | Configured paths | Run `overlay ... --raster-dir /x` | Exit 2, "No such option", no output |
 | user cannot point overlay at a station folder | Configured paths | Run `overlay ... --station-dir /x` | Exit 2, "No such option", no output |
@@ -29,7 +30,6 @@ REGION_SCENARIOS.md).
 | user cannot point radius at a station folder | Configured paths | Run `radius ... --station-data-dir /x` | Exit 2, "No such option", no output |
 | user cannot point station at a data folder | Configured paths | Run `station ... --data-dir /x` | Exit 2, "No such option", no output |
 | user cannot point trend at a data folder | Configured paths | Run `trend ... --data-dir /x` | Exit 2, "No such option", no output |
-| user cannot point recent at a data folder | Configured paths | Run `recent ... --data-dir /x` | Exit 2, "No such option", no output |
 | user cannot point fnr at an NO2 folder | Configured paths | Run `fnr ... --no2-dir /x` | Exit 2, "No such option", no output |
 | user cannot point fnr at an HCHO folder | Configured paths | Run `fnr ... --hcho-dir /x` | Exit 2, "No such option", no output |
 | user cannot point meteo at an ERA5 folder | Configured paths | Run `meteo ... --data-dir /x` | Exit 2, "No such option", no output |
@@ -43,7 +43,6 @@ REGION_SCENARIOS.md).
 | user sees only long options for radius | CLI is installed | Request `radius --help` | No single-letter option |
 | user sees only long options for station | CLI is installed | Request `station --help` | No single-letter option |
 | user sees only long options for trend | CLI is installed | Request `trend --help` | No single-letter option |
-| user sees only long options for recent | CLI is installed | Request `recent --help` | No single-letter option |
 | user sees only long options for fnr | CLI is installed | Request `fnr --help` | No single-letter option |
 | user sees only long options for meteo | CLI is installed | Request `meteo --help` | No single-letter option |
 | user cannot use a former alias | CLI is installed | Run `raster ... -o map.png` | Exit 2, "No such option", no output |
@@ -57,15 +56,12 @@ REGION_SCENARIOS.md).
 | user must give station a variable | CLI is installed | Run `station` without `--var` | Exit 2, "Missing option" naming `--var`, no output |
 | user must give trend an output | CLI is installed | Run `trend` without `--output` | Exit 2, "Missing option" naming `--output`, no output |
 | user must give trend a variable | CLI is installed | Run `trend` without `--var` | Exit 2, "Missing option" naming `--var`, no output |
-| user must give recent an output | CLI is installed | Run `recent` without `--output` | Exit 2, "Missing option" naming `--output`, no output |
-| user must give recent a day count | CLI is installed | Run `recent` without `--days` | Exit 2, "Missing option" naming `--days`, no output |
 | user must give fnr an output | CLI is installed | Run `fnr` without `--output` | Exit 2, "Missing option" naming `--output`, no output |
 | user must give meteo an output | CLI is installed | Run `meteo` without `--output` | Exit 2, "Missing option" naming `--output`, no output |
 | user cannot force the raster region level | CLI is installed | Run `raster ... --level city` | Exit 2, "No such option", no output |
 | user cannot force the overlay region level | CLI is installed | Run `overlay ... --level city` | Exit 2, "No such option", no output |
 | user cannot force the station region level | CLI is installed | Run `station ... --level city` | Exit 2, "No such option", no output |
 | user cannot force the trend region level | CLI is installed | Run `trend ... --level city` | Exit 2, "No such option", no output |
-| user cannot force the recent region level | CLI is installed | Run `recent ... --level city` | Exit 2, "No such option", no output |
 | user cannot force the fnr region level | CLI is installed | Run `fnr ... --level city` | Exit 2, "No such option", no output |
 | user cannot force the meteo region level | CLI is installed | Run `meteo ... --level city` | Exit 2, "No such option", no output |
 | user reads a failure from one error line | One swath | Map with --days 0 | Exit 1; stderr has exactly one `rsplot error invalid_argument --days: --days 必须 >= 1。` line; no files are left |

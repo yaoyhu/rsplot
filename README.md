@@ -203,7 +203,7 @@ rsplot fnr 合肥 20260114 --days 7 --voc-threshold 0.8 --nox-threshold 1.8 \
 sidecar with the same base name. Nothing that selects data is implied:
 `--product` (satellite maps), `--var` (`station`, `trend`), `--station-var`
 (`overlay`) and the window length (`--days` with a single end date for
-`trend`, `fnr` and `recent`, or a `YYYYMMDD-YYYYMMDD` range) must be given.
+`trend` and `fnr`, or a `YYYYMMDD-YYYYMMDD` range) must be given.
 
 Regions are named in Chinese; there is no `--level` option and no pinyin.
 A full name selects its own level (`吉林市` is the city, `吉林省` the
@@ -313,8 +313,7 @@ TROPOMI selector.
 
 Station observations are always one concrete China-time hour, never a
 temporal mean. rsplot never picks the latest available hour and never falls
-back to another file. (`recent --source station` is the exception: each day
-is the mean of all available hours, with the hour count in its CSV.)
+back to another file.
 
 | Satellite request | Station hour |
 | --- | --- |
@@ -459,8 +458,8 @@ comma-separated region argument.
 Use English or Chinese commas; surrounding whitespace and embedded line
 breaks are ignored in a list. Province, city, and qualified county/township
 names can be mixed. County and township names still require their city,
-e.g. `中山市/东区街道`. `recent` and `trend --region` summarize one region
-per run and reject a list; run them once per region.
+e.g. `中山市/东区街道`. `trend --region` summarizes one region per run
+and rejects a list; run it once per region.
 
 ```bash
 # One map covering three selected townships.
@@ -531,12 +530,12 @@ missing observations.
 
 ## TROPOMI NRTI processing stream
 
-Use `--processing nrti` with `raster`, `radius`, `overlay`,
-`recent --source raster`, or `fnr`. Keep `--sensor tropomi` for commands with
+Use `--processing nrti` with `raster`, `radius`, `overlay`, or `fnr`.
+Keep `--sensor tropomi` for commands with
 a sensor option; FNR is already TROPOMI-only and has no sensor option. All four
 products are supported: `no2`, `hcho`, `o3`, and `o3pr`. Omitting
 `--processing` preserves the existing directories and reading behavior.
-The NRTI option cannot be combined with GEMS or station-only recent summaries.
+The NRTI option cannot be combined with GEMS.
 
 Configure independent archive roots under `[paths.data_dirs]`:
 
@@ -570,9 +569,6 @@ rsplot radius 1379A 20260918 --km 20 --product no2 --processing nrti \
   --station-var NO2 --station-datetime 2026091812 \
   --basemap none --output /tmp/station_no2_nrti.png
 
-rsplot recent 安徽 20260919 --source raster --product no2 \
-  --processing nrti --days 3 --output /tmp/anhui_no2_nrti_recent.json
-
 rsplot fnr 安徽 20260917-20260919 --processing nrti --n-min 1 \
   --basemap none --output /tmp/anhui_fnr_nrti.png
 ```
@@ -602,7 +598,7 @@ explicit `--title` and `--output` still take precedence.
 
 ## GEMS satellite products
 
-Use `--sensor gems` with `raster`, `recent`, and `overlay`. Omitting
+Use `--sensor gems` with `raster`, `radius`, and `overlay`. Omitting
 `--sensor` retains TROPOMI behavior. GEMS FNR and satellite trend curves are
 not included in this release.
 
@@ -647,11 +643,6 @@ rsplot raster 安徽 20260901 --sensor gems --product hcho \
 rsplot raster 安徽 20260901-20260902 --sensor gems --product o3pr \
   --basemap none --output /tmp/gems_o3pr_window.png
 
-# Recent daily regional statistics (JSON only, plus gems_no2_recent.daily.csv;
-# window comparisons and the trend are in layers[0].temporal_summary).
-rsplot recent 安徽 20260902 --days 2 --source raster --sensor gems --product no2 \
-  --output /tmp/gems_no2_recent.json
-
 # 11:45 China-time scan with observations at the nearest hour, 12:00.
 rsplot overlay 安徽 202609011145 --sensor gems --product no2 \
   --station-var NO2 --basemap none --output /tmp/gems_no2_overlay.png
@@ -668,7 +659,7 @@ valid days equally. A daily cell needs at least one valid scan, and a window
 cell at least one valid day. These are means of available daytime scans,
 not full 24-hour means. Empty scans and failed files do not contribute zeros.
 
-For GEMS `raster`, `overlay`, and `recent`, **`--res` controls the actual
+For GEMS `raster`, `radius`, and `overlay`, **`--res` controls the actual
 analysis grid**. No fixed 0.05° intermediate grid is used. Raster and overlay
 draw that grid directly, clipped to its valid-cell union and the administrative
 boundary. Changing `--res` may change grid-center selection, coverage, and

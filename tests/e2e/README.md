@@ -24,7 +24,6 @@ uv run python -B -m unittest discover -s tests/e2e -p 'test_overlay.py' -v
 uv run python -B -m unittest discover -s tests/e2e -p 'test_radius.py' -v
 uv run python -B -m unittest discover -s tests/e2e -p 'test_station.py' -v
 uv run python -B -m unittest discover -s tests/e2e -p 'test_trend.py' -v
-uv run python -B -m unittest discover -s tests/e2e -p 'test_recent.py' -v
 uv run python -B -m unittest discover -s tests/e2e -p 'test_fnr.py' -v
 uv run python -B -m unittest discover -s tests/e2e -p 'test_meteo.py' -v
 ```
@@ -339,3 +338,16 @@ which did not say why. One scenario each (ASCII comma for `recent`,
 Chinese comma for `trend`) failed against the unchanged application; both
 now reject the list with `invalid_argument`, a message to run once per
 region, and `details.regions`.
+
+## Removal of `recent`
+
+`recent` was removed together with `test_recent.py`, `recent_support.py`
+and `RECENT_SCENARIOS.md`; the entries above that mention it are history.
+Its daily regional satellite means averaged whichever cells were observed
+each day, so its window changes mixed spatial sampling with temporal change
+(安徽 NO2, 9/14–20 vs 9/21–27: −1.7% from daily means, −14% over cells
+valid in both weeks). Two CLI scenarios were written first and failed
+against the unchanged application: help no longer lists `recent`, and
+running it reports no such command. Its five CLI option scenarios were
+dropped with the command. The schema no longer allows a null `render` or
+`artifacts.image`, `daily_series`, or `temporal_summary`.

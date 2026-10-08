@@ -16,7 +16,6 @@ ENABLED = (
     "station",
     "trend",
     "meteo",
-    "recent",
     "fnr",
 )
 
@@ -37,7 +36,9 @@ class CliE2E(unittest.TestCase):
             if line.startswith("│ ") and line.strip("│ ")
         }
         self.assertTrue(set(ENABLED) <= listed, listed)
-        self.assertFalse({"forecast", "reconstruct"} & listed, listed)
+        self.assertFalse(
+            {"recent", "forecast", "reconstruct"} & listed, listed
+        )
 
     def test_user_cannot_run_the_disabled_forecast_command(self):
         """Given the CLI, when running forecast, then report no such command."""
@@ -46,6 +47,23 @@ class CliE2E(unittest.TestCase):
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("No such command", result.stdout + result.stderr)
+
+    def test_user_cannot_run_the_removed_recent_command(self):
+        """Given the CLI, when running recent, then report no such command."""
+        result = self.workspace.invoke(
+            "recent",
+            "FixtureCity",
+            "20260103",
+            "--days",
+            "3",
+            "--product",
+            "no2",
+            "--output",
+            str(self.workspace.output),
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("No such command", result.stdout + result.stderr)
+        self.assertFalse(self.workspace.output.parent.exists())
 
     def assert_no_such_option(self, *arguments: str) -> None:
         result = self.workspace.invoke(*arguments)
@@ -78,10 +96,6 @@ class CliE2E(unittest.TestCase):
     def test_user_sees_only_long_options_for_trend(self):
         """Given trend help, when reading options, then none is a letter."""
         self.assertEqual(self.short_options("trend"), [])
-
-    def test_user_sees_only_long_options_for_recent(self):
-        """Given recent help, when reading options, then none is a letter."""
-        self.assertEqual(self.short_options("recent"), [])
 
     def test_user_sees_only_long_options_for_fnr(self):
         """Given fnr help, when reading options, then none is a letter."""
@@ -213,32 +227,6 @@ class CliE2E(unittest.TestCase):
             "OUT",
         )
 
-    def test_user_must_give_recent_an_output(self):
-        """Given recent, when omitting --output, then exit 2 naming it."""
-        self.assert_missing_option(
-            "--output",
-            "recent",
-            "FixtureCity",
-            "20260101",
-            "--days",
-            "3",
-            "--product",
-            "no2",
-        )
-
-    def test_user_must_give_recent_a_day_count(self):
-        """Given recent, when omitting --days, then exit 2 naming it."""
-        self.assert_missing_option(
-            "--days",
-            "recent",
-            "FixtureCity",
-            "20260101",
-            "--product",
-            "no2",
-            "--output",
-            "OUT",
-        )
-
     def test_user_must_give_fnr_an_output(self):
         """Given fnr, when omitting --output, then exit 2 naming it."""
         self.assert_missing_option(
@@ -278,12 +266,6 @@ class CliE2E(unittest.TestCase):
         """Given trend, when passing --level, then reject the option."""
         self.assert_no_such_option(
             "trend", "FixtureCity", "20260101", "--region", "--level", "city"
-        )
-
-    def test_user_cannot_force_the_recent_region_level(self):
-        """Given recent, when passing --level, then reject the option."""
-        self.assert_no_such_option(
-            "recent", "FixtureCity", "20260101", "--level", "city"
         )
 
     def test_user_cannot_force_the_fnr_region_level(self):
@@ -433,18 +415,6 @@ class CliE2E(unittest.TestCase):
         self.assert_no_such_option(
             "trend",
             "S001A",
-            "20260101",
-            "--data-dir",
-            "/x",
-            "--output",
-            str(self.workspace.output),
-        )
-
-    def test_user_cannot_point_recent_at_a_data_folder(self):
-        """Given config paths, when passing --data-dir, then reject it."""
-        self.assert_no_such_option(
-            "recent",
-            "FixtureCity",
             "20260101",
             "--data-dir",
             "/x",

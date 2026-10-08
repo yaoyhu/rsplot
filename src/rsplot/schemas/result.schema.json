@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://git.lug.ustc.edu.cn/yaoyhu/rsplot/schemas/result.schema.json",
   "title": "rsplot result sidecar",
-  "description": "One envelope for every rsplot command, written only on success: next to the image, or alone for recent. Failures write no sidecar. rsplot_version identifies the producer; there is no separate format number. See docs/result-schema.md.",
+  "description": "One envelope for every rsplot command, written only on success, next to the image. Failures write no sidecar. rsplot_version identifies the producer; there is no separate format number. See docs/result-schema.md.",
   "type": "object",
   "required": [
     "command",
@@ -26,7 +26,6 @@
         "station",
         "trend",
         "meteo",
-        "recent",
         "fnr"
       ]
     },
@@ -47,10 +46,7 @@
     },
     "relations": {"$ref": "#/$defs/relations"},
     "quality": {"$ref": "#/$defs/quality"},
-    "render": {
-      "oneOf": [{"$ref": "#/$defs/render"}, {"type": "null"}],
-      "description": "Null for recent (no image)."
-    },
+    "render": {"$ref": "#/$defs/render"},
     "artifacts": {"$ref": "#/$defs/artifacts"}
   },
   "$defs": {
@@ -193,8 +189,7 @@
             "daily",
             "daily_scan_mean",
             "window_mean",
-            "hourly_series",
-            "daily_series"
+            "hourly_series"
           ]
         },
         "at": {
@@ -390,10 +385,6 @@
           "type": "object",
           "description": "Vector layers: resultant mean components and direction, component statistics, and the maximum-speed location."
         },
-        "temporal_summary": {
-          "type": "object",
-          "description": "Comparisons across the series, e.g. last_7 vs prev_7 windows, changes and a linear trend (recent)."
-        },
         "categories": {
           "type": "object",
           "description": "Counts per category band, e.g. AQI levels for AQI station layers.",
@@ -554,7 +545,7 @@
       "required": ["image", "sidecar", "data"],
       "additionalProperties": false,
       "properties": {
-        "image": {"type": ["string", "null"]},
+        "image": {"type": "string"},
         "sidecar": {"type": "string"},
         "data": {
           "type": "array",

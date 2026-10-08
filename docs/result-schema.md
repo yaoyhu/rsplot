@@ -46,14 +46,14 @@ file, and that release's shipped schema describes it.
 
 | Key | Meaning |
 | --- | --- |
-| `command` | `raster`, `radius`, `overlay`, `station`, `trend`, `meteo`, `recent`, `fnr`. |
+| `command` | `raster`, `radius`, `overlay`, `station`, `trend`, `meteo`, `fnr`. |
 | `rsplot_version`, `generated_at` | Package version and ISO 8601 time with offset. |
 | `request` | `argv` exactly as received, and `resolved`: every effective parameter as `{value, source, detail?}` where `source` is `cli`, `config`, `level_default`, `product_default` or `built_in`. |
 | `region` | `name`, `level`, `kind` (`administrative` or `station_radius`), `extent`, `members` (comma-selected regions), and for radius maps `radius` (`center_station`, `center_lon`, `center_lat`, `km`, `side_length_km`, `shape`, `projection`, `administrative_context`). `null` only for single-station trends. |
 | `layers` | One entry per data layer (below); never empty. |
 | `relations` | How layers relate: `time_matching` and `colocation`. `{}` for single-layer results. |
 | `quality` | `grade` and `flags` (below). |
-| `render` | Image settings actually used, per layer id. `null` for `recent` and failures. |
+| `render` | Image settings actually used, per layer id. |
 | `artifacts` | `image`, `sidecar`, and every `data` file with format, content, shape/rows and size in bytes. All paths are absolute. |
 | `error` | `null` on success; `{code, message, option?, details?}` on failure. |
 
@@ -74,7 +74,6 @@ Every layer has the same keys:
 | `exceedance` | Station layers with a standard: `threshold`, `operator` (`>`), `standard`, `count`, `fraction`. |
 | `vector_summary` | Vector layers: resultant `mean_u`, `mean_v`, `direction_to_deg`, `wind_from_deg`, component statistics and the maximum-speed location. |
 | `categories` | Counts per band where the variable has bands, e.g. AQI levels (优, 良, 轻度, 中度, 重度, 严重, 爆表). |
-| `temporal_summary` | Comparisons across a series (`recent`): `windows` (last/previous 7 and 30 days, last 365), `changes` between them, and the linear `trend`. |
 | `by_admin` | Statistics for every subdivision of the region, never truncated; may carry a `category` such as the dominant FNR regime. |
 | `by_member` | Comma-selected regions only (`raster`, `overlay`, `station`, `meteo`, `fnr`), from the same statistical data. A member without valid data keeps `n: 0` with null summaries (and a null FNR `category`). |
 | `extremes` | Highest cells or stations as a capped list: `items`, `total`, `truncated`, `order`. |
@@ -90,7 +89,6 @@ Commands map onto layers like this:
 | `station` | `station` (points) |
 | `trend` | `station` (series, station ID in `subject`, region `null`); region mode: `regional_mean` and `station` (series), all hours in the data file |
 | `meteo` | any of `temperature` (grid, degC), `wind` (vector_grid, speed statistics plus `vector_summary`), `station` (points, paired with `wind` by `same_hour`) |
-| `recent` | one daily `series` layer, `satellite` or `station`, with `temporal_summary`; no image, `render` null |
 | `fnr` | `no2` and `hcho` window means (grid), `fnr` (grid, unit 1) with regime counts in `categories`, masking rules and `mask_counts` in `method`, and dominant regimes per unit in `by_admin[].category` |
 
 ## Relations
@@ -152,7 +150,6 @@ source list is too long for JSON.
 | `vector_grid` | NetCDF4 | Same layout as `statistical_grid` with `value` = speed plus `u` and `v`. |
 | `station_table` | CSV | Overlay: every station read around the region with `id`, `lon`, `lat`, `admin`, `admin_level`, `value`, `valid`, `exceeds`, `in_region`, `satellite_value`, `colocated`. Radius: the stations in the square with the same columns plus `is_center`, `distance_km`, `dx_km`, `dy_km`; without `--station-var` only `id`, `lon`, `lat`, `admin`, `in_region` and the radius columns. |
 | `hourly_series` | NetCDF4 | `station_id`, `lon`, `lat` per station; `time` (CF hours since 1970-01-01 UTC) and `time_cst` (`YYYYMMDDHH` China time); `value(station, time)` with NaN gaps; region trends add `regional_mean(time)` and `n_stations(time)`. |
-| `daily_table` | CSV | `recent`: one row per requested day with `date`, `ok`, `value`, and `error`; satellite adds `n_valid`, `coverage_fraction`, `pixels`; station adds `hours` (hourly files read that day), `n_valid`, `n_stations`, `n_exceed` (stations above `method.daily_limit`). |
 | `source_manifest` | CSV | Every input file with status and failure reason. |
 
 **Size.** The JSON itself stays small (typically under 64 KB) because it never

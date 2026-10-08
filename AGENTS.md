@@ -16,7 +16,13 @@ rsplot = rsplot.__main__:app
 ```
 
 Primary CLI commands are `raster`, `radius`, `meteo`, `station`, `trend`,
-`overlay`, `recent`, and `fnr`.
+`overlay`, and `fnr`.
+`recent` was removed, not disabled: its daily regional satellite means
+mixed each day's observed area with temporal change, and its window
+comparisons did not match cells. Compare satellite periods from two
+`raster` window runs (same region and `--res` give the same grid; each
+`.satellite.nc` has `value`, `counted`, `valid_days`) over cells valid in
+both; do not reintroduce a regional mean-of-daily-means comparison.
 `forecast` and `reconstruct` are disabled: their Typer wrappers were removed
 from `cli.py`, so the CLI reports "No such command". Their modules under
 `commands/`, `readers/`, and `result_builders/` remain unchanged for later
@@ -69,16 +75,7 @@ remain gaps. Its result sidecar has one `station` series layer
 in `<name>.series.nc` (`value(station, time)`, `time` in UTC hours,
 `time_cst` labels, `regional_mean`, `n_stations`). Focus stations and the
 view are display settings under `render.layers.station`.
-The `recent` command writes JSON only (at `--output`, with `image` and
-`render` null) plus `<name>.daily.csv`; the other plotting commands write a PNG
-and a same-basename `.json` sidecar. Its sidecar layer is a daily
-`series` (`satellite` or `station`) with `temporal_summary` (window means,
-changes, trend). `--source station` summarizes each China-time day from all
-of its available hourly files (`recent.summarize_recent_station` via
-`read_region_station_series`): a station's day is the mean of its valid
-hours, the regional day the mean over those stations. The CSV `hours` column
-counts the hourly files read; `method.daily_limit` is the variable's daily
-standard (NO2 80), never the hourly one, or null when there is none.
+Every enabled command writes a PNG and a same-basename `.json` sidecar.
 
 ## CLI Conventions (Agent Contract)
 
@@ -105,9 +102,7 @@ introduce new code that violates them.
    with one valid day, nodata with none; `raster`, `overlay` and `radius`
    have no `--n-min` (sidecar `time.days.n_min` is 1), only `fnr` keeps
    one. Station observations are always one
-   concrete hour, never a temporal mean. The one exception is `recent
-   --source station`, whose daily value is explicitly the mean of all
-   available hours of that day.
+   concrete hour, never a temporal mean.
 5. **Variable naming.** `--var` selects what the command is about.
    `--station-var` selects the station variable drawn alongside another
    layer. Each command documents what happens without `--station-var`:
@@ -116,7 +111,6 @@ introduce new code that violates them.
    | --- | --- | --- |
    | `raster` | `--product` | no station layer option |
    | `station`, `trend` | `--var` | no station layer option |
-   | `recent` | `--product` (`--source raster`) or `--var` (`--source station`) | no station layer option |
    | `overlay` | `--product` | rejected; `--station-var` is required |
    | `radius` | `--product` | station locations only |
    | `meteo` | `--temp-level` / `--wind-level` | no station layer |
@@ -156,7 +150,7 @@ introduce new code that violates them.
    Counties are written `城市/区县`. `resolve_region(level_override=...)`
    remains only for the disabled `forecast`/`reconstruct` modules.
    Map commands (`raster`, `overlay`, `station`, `meteo`, `fnr`) accept
-   comma-separated regions; `recent` and `trend --region` reject them with
+   comma-separated regions; `trend --region` rejects them with
    `invalid_argument` (`commands.common.require_single_region`), because a
    merged regional mean would weight regions implicitly.
 
@@ -188,8 +182,6 @@ refactor.
 - `src/rsplot/plotting/`: Matplotlib/Cartopy renderers, styles, and colormaps.
 - `src/rsplot/fnr.py`: FNR window parsing, window means, FNR computation, and
   regime classification helpers.
-- `src/rsplot/recent.py`: daily summaries and window/trend comparisons
-  for `recent`.
 - `src/rsplot/results.py`: structured JSON sidecar builders and emitters.
 - `src/rsplot/tiles/tianditu.py`: TianDiTu tile provider for Cartopy.
 - `logs/`, `dist/`, `.venv/`, `.ruff_cache/`: local/generated artifacts.
@@ -303,7 +295,7 @@ subprocess E2E tests live in `tests/e2e/`: `RASTER_SCENARIOS.md` with
 `test_raster.py`, `OVERLAY_SCENARIOS.md` with `test_overlay.py`,
 `RADIUS_SCENARIOS.md` with `test_radius.py`, `STATION_SCENARIOS.md` with
 `test_station.py`, `TREND_SCENARIOS.md` with `test_trend.py`,
-`RECENT_SCENARIOS.md` with `test_recent.py`, `FNR_SCENARIOS.md` with
+`FNR_SCENARIOS.md` with
 `test_fnr.py`, `METEO_SCENARIOS.md` with `test_meteo.py`, and CLI-wide
 scenarios (the
 enabled command set) in `CLI_SCENARIOS.md` with `test_cli.py`. Run the
@@ -316,7 +308,6 @@ uv run python -B -m unittest discover -s tests/e2e -p 'test_overlay.py' -v
 uv run python -B -m unittest discover -s tests/e2e -p 'test_radius.py' -v
 uv run python -B -m unittest discover -s tests/e2e -p 'test_station.py' -v
 uv run python -B -m unittest discover -s tests/e2e -p 'test_trend.py' -v
-uv run python -B -m unittest discover -s tests/e2e -p 'test_recent.py' -v
 uv run python -B -m unittest discover -s tests/e2e -p 'test_fnr.py' -v
 uv run python -B -m unittest discover -s tests/e2e -p 'test_meteo.py' -v
 ```
@@ -345,7 +336,7 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
   functions.
 - Keep CLI commands as orchestration layers. Data reading belongs in
   `readers/`, gridding/masking in `geo/`, plotting in `plotting/`, and JSON
-  payload construction in `results.py` or `recent.py`.
+  payload construction in `result_builders/`.
 - Preserve lazy imports inside CLI command bodies unless there is a concrete
   reason to change startup behavior.
 - User-facing CLI text is largely Chinese. Keep existing tone and error style:
@@ -418,9 +409,9 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
 
 ## GEMS Integration
 
-- `raster`, `recent --source raster`, and `overlay` accept `--sensor gems`;
-  the default remains TROPOMI. `recent --source` retains raster/station semantics.
-  GEMS FNR and satellite trend analysis are outside the current scope.
+- `raster`, `radius`, and `overlay` accept `--sensor gems`; the default
+  remains TROPOMI. GEMS FNR and satellite trend analysis are outside the
+  current scope.
 - Product lookup is `get_product_info(product, sensor="gems")`. Preserve
   `PRODUCT_REGISTRY` and the default lookup for existing TROPOMI callers.
 - `readers/gems.py` reads NO2/HCHO from `Data Fields` / `Geolocation Fields`
@@ -445,7 +436,7 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
 - GEMS statistics use unfilled/unsmoothed region-masked grids. Display
   smoothing must restore the original valid mask. Preserve source versions,
   variables, cloud definitions, scan counts, failed files, and time provenance
-  in sidecars, including daily diagnostics in window and recent outputs.
+  in sidecars, including daily diagnostics in window outputs.
 - GEMS overlay accepts a 12-digit scan and pairs the nearest station hour
   (ties forward, <=30 minutes), with `--station-datetime` as an explicit
   local-hour override. An 8-digit daily mean requires `--station-datetime`;
@@ -485,7 +476,7 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
 - `geo/footprints.py` remaps valid native polygons using overlap areas in
   EPSG:6933. Empty/boundary-touch-only targets stay NaN. Average scans and
   then days with the existing equal-time weighting rules.
-- GEMS `raster`, `overlay`, and `recent` remap native footprints directly to
+- GEMS `raster`, `radius`, and `overlay` remap native footprints directly to
   the globally aligned target spacing selected by `--res`; the default is
   0.05° at every administrative level. There is no fixed intermediate grid.
   This is numerical spacing, not a claimed native satellite resolution.
@@ -502,7 +493,7 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
 ## Comma-Selected Regions
 
 - The map commands `raster`, `overlay`, `station`, `meteo` and `fnr` call
-  `resolve_regions`; `recent` and `trend --region` call
+  `resolve_regions`; `trend --region` calls
   `require_single_region` before `resolve_region`. Each member's
   `by_member` row uses its layer's own cell/station selection (meteo grids
   count border cells for both neighbours, like their `coverage`). FNR's

@@ -219,7 +219,7 @@ def success_envelope(
     region: RegionInfo | None,
     layers: list[dict],
     flags: list[dict],
-    render: dict | None,
+    render: dict,
     artifacts: dict,
     relations: dict | None = None,
     radius: dict[str, Any] | None = None,
