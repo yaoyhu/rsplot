@@ -29,8 +29,7 @@
         "aggregation": "daily",
         "start": "20260919",
         "end": "20260919",
-        "timezone": "UTC",
-        "basis": "filename_start_date_utc"
+        "basis": "calendar_day"
       },
       "source": {
         "sensor": "tropomi",
@@ -127,7 +126,6 @@
       "time": {
         "aggregation": "hourly",
         "at": "2026091913",
-        "timezone": "Asia/Shanghai",
         "basis": "station_hour"
       },
       "source": {
@@ -222,7 +220,7 @@
     "image": "/data/out/hefei_no2.png",
     "dpi": 300,
     "basemap": "none",
-    "title": "TROPOMI NO2 20260919 + Station NO2 2026091913 CST - 合肥市",
+    "title": "TROPOMI NO2 20260919 + Station NO2 2026091913 - 合肥市",
     "layers": {
       "satellite": {
         "cmap": "rsplot_22",

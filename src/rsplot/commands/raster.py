@@ -205,12 +205,11 @@ def prepare_raster(
     sensor = prod_info.sensor
     processing = prod_info.processing
     scan_mode = sensor == "gems" and len(date_arg) == 12
-    scan_time = None
     if scan_mode:
         from rsplot.readers.gems import parse_gems_time
 
         try:
-            scan_time = parse_gems_time(date_arg)
+            parse_gems_time(date_arg)
         except ValueError as error:
             raise RsplotError("invalid_time", str(error)) from error
         if days is not None:
@@ -506,9 +505,7 @@ def prepare_raster(
             f"{dates[0]}~{dates[-1]} mean"
             if window_mode
             else (
-                f"{date_arg} CST scan"
-                if scan_mode
-                else f"{date_arg} daily mean (CST)"
+                f"{date_arg} scan" if scan_mode else f"{date_arg} daily mean"
             )
         )
         title = f"GEMS {product.upper()} - {info.name} ({period})"
@@ -538,21 +535,11 @@ def prepare_raster(
     stat_grid = prepared.values if statistics_grid is None else statistics_grid
     counted = region_grid_mask(prepared.lon, prepared.lat, info.geometry)
     china = sensor == "gems"
-    basis = (
-        "asia_shanghai_calendar_day" if china else "filename_start_date_utc"
-    )
-    timezone_name = "Asia/Shanghai" if china else "UTC"
     if scan_mode:
-        from datetime import timezone
-
         time = {
             "aggregation": "scan",
             "at": date_arg,
-            "timezone": "Asia/Shanghai",
             "basis": "nominal_scan_time",
-            "archive_time_utc": scan_time.astimezone(timezone.utc).strftime(
-                "%Y%m%d%H%M"
-            ),
         }
     else:
         time = {
@@ -565,8 +552,7 @@ def prepare_raster(
             ),
             "start": dates[0],
             "end": dates[-1],
-            "timezone": timezone_name,
-            "basis": basis,
+            "basis": "calendar_day",
         }
     days_block = None
     if window_mode:

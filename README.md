@@ -179,8 +179,9 @@ rsplot trend 重庆 20260520 --days 7 --var O3 --region --output trend_chongqing
 # Plot only the regional mean and highlight one or more explicit stations.
 rsplot trend 重庆 20260520 --days 7 --var O3 --region --view mean \
   --focus-station 3347A --threshold 200 --output trend_chongqing_focus.png
-# Each trend also writes <name>.series.nc: value(station, time) with
-# time_cst labels, plus regional_mean and n_stations in region mode. The
+# Each trend also writes <name>.series.nc: value(station, time), whose
+# time decodes to the requested hours, plus regional_mean and n_stations
+# in region mode. The
 # sidecar's station (or regional_mean) layer adds `daily` rows (hours, mean,
 # min, max per China-time day) and 24 `diurnal` rows (mean per hour of day).
 
@@ -337,8 +338,8 @@ units; the map shows spatial juxtaposition, not a column-to-surface
 conversion.
 
 The sidecar has two layers. `satellite` is the same layer
-`raster` writes, with its period in `time` (TROPOMI dates are UTC filename
-dates, GEMS days are China-time days). `station` holds the station hour in
+`raster` writes, with its period in `time` (calendar days, like every rsplot
+time in China time). `station` holds the station hour in
 `time.at`, statistics over in-region stations, exceedances against the
 variable's limit, and per-district rows. Next to the image are
 `<name>.satellite.nc` and `<name>.station.csv`; the CSV lists every station

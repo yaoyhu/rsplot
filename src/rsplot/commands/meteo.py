@@ -95,12 +95,11 @@ def _emit_meteo(
     # Station observations and ERA5 share one explicit China-time hour; a
     # date-only input would have to pick a "latest" hour, which is forbidden.
     try:
-        hour = adapt_hourly_time(datetime_str, label="meteo 时次")
+        adapt_hourly_time(datetime_str, label="meteo 时次")
     except ValueError as error:
         raise RsplotError(
             "invalid_time",
-            "meteo 时次必须是北京时间 YYYYMMDDHH，不会自动选择最新小时。"
-            f" ({error})",
+            f"meteo 时次必须是 YYYYMMDDHH，不会自动选择最新小时。 ({error})",
         ) from error
     if station_var is not None and wind_level is None:
         raise RsplotError(
@@ -203,7 +202,7 @@ def _emit_meteo(
 
     use_data_dir = str(cfg.get_data_dir("era5"))
     console.print(f"\n[bold]读取 ERA5:[/bold] {use_data_dir}")
-    console.print(f"  输入时次: {datetime_str} (中国时间)")
+    console.print(f"  输入时次: {datetime_str}")
     field = wind = None
     try:
         if temp_level is not None:
@@ -244,11 +243,6 @@ def _emit_meteo(
         use_vmin, use_vmax = _temperature_range(
             field.values, vmin=vmin, vmax=vmax
         )
-    datetime_utc = (
-        field.datetime_utc if field is not None else wind.datetime_utc
-    )
-    console.print(f"  → ERA5 UTC 时次: [cyan]{datetime_utc}[/cyan]")
-
     use_title = title or _default_title(
         region=info.name,
         datetime_str=datetime_str,
@@ -264,9 +258,7 @@ def _emit_meteo(
     time = {
         "aggregation": "hourly",
         "at": datetime_str,
-        "timezone": "Asia/Shanghai",
         "basis": "era5_hour",
-        "archive_time_utc": hour.data_time.strftime("%Y%m%d%H"),
     }
     layers: list[dict[str, Any]] = []
     flags: list[dict[str, Any]] = []

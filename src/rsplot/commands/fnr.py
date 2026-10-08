@@ -262,8 +262,7 @@ def _emit_fnr(
         "aggregation": "window_mean",
         "start": dates[0],
         "end": dates[-1],
-        "timezone": "UTC",
-        "basis": "filename_start_date_utc",
+        "basis": "calendar_day",
     }
     product_method = {
         "qa_min_exclusive": use_qa,

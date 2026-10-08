@@ -17,6 +17,14 @@ the satellite maps, and `--var` for station and trend.
 Regions are named, never levelled: there is no `--level` option (see
 REGION_SCENARIOS.md).
 
+Every time is China time, so no output names a time zone (北京时间, 中国时间,
+中国标准时间, CST, UTC, `Asia/Shanghai`, a `timezone` key or a `_utc` key):
+not help text, console output, the error line, figure titles or sidecars.
+Every suite's success helper checks stdout and the sidecar, and the shared
+`assert_failed` checks the error output, so each scenario covers this rule.
+The one exception is meteo's missing ERA5 hour error, which still names
+the UTC archive hour it looked for.
+
 | Scenario | Given | When | Then |
 | --- | --- | --- | --- |
 | user sees only enabled commands | CLI is installed | Request top-level help | Help lists raster, radius, overlay, station, trend, meteo and fnr, and does not list recent, forecast or reconstruct |
@@ -45,6 +53,13 @@ REGION_SCENARIOS.md).
 | user sees only long options for trend | CLI is installed | Request `trend --help` | No single-letter option |
 | user sees only long options for fnr | CLI is installed | Request `fnr --help` | No single-letter option |
 | user sees only long options for meteo | CLI is installed | Request `meteo --help` | No single-letter option |
+| user reads raster help without time zones | CLI is installed | Request `raster --help` | The help names no time zone |
+| user reads overlay help without time zones | CLI is installed | Request `overlay --help` | The help names no time zone |
+| user reads radius help without time zones | CLI is installed | Request `radius --help` | The help names no time zone |
+| user reads station help without time zones | CLI is installed | Request `station --help` | The help names no time zone |
+| user reads trend help without time zones | CLI is installed | Request `trend --help` | The help names no time zone |
+| user reads fnr help without time zones | CLI is installed | Request `fnr --help` | The help names no time zone |
+| user reads meteo help without time zones | CLI is installed | Request `meteo --help` | The help names no time zone |
 | user cannot use a former alias | CLI is installed | Run `raster ... -o map.png` | Exit 2, "No such option", no output |
 | user must give raster an output | CLI is installed | Run `raster` without `--output` | Exit 2, "Missing option" naming `--output`, no output |
 | user must give raster a product | CLI is installed | Run `raster` without `--product` | Exit 2, "Missing option" naming `--product`, no output |
@@ -67,3 +82,4 @@ REGION_SCENARIOS.md).
 | user reads a failure from one error line | One swath | Map with --days 0 | Exit 1; stderr has exactly one `rsplot error invalid_argument --days: --days 必须 >= 1。` line; no files are left |
 | user keeps no stale sidecar after a failure | An earlier successful map at the same output | Map again with --days 0 | Exit 1; the earlier sidecar is gone |
 | user finds no format number in a sidecar | One swath | Map it | The sidecar has no `schema`, `status` or `error` key; it has `rsplot_version` |
+| user reads the generation time in Beijing time | One swath; the computer's time zone is America/New_York | Map it | The sidecar's `generated_at` ends in `+08:00` |

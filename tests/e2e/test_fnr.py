@@ -10,7 +10,7 @@ import numpy as np
 from fnr_support import FnrWorkspace
 from netCDF4 import Dataset
 from PIL import Image
-from raster_support import assert_failed, schema_errors
+from raster_support import assert_failed, schema_errors, zone_wording
 
 
 def layer(payload: dict, layer_id: str) -> dict:
@@ -39,6 +39,7 @@ class FnrE2E(unittest.TestCase):
         payload = self.workspace.payload()
         self.assertEqual(schema_errors(payload), [])
         self.assertEqual(payload["command"], "fnr")
+        self.assertEqual(zone_wording(result, payload), [])
         self.assertEqual(
             [item["id"] for item in payload["layers"]], ["no2", "hcho", "fnr"]
         )
@@ -69,7 +70,7 @@ class FnrE2E(unittest.TestCase):
         time = fnr["time"]
         self.assertEqual(
             [time["aggregation"], time["start"], time["end"], time["basis"]],
-            ["window_mean", "20260101", "20260103", "filename_start_date_utc"],
+            ["window_mean", "20260101", "20260103", "calendar_day"],
         )
 
     def test_user_counts_cells_per_regime(self):

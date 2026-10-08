@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
-from netCDF4 import Dataset
+from netCDF4 import Dataset, num2date
 from PIL import Image
-from raster_support import assert_failed, schema_errors
+from raster_support import assert_failed, schema_errors, zone_wording
 from trend_support import TrendWorkspace
 
 
@@ -36,6 +37,7 @@ class TrendE2E(unittest.TestCase):
         payload = self.workspace.payload()
         self.assertEqual(schema_errors(payload), [])
         self.assertEqual(payload["command"], "trend")
+        self.assertEqual(zone_wording(result, payload), [])
         return payload
 
     def assert_rejected(self, result, message, code, option=None):
@@ -67,7 +69,6 @@ class TrendE2E(unittest.TestCase):
                 "aggregation": "hourly_series",
                 "start": "20260101",
                 "end": "20260101",
-                "timezone": "Asia/Shanghai",
                 "basis": "station_hour",
             },
         )
@@ -78,9 +79,25 @@ class TrendE2E(unittest.TestCase):
         payload = self.assert_plot(self.workspace.trend("S001A", "20260101"))
         with self.series_file(payload, "station") as dataset:
             values = dataset["value"][:].filled(np.nan)
-            first_hour = str(dataset["time_cst"][0])
+            time = dataset["time"]
+            first_hour = num2date(
+                time[0],
+                time.units,
+                time.calendar,
+                only_use_cftime_datetimes=False,
+            )
         self.assertEqual(values.shape, (1, 24))
-        self.assertEqual([first_hour, float(values[0, 0])], ["2026010100", 10])
+        self.assertEqual(
+            [first_hour, float(values[0, 0])], [datetime(2026, 1, 1, 0), 10]
+        )
+
+    def test_user_finds_one_time_variable_in_the_series(self):
+        """Given 24 hours, when trending, then only `time` labels hours."""
+        self.workspace.write_hours("20260101")
+        payload = self.assert_plot(self.workspace.trend("S001A", "20260101"))
+        with self.series_file(payload, "station") as dataset:
+            names = set(dataset.variables)
+        self.assertEqual(["time" in names, "time_cst" in names], [True, False])
 
     def test_user_is_warned_about_missing_hours(self):
         """Given 12 of 24 hours, when trending, then flag the gap."""
@@ -325,6 +342,16 @@ class TrendE2E(unittest.TestCase):
             "invalid_argument",
             "--days",
         )
+
+    def test_user_s_time_axis_ignores_the_matplotlib_timezone(self):
+        """Given a Shanghai matplotlibrc, when trending, then no 8 h shift."""
+        self.workspace.write_hours("20260101")
+        self.assert_plot(self.workspace.trend("S001A", "20260101"))
+        default = np.asarray(Image.open(self.workspace.output))
+        self.workspace.set_matplotlib_timezone("Asia/Shanghai")
+        self.assert_plot(self.workspace.trend("S001A", "20260101"))
+        shanghai = np.asarray(Image.open(self.workspace.output))
+        np.testing.assert_array_equal(shanghai, default)
 
 
 if __name__ == "__main__":

@@ -54,7 +54,7 @@ def raster(
         metavar="DATE",
         help=(
             "TROPOMI: YYYYMMDD 按文件名日期合并当天轨道；"
-            "GEMS: 北京时间 YYYYMMDD 日均或 YYYYMMDDHHMM 精确扫描。"
+            "GEMS: YYYYMMDD 日均或 YYYYMMDDHHMM 精确扫描。"
             "两者均支持 YYYYMMDD-YYYYMMDD 闭区间，"
             "或结束日期 YYYYMMDD 配合 --days N，逐日等权平均。"
         ),
@@ -160,7 +160,7 @@ def radius(
     ),
     date_arg: str = typer.Argument(
         ...,
-        help="GEMS: 北京时间 YYYYMMDDHHMM 精确扫描，YYYYMMDD 日均；单日 YYYYMMDD 走单日路径；带 --days 或写成 YYYYMMDD-YYYYMMDD "
+        help="GEMS: YYYYMMDDHHMM 精确扫描，YYYYMMDD 日均；单日 YYYYMMDD 走单日路径；带 --days 或写成 YYYYMMDD-YYYYMMDD "
         "时切换为窗口均值（HCHO 单日覆盖率低，月均更可读）",
     ),
     # --- Required options ---
@@ -202,7 +202,7 @@ def radius(
     station_datetime: str | None = typer.Option(
         None,
         "--station-datetime",
-        help="站点北京时间 YYYYMMDDHH；日均/窗口叠加变量时必填，GEMS 扫描默认匹配最近整点",
+        help="站点小时 YYYYMMDDHH；日均/窗口叠加变量时必填，GEMS 扫描默认匹配最近整点",
     ),
     res: float | None = typer.Option(
         None,
@@ -269,7 +269,7 @@ def meteo(
     ),
     datetime_str: str = typer.Argument(
         ...,
-        help="中国时间 YYYYMMDDHH；不接受仅日期，不自动选择最新小时",
+        help="YYYYMMDDHH；不接受仅日期，不自动选择最新小时",
     ),
     # --- Required options ---
     output: str = typer.Option(
@@ -338,7 +338,7 @@ def meteo(
 ) -> None:
     """绘制温度、黑色风箭头及可选国控站点图层。
 
-    DATETIME 按中国标准时间解释并匹配 ERA5 UTC：
+    DATETIME 为 YYYYMMDDHH：
 
         rsplot meteo 南京 2026051115 --temp-level 2m
         rsplot meteo 南京 2026051115 --wind-level 850
@@ -374,7 +374,7 @@ def station(
     ),
     datetime_str: str = typer.Argument(
         ...,
-        help="北京时间 YYYYMMDDHH（必须指定小时，不自动选择最新小时）",
+        help="YYYYMMDDHH（必须指定小时，不自动选择最新小时）",
     ),
     # --- Required options ---
     var: str = typer.Option(
@@ -399,7 +399,7 @@ def station(
 ) -> None:
     """绘制国控站点污染物散点图。
 
-    时间必须为北京时间 YYYYMMDDHH；不接受仅日期或自动选择最新小时。
+    时间必须为 YYYYMMDDHH；不接受仅日期或自动选择最新小时。
 
     示例:
         rsplot station 安徽 2026041415
@@ -510,7 +510,7 @@ def overlay(
         metavar="DATE",
         help=(
             "卫星时间，与 raster 相同。TROPOMI: YYYYMMDD 按文件名日期合并"
-            "当天轨道；GEMS: 北京时间 YYYYMMDD 日均或 YYYYMMDDHHMM 精确扫描。"
+            "当天轨道；GEMS: YYYYMMDD 日均或 YYYYMMDDHHMM 精确扫描。"
             "两者均支持 YYYYMMDD-YYYYMMDD 闭区间，或结束日期 YYYYMMDD 配合"
             " --days N，逐日等权平均。"
         ),
@@ -552,7 +552,7 @@ def overlay(
         None,
         "--station-datetime",
         help=(
-            "站点观测小时，北京时间 YYYYMMDDHH。TROPOMI、GEMS 日均及窗口"
+            "站点观测小时 YYYYMMDDHH。TROPOMI、GEMS 日均及窗口"
             "均值必须指定；GEMS 精确扫描默认匹配最近整点，也可显式覆盖。"
             "不会自动选择最新小时。"
         ),
@@ -594,7 +594,7 @@ def overlay(
     """叠加绘制卫星栅格+国控站点图。
 
     两种数据同时输出到一张 PNG 和一个合并的 JSON sidecar。
-    DATE 只决定卫星时间；站点始终是一个北京时间整点，从不做时间平均。
+    DATE 只决定卫星时间；站点始终是一个整点，从不做时间平均。
 
     示例:
         rsplot overlay YRD  20260208 --product no2 --station-datetime 2026020813

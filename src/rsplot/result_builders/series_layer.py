@@ -23,7 +23,6 @@ def series_time(dates: list[str]) -> dict[str, Any]:
         "aggregation": "hourly_series",
         "start": dates[0],
         "end": dates[-1],
-        "timezone": "Asia/Shanghai",
         "basis": "station_hour",
     }
 

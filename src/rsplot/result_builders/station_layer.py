@@ -215,7 +215,6 @@ def build_station_layer(
         "time": {
             "aggregation": "hourly",
             "at": inputs.hour,
-            "timezone": "Asia/Shanghai",
             "basis": "station_hour",
         },
         "source": {

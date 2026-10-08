@@ -261,16 +261,16 @@ def _emit_radius(
             else "单日"
         )
         station_label = (
-            f"站点 {station_var} · {station_hour} 北京时间"
+            f"站点 {station_var} · {station_hour}"
             if station_var
-            else f"站点位置快照 · {station_hour} 北京时间"
+            else f"站点位置快照 · {station_hour}"
         )
         options["title"] = (
             f"{info.name}\n{source_label} {options['product'].upper()} "
-            f"· {pretty_period} {aggregation}（北京时间）\n{station_label}"
+            f"· {pretty_period} {aggregation}\n{station_label}"
         )
     console.print(
-        f"[bold]站点快照:[/bold] {locations.datetime} 北京时间，"
+        f"[bold]站点快照:[/bold] {locations.datetime}，"
         f"正方形范围内 {data.n_stations} 站"
     )
     run = prepare_raster(
@@ -372,7 +372,6 @@ def _emit_radius(
             "time": {
                 "aggregation": "hourly",
                 "at": locations.datetime,
-                "timezone": "Asia/Shanghai",
                 "basis": "station_hour",
             },
             "source": {

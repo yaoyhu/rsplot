@@ -314,6 +314,22 @@ def schema_errors(payload: dict) -> list[str]:
     ]
 
 
+# Every rsplot time is China time, so no output names a time zone: not the
+# console, the error line, the sidecar (titles included) or the help text.
+ZONE_WORDING = re.compile(
+    r"北京时间|中国时间|中国标准时间|\bCST\b|\bUTC\b|_utc\b|Asia/Shanghai"
+    r"|\btimezone\b"
+)
+
+
+def zone_wording(result, payload: dict | None = None) -> list[str]:
+    """Time-zone words in a run's console output and optional sidecar."""
+    text = result.stdout + result.stderr
+    if payload is not None:
+        text += json.dumps(payload, ensure_ascii=False)
+    return sorted(set(ZONE_WORDING.findall(text)))
+
+
 ERROR_LINE = re.compile(
     r"^rsplot error (?P<code>[a-z_]+)(?: (?P<option>--[a-z0-9-]+))?: "
     r"(?P<rest>.*)$"
@@ -349,13 +365,28 @@ def error_line(stderr: str) -> dict:
     }
 
 
-def assert_failed(case, workspace, result, message, code, option=ANY_OPTION):
-    """Check a rejected run: exit 1, one error line, no files left behind."""
+def assert_failed(
+    case,
+    workspace,
+    result,
+    message,
+    code,
+    option=ANY_OPTION,
+    *,
+    zone_free=True,
+):
+    """Check a rejected run: exit 1, one error line, no files left behind.
+
+    ``zone_free=False`` is only for the ERA5 missing-hour error, which keeps
+    naming the UTC archive hour it looked for.
+    """
     output = result.stdout + result.stderr
     case.assertEqual(result.returncode, 1, output)
     case.assertIn(message, result.stderr)
     error = error_line(result.stderr)
     case.assertEqual(error["code"], code, output)
+    if zone_free:
+        case.assertEqual(zone_wording(result), [], output)
     if option is not ANY_OPTION:
         case.assertEqual(error["option"], option, output)
     folder = workspace.output.parent

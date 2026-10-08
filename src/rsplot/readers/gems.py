@@ -32,7 +32,7 @@ FILE_RE = re.compile(r"^GK2_GEMS_L2_(\d{8})_(\d{4})_(NO2|HCHO|O3P)_.+\.nc$")
 def parse_gems_time(value: str) -> datetime:
     """Parse an exact nominal scan time in Asia/Shanghai."""
     if not value.isdigit() or len(value) != 12:
-        raise ValueError("GEMS 扫描时间应为北京时间 YYYYMMDDHHMM。")
+        raise ValueError("GEMS 扫描时间应为 YYYYMMDDHHMM。")
     try:
         return datetime.strptime(value, "%Y%m%d%H%M").replace(
             tzinfo=CHINA_TIME
@@ -59,7 +59,6 @@ def match_station_hour(
             "satellite_date": scan,
             "satellite_aggregation": "daily_mean",
             "station_datetime": hour,
-            "timezone": "Asia/Shanghai",
             "difference_minutes": None,
             "manual_override": True,
             "reference": "daily_mean_with_explicit_station_hour",
@@ -74,7 +73,6 @@ def match_station_hour(
     return hour, {
         "scan_datetime": scan,
         "station_datetime": hour,
-        "timezone": "Asia/Shanghai",
         "difference_minutes": (station - time).total_seconds() / 60,
         "manual_override": override is not None,
         "reference": "nominal_scan_time",
@@ -143,7 +141,7 @@ class GemsReader(BaseReader):
                 }
             )
             raise FileNotFoundError(
-                f"未找到 GEMS {request}；当日可用扫描（北京时间）: "
+                f"未找到 GEMS {request}；当日可用扫描: "
                 + (", ".join(available) or "无")
             )
         times = [time for _, time in selected]

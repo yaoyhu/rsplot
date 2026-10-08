@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 from overlay_support import OverlayWorkspace
 from PIL import Image
-from raster_support import assert_failed, schema_errors
+from raster_support import assert_failed, schema_errors, zone_wording
 
 SUPPORT_KEYS = ("valid", "total", "fraction")
 
@@ -42,6 +42,7 @@ class OverlayE2E(unittest.TestCase):
         payload = self.workspace.payload()
         self.assertEqual(schema_errors(payload), [])
         self.assertEqual(payload["command"], "overlay")
+        self.assertEqual(zone_wording(result, payload), [])
         self.assertEqual(
             [item["id"] for item in payload["layers"]],
             ["satellite", "station"],
@@ -322,12 +323,7 @@ class OverlayE2E(unittest.TestCase):
         time = layer(payload, "satellite")["time"]
         self.assertEqual(
             [time["aggregation"], time["start"], time["end"], time["basis"]],
-            [
-                "window_mean",
-                "20260101",
-                "20260102",
-                "filename_start_date_utc",
-            ],
+            ["window_mean", "20260101", "20260102", "calendar_day"],
         )
 
     def test_user_sees_how_a_gems_window_meets_its_station_hour(self):
@@ -347,7 +343,7 @@ class OverlayE2E(unittest.TestCase):
         )
         time = layer(payload, "satellite")["time"]
         self.assertEqual(time["aggregation"], "window_mean")
-        self.assertEqual(time["basis"], "asia_shanghai_calendar_day")
+        self.assertEqual(time["basis"], "calendar_day")
         self.assertIsNone(
             payload["relations"]["time_matching"]["difference_minutes"]
         )

@@ -10,6 +10,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 import numpy as np
 
@@ -22,6 +23,8 @@ STAT_KEYS = ("mean", "std", "min", "p10", "p25", "median", "p75", "p90")
 LOW_COVERAGE = 0.30
 VERY_LOW_COVERAGE = 0.10
 EXTREMES_LIMIT = 10
+# Sidecar times are China time whatever the host clock's zone is.
+CHINA_TIME = ZoneInfo("Asia/Shanghai")
 # Subdivision drawn inside each region level when none is configured.
 SUBDIVISION_LEVEL = {
     "country": "province",
@@ -191,7 +194,7 @@ def success_envelope(
     return {
         "command": command,
         "rsplot_version": rsplot_version(),
-        "generated_at": datetime.now().astimezone().isoformat("T", "seconds"),
+        "generated_at": datetime.now(CHINA_TIME).isoformat("T", "seconds"),
         "request": request,
         "region": None if region is None else region_block(region, radius),
         "layers": layers,

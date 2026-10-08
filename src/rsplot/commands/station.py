@@ -57,7 +57,7 @@ def _emit_station(
     except ValueError as error:
         raise RsplotError(
             "invalid_time",
-            "station 时间必须是有效的北京时间 YYYYMMDDHH"
+            "station 时间必须是有效的 YYYYMMDDHH"
             "（10 位数字，小时 00–23），如 2026041415；"
             "不支持仅日期 YYYYMMDD，也不会自动选择最新小时。",
         ) from error

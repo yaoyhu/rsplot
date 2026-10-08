@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 from radius_support import RadiusWorkspace
-from raster_support import assert_failed, schema_errors
+from raster_support import assert_failed, schema_errors, zone_wording
 
 HOUR = ("--station-datetime", "2026010113")
 VALUES = ("--station-var", "NO2", *HOUR)
@@ -46,6 +46,7 @@ class RadiusE2E(unittest.TestCase):
         payload = self.workspace.payload()
         self.assertEqual(schema_errors(payload), [])
         self.assertEqual(payload["command"], "radius")
+        self.assertEqual(zone_wording(result, payload), [])
         self.assertEqual(
             [item["id"] for item in payload["layers"]],
             ["satellite", "station"],
@@ -76,6 +77,17 @@ class RadiusE2E(unittest.TestCase):
         self.assertEqual(station["time"]["at"], "2026010113")
         self.assertEqual(station["coverage"]["total"], 2)
         self.assertEqual(station["stats"]["mean"], 60)
+
+    def test_user_reads_a_compact_radius_title(self):
+        """Given a day and hour, when mapping, then show compact dates."""
+        self.standard_inputs()
+        payload = self.assert_plot(self.workspace.radius("20260101", *VALUES))
+        self.assertEqual(
+            payload["render"]["title"],
+            "C001A 上下左右各 20 km\n"
+            "TROPOMI NO2 · 2026-01-01 单日\n"
+            "站点 NO2 · 2026-01-01 13:00",
+        )
 
     def test_user_maps_station_locations_only(self):
         """Given no station variable, when mapping, then show positions only."""

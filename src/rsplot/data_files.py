@@ -173,21 +173,16 @@ def write_series_netcdf(
 ) -> dict[str, Any]:
     """Write hourly station values as ``value(station, time)``.
 
-    ``time`` is CF hours since 1970-01-01 UTC; ``time_cst`` keeps the
-    China-time ``YYYYMMDDHH`` labels the CLI uses.
+    ``time`` counts China clock hours, like every rsplot time, so readers
+    decode it to the CLI's ``YYYYMMDDHH`` hours without a UTC shift.
     """
-    from datetime import datetime, timezone
-    from zoneinfo import ZoneInfo
+    from datetime import datetime
 
     from netCDF4 import Dataset
 
-    china = ZoneInfo("Asia/Shanghai")
-    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    epoch = datetime(1970, 1, 1)
     hours = [
-        (
-            datetime.strptime(stamp, "%Y%m%d%H").replace(tzinfo=china) - epoch
-        ).total_seconds()
-        / 3600
+        (datetime.strptime(stamp, "%Y%m%d%H") - epoch).total_seconds() / 3600
         for stamp in timestamps
     ]
     matrix = np.atleast_2d(np.asarray(values, dtype=np.float32))
@@ -215,10 +210,6 @@ def write_series_netcdf(
         time.setncattr("units", "hours since 1970-01-01 00:00:00")
         time.setncattr("calendar", "standard")
         time[:] = hours
-        labels = dataset.createVariable("time_cst", str, ("time",))
-        labels.setncattr("description", "Asia/Shanghai hour, YYYYMMDDHH")
-        for index, stamp in enumerate(timestamps):
-            labels[index] = stamp
         value = dataset.createVariable(
             "value",
             "f4",

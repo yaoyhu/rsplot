@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
@@ -23,6 +24,10 @@ _DISPLAY_UNITS = {
     "ug/m3": "μg/m³",
     "mg/m3": "mg/m³",
 }
+
+# Station hours are China time. Every date locator and formatter gets this
+# zone explicitly so a matplotlibrc ``timezone`` cannot shift the axis.
+CHINA_TIME = ZoneInfo("Asia/Shanghai")
 
 _FOCUS_COLORS = (
     "#e6550d",
@@ -44,10 +49,7 @@ def plot_station_trend(
     title: str | None = None,
 ) -> None:
     """Plot an hourly station series, preserving NaN gaps."""
-    times = [
-        datetime.strptime(timestamp, "%Y%m%d%H")
-        for timestamp in series.timestamps
-    ]
+    times = _china_hours(series.timestamps)
     width = min(16.0, max(10.0, 8.0 + series.n_hours / 96))
     fig, ax = plt.subplots(figsize=(width, 5.8), dpi=dpi)
     try:
@@ -125,10 +127,7 @@ def plot_region_station_trend(
     title: str | None = None,
 ) -> None:
     """Plot regional station context, mean, and explicit focus stations."""
-    times = [
-        datetime.strptime(timestamp, "%Y%m%d%H")
-        for timestamp in series.timestamps
-    ]
+    times = _china_hours(series.timestamps)
     time_values = mdates.date2num(times)
     width = min(16.0, max(10.0, 8.0 + series.n_hours / 96))
     fig, ax = plt.subplots(figsize=(width, 5.8), dpi=dpi)
@@ -293,28 +292,44 @@ def _background_segments(
     return segments
 
 
+def _china_hours(timestamps: list[str]) -> list[datetime]:
+    """Parse ``YYYYMMDDHH`` station labels as China-time instants."""
+    return [
+        datetime.strptime(timestamp, "%Y%m%d%H").replace(tzinfo=CHINA_TIME)
+        for timestamp in timestamps
+    ]
+
+
 def _configure_time_axis(ax: Axes, times: list[datetime]) -> None:
     """Choose readable ticks without Matplotlib's overlapping offset label."""
     span_hours = (times[-1] - times[0]).total_seconds() / 3600
     if span_hours <= 72:
-        ax.xaxis.set_major_locator(mdates.HourLocator(byhour=(0, 6, 12, 18)))
+        ax.xaxis.set_major_locator(
+            mdates.HourLocator(byhour=(0, 6, 12, 18), tz=CHINA_TIME)
+        )
         ax.xaxis.set_major_formatter(FuncFormatter(_format_hour_tick))
         return
 
     if span_hours <= 24 * 14:
         days = max(1, round(span_hours / 24))
         interval = max(1, round(days / 7))
-        ax.xaxis.set_major_locator(mdates.DayLocator(interval=interval))
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
+        ax.xaxis.set_major_locator(
+            mdates.DayLocator(interval=interval, tz=CHINA_TIME)
+        )
+        ax.xaxis.set_major_formatter(
+            mdates.DateFormatter("%m-%d", tz=CHINA_TIME)
+        )
         return
 
-    locator = mdates.AutoDateLocator(minticks=5, maxticks=10)
+    locator = mdates.AutoDateLocator(minticks=5, maxticks=10, tz=CHINA_TIME)
     ax.xaxis.set_major_locator(locator)
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
+    ax.xaxis.set_major_formatter(
+        mdates.DateFormatter("%Y-%m-%d", tz=CHINA_TIME)
+    )
 
 
 def _format_hour_tick(value: float, _position: int | None = None) -> str:
-    timestamp = mdates.num2date(value)
+    timestamp = mdates.num2date(value, tz=CHINA_TIME)
     if timestamp.hour == 0:
         return timestamp.strftime("%m-%d\n%H:%M")
     return timestamp.strftime("%H:%M")

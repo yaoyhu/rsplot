@@ -59,7 +59,7 @@ def resolve_station_hour(
         raise RsplotError(
             "invalid_argument",
             "卫星日均或窗口均值叠加站点时，必须通过 --station-datetime "
-            "YYYYMMDDHH（北京时间）指定一个站点小时；不会自动选择。",
+            "YYYYMMDDHH 指定一个站点小时；不会自动选择。",
             option="--station-datetime",
         )
     if scan_mode or (sensor == "gems" and not window_mode):
@@ -166,7 +166,7 @@ def _emit_overlay(
 
     use_station_dir = cfg.get_data_dir("guokong")
     console.print(f"\n[bold]读取站点数据:[/bold] {use_station_dir}")
-    console.print(f"  时间: {station_hour} 北京时间, 变量: {station_var}")
+    console.print(f"  时间: {station_hour}, 变量: {station_var}")
     read, _ = read_stations(
         use_station_dir,
         station_hour,
@@ -191,11 +191,11 @@ def _emit_overlay(
     else:
         period = date_arg
         if sensor == "gems":
-            period += " CST scan" if len(date_arg) == 12 else " CST daily mean"
+            period += " scan" if len(date_arg) == 12 else " daily mean"
     if title is None:
         title = (
             f"{source} {product.upper()} {period} + "
-            f"Station {station_var} {station_hour} CST - {info.name}"
+            f"Station {station_var} {station_hour} - {info.name}"
         )
 
     run = prepare_raster(

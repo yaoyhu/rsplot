@@ -18,7 +18,7 @@ outside.
 
 | Scenario | Given | When | Then |
 | --- | --- | --- | --- |
-| user maps temperature | 2 m temperature | Map with --temp-level 2m | A colored PNG; one `temperature` grid layer, mean 20 °C, hourly at 2026010113 Asia/Shanghai on the ERA5 hour basis with archive time 2026010105 UTC; no relations |
+| user maps temperature | 2 m temperature | Map with --temp-level 2m | A colored PNG; one `temperature` grid layer, mean 20 °C, hourly at 2026010113 on the ERA5 hour basis, with no time zone or archive time; no relations |
 | user maps temperature from older files | 2 m temperature whose time coordinate is named `time` | Map with --temp-level 2m | A PNG; `temperature` mean 20 °C |
 | user maps wind | 10 m wind | Map with --wind-level 10m | One `wind` vector_grid layer, mean speed 5 m/s; `vector_summary` gives wind from 216.9° |
 | user loads the wind grid | 10 m wind | Map with --wind-level 10m | The wind NetCDF holds `u` 3, `v` 4 and `value` (speed) 5 |

@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 from overlay_support import STATIONS
 from PIL import Image
-from raster_support import assert_failed, schema_errors
+from raster_support import assert_failed, schema_errors, zone_wording
 from station_support import StationWorkspace
 
 
@@ -40,6 +40,7 @@ class StationE2E(unittest.TestCase):
         payload = self.workspace.payload()
         self.assertEqual(schema_errors(payload), [])
         self.assertEqual(payload["command"], "station")
+        self.assertEqual(zone_wording(result, payload), [])
         self.assertEqual(
             [item["id"] for item in payload["layers"]], ["station"]
         )
@@ -63,7 +64,6 @@ class StationE2E(unittest.TestCase):
             {
                 "aggregation": "hourly",
                 "at": "2026010113",
-                "timezone": "Asia/Shanghai",
                 "basis": "station_hour",
             },
         )

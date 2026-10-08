@@ -14,7 +14,7 @@ JSON or data file.
 | Scenario | Given | When | Then |
 | --- | --- | --- | --- |
 | user understands raster dates | CLI is installed | Request raster help | Explain TROPOMI single-day orbit aggregation, trailing/inclusive windows, GEMS scans, and file output |
-| user plots one TROPOMI day | Two NO2 orbits on Jan 1 contain 2 and 4; Jan 2 contains 9 | Select Jan 1 | A colored PNG; time is a daily UTC filename date Jan 1; 2 source files; mean 3 |
+| user plots one TROPOMI day | Two NO2 orbits on Jan 1 contain 2 and 4; Jan 2 contains 9 | Select Jan 1 | A colored PNG; time is the calendar day Jan 1; 2 source files; mean 3 |
 | user counts the input files | Two NO2 orbits on Jan 1 | Select Jan 1 | `source` has the configured data root, sensor `tropomi`, processing `offl` and `files_total` 2, with no file list or manifest; the output folder holds only the PNG, JSON and satellite NetCDF |
 | user loads the statistical grid | Two NO2 orbits on Jan 1 contain 2 and 4 | Select Jan 1 | The NetCDF named by the layer's `data` exists, has nonzero size, and its mean over `counted` cells is 3 with as many counted cells as `coverage.total` |
 | user reads grouped products | Official PRODUCT-group NO2 input contains 4 | Plot that day | Mean 4 |
@@ -39,7 +39,7 @@ JSON or data file.
 | user reads a quoted title in the command line | Uniform NO2 input | Plot with --title "NO2 map" | `request` ends with `--title 'NO2 map'`; other arguments stay unquoted |
 | user reads the region bounding box | Uniform NO2 input | Plot FixtureCity | `region.bbox` is [117, 118, 31, 32]; there is no `extent` |
 | user selects multiple regions | Two adjacent fixture regions and uniform observations | Select comma-separated regions | Region has both members; the layer has two `by_member` rows |
-| user selects NRTI processing | Two versions of identical NRTI observations contain 2 and 4 | Plot with --processing nrti | Mean 4; processing `nrti`; 16 duplicates removed; UTC filename-date basis |
+| user selects NRTI processing | Two versions of identical NRTI observations contain 2 and 4 | Plot with --processing nrti | Mean 4; processing `nrti`; 16 duplicates removed; calendar-day basis |
 | user rejects competing window selectors | A valid archive | Supply a date range and --days together | Rejected with `invalid_argument` on option --days |
 | user rejects hourly TROPOMI input | A valid archive | Supply YYYYMMDDHH | Rejected with `invalid_time`, naming accepted date formats |
 | user rejects invalid calendar dates | A valid archive | Supply Feb 30 | Rejected with `invalid_time` |
@@ -49,7 +49,7 @@ JSON or data file.
 | user receives useful window coverage guidance | Observations exist only outside the selected region | Plot a one-day window | Rejected with `no_valid_data`; the message names the window and does not suggest a valid-day threshold |
 | user learns a region does not exist | A valid archive | Plot region "Atlantis" | Rejected with `region_not_found` |
 | user learns data is missing | Only Jan 2 data exists | Plot Jan 1 | Rejected with `data_not_found` |
-| user selects a GEMS scan in China time | UTC Jan 1 04:00 and 05:00 scans contain 2 and 6 | Select local Jan 1 12:00 | Mean 2; time is scan 202601011200 in Asia/Shanghai, nominal scan basis, archive time 202601010400 UTC; one scan found |
+| user selects a GEMS scan in China time | UTC Jan 1 04:00 and 05:00 scans contain 2 and 6 | Select local Jan 1 12:00 | Mean 2; time is scan 202601011200 on the nominal scan basis, with no time zone or archive time; one scan found |
 | user averages GEMS scans equally | Those two scans belong to the same China-time day | Select Jan 1 | Mean 4 from two valid scans; daily scan-mean aggregation |
 | user averages GEMS days equally | Jan 1 has scan values 2 and 6; Jan 2 has value 10 | Select Jan 2 with --days 2 | Mean 7, equal scans then equal days, China-time day basis |
 | user preserves GEMS statistics while styling | A GEMS scan contains value 6 | Change smoothing and DPI | Both PNGs are produced and statistics are identical |

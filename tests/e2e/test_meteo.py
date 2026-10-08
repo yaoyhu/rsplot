@@ -10,7 +10,7 @@ import numpy as np
 from meteo_support import MeteoWorkspace
 from netCDF4 import Dataset
 from PIL import Image
-from raster_support import assert_failed, schema_errors
+from raster_support import assert_failed, schema_errors, zone_wording
 
 HOUR = "2026010113"
 UTC = "2026010105"
@@ -33,6 +33,7 @@ class MeteoE2E(unittest.TestCase):
         payload = self.workspace.payload()
         self.assertEqual(schema_errors(payload), [])
         self.assertEqual(payload["command"], "meteo")
+        self.assertEqual(zone_wording(result, payload), [])
         self.assertEqual([item["id"] for item in payload["layers"]], layer_ids)
         return payload
 
@@ -57,9 +58,7 @@ class MeteoE2E(unittest.TestCase):
             {
                 "aggregation": "hourly",
                 "at": HOUR,
-                "timezone": "Asia/Shanghai",
                 "basis": "era5_hour",
-                "archive_time_utc": UTC,
             },
         )
         self.assertEqual(payload["relations"], {})
@@ -201,10 +200,13 @@ class MeteoE2E(unittest.TestCase):
     def test_user_learns_the_era5_hour_is_missing(self):
         """Given ERA5 for another hour, when mapping, then report it."""
         self.workspace.write_temperature("2026010106")
-        self.assert_rejected(
+        assert_failed(
+            self,
+            self.workspace,
             self.workspace.meteo(HOUR, "--temp-level", "2m"),
             "ERA5",
             "data_not_found",
+            zone_free=False,
         )
 
     def test_user_learns_the_station_hour_is_missing(self):

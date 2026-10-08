@@ -10,7 +10,12 @@ from pathlib import Path
 import numpy as np
 from netCDF4 import Dataset
 from PIL import Image
-from raster_support import RasterWorkspace, assert_failed, schema_errors
+from raster_support import (
+    RasterWorkspace,
+    assert_failed,
+    schema_errors,
+    zone_wording,
+)
 
 SUPPORT_KEYS = ("valid", "total", "fraction")
 
@@ -40,6 +45,7 @@ class RasterE2E(unittest.TestCase):
         payload = self.workspace.payload()
         self.assertEqual(schema_errors(payload), [])
         self.assertEqual(payload["command"], "raster")
+        self.assertEqual(zone_wording(result, payload), [])
         self.assertEqual(
             payload["artifacts"]["image"], str(self.workspace.output)
         )
@@ -76,8 +82,7 @@ class RasterE2E(unittest.TestCase):
                 "aggregation": "daily",
                 "start": "20260101",
                 "end": "20260101",
-                "timezone": "UTC",
-                "basis": "filename_start_date_utc",
+                "basis": "calendar_day",
             },
         )
         self.assertEqual(layer["source"]["files_total"], 2)
@@ -403,7 +408,7 @@ class RasterE2E(unittest.TestCase):
         self.assertEqual(layer["stats"]["mean"], 4)
         self.assertEqual(layer["source"]["processing"], "nrti")
         self.assertEqual(layer["method"]["duplicates_removed"], 16)
-        self.assertEqual(layer["time"]["basis"], "filename_start_date_utc")
+        self.assertEqual(layer["time"]["basis"], "calendar_day")
 
     def test_user_rejects_competing_window_selectors(self):
         """Given a range, when also supplying --days, then reject ambiguity."""
@@ -487,9 +492,7 @@ class RasterE2E(unittest.TestCase):
             {
                 "aggregation": "scan",
                 "at": "202601011200",
-                "timezone": "Asia/Shanghai",
                 "basis": "nominal_scan_time",
-                "archive_time_utc": "202601010400",
             },
         )
         self.assertEqual(layer["method"]["scans_found"], 1)
@@ -522,7 +525,7 @@ class RasterE2E(unittest.TestCase):
         self.assertEqual(layer["stats"]["mean"], 7)
         self.assertEqual(layer["method"]["scan_weighting"], "equal_scans")
         self.assertEqual(layer["method"]["day_weighting"], "equal_days")
-        self.assertEqual(layer["time"]["basis"], "asia_shanghai_calendar_day")
+        self.assertEqual(layer["time"]["basis"], "calendar_day")
 
     def test_user_preserves_gems_statistics_while_styling(self):
         """Given one scan, when changing display settings, then stats persist."""

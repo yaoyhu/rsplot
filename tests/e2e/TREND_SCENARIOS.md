@@ -15,8 +15,9 @@ S003A in `EastCity` reads 999. Requests use `--days 1 --var NO2`.
 
 | Scenario | Given | When | Then |
 | --- | --- | --- | --- |
-| user plots one station's hours | 24 hourly files | Trend S001A for Jan 1 | A PNG; no region; one `series` layer for station S001A, 24 of 24 hours valid, mean 21.5, hourly series on Jan 1 in Asia/Shanghai |
-| user loads the hourly series | 24 hourly files | Trend S001A | The series NetCDF holds 1 station × 24 hours, first hour 2026010100 with value 10 |
+| user plots one station's hours | 24 hourly files | Trend S001A for Jan 1 | A PNG; no region; one `series` layer for station S001A, 24 of 24 hours valid, mean 21.5, hourly series on Jan 1 with no time zone |
+| user loads the hourly series | 24 hourly files | Trend S001A | The series NetCDF holds 1 station × 24 hours; its `time` decodes to 2026-01-01 00:00 for the first hour, with value 10 |
+| user finds one time variable in the series | 24 hourly files | Trend S001A | The series NetCDF has `time` and no separate label variable such as `time_cst` |
 | user is warned about missing hours | Only hours 00–11 exist | Trend S001A | Coverage 12 of 24 hours; warning `missing_hours`; `quality` has no grade |
 | user overrides the exceedance threshold | 24 hourly files | Trend S001A with --threshold 30 | Exceedance threshold 30 counts 3 hours, standard says it came from --threshold |
 | user plots a regional trend | 24 hourly files | Trend FixtureCity with --region | Region FixtureCity; `regional_mean` layer with mean 26.5 over 24 hours; `station` layer with 2 stations |
@@ -36,6 +37,7 @@ S003A in `EastCity` reads 999. Requests use `--days 1 --var NO2`.
 | user names the window for a single date | 24 hourly files | Trend S001A 20260101 without --days | Rejected with `invalid_argument` on option --days |
 | user plots an explicit date range | 24 hourly files | Trend S001A 20260101-20260101 without --days | A PNG; the series runs from 20260101 to 20260101 |
 | user cannot combine a date range with days | 24 hourly files | Trend S001A 20260101-20260101 with --days 1 | Rejected with `invalid_argument` on option --days |
+| user's time axis ignores the matplotlib timezone | 24 hourly files; matplotlibrc sets `timezone: Asia/Shanghai` | Trend S001A | The PNG is pixel-identical to the default run: hour 00 is still drawn at 00:00, not shifted 8 hours |
 
 For suspected bugs, run the corresponding scenario against the unchanged
 application and record the failure before applying a fix.

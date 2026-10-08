@@ -143,7 +143,7 @@
 
     "time": {
       "type": "object",
-      "required": ["aggregation", "timezone", "basis"],
+      "required": ["aggregation", "basis"],
       "additionalProperties": false,
       "properties": {
         "aggregation": {
@@ -162,19 +162,13 @@
         },
         "start": {"$ref": "#/$defs/compactDate"},
         "end": {"$ref": "#/$defs/compactDate"},
-        "timezone": {"enum": ["UTC", "Asia/Shanghai"]},
         "basis": {
           "enum": [
-            "filename_start_date_utc",
-            "asia_shanghai_calendar_day",
+            "calendar_day",
             "nominal_scan_time",
             "station_hour",
             "era5_hour"
           ]
-        },
-        "archive_time_utc": {
-          "type": "string",
-          "description": "Matched UTC archive time when it differs from the input time (ERA5, GEMS)."
         },
         "days": {"$ref": "#/$defs/days"}
       }

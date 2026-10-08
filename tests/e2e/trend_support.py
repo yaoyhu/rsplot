@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from overlay_support import OverlayWorkspace
 
 
@@ -19,6 +21,12 @@ class TrendWorkspace(OverlayWorkspace):
                     ("S003A", 118.5, 31.5, 999.0),
                 ),
             )
+
+    def set_matplotlib_timezone(self, timezone: str) -> None:
+        """Write a matplotlibrc whose date timezone is ``timezone``."""
+        config = Path(self.env["MPLCONFIGDIR"])
+        config.mkdir(parents=True, exist_ok=True)
+        (config / "matplotlibrc").write_text(f"timezone: {timezone}\n")
 
     def trend(
         self, target: str, date: str, *options: str, days: str | None = "1"

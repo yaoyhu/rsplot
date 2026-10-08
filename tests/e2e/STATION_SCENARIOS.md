@@ -16,7 +16,7 @@ The station file for Jan 1 13:00 places two stations inside `FixtureCity`
 
 | Scenario | Given | When | Then |
 | --- | --- | --- | --- |
-| user maps one station hour | The Jan 1 13:00 station file | Map NO2 at 2026010113 | A colored PNG; station layer NO2 in ug/m3 at hour 2026010113 in Asia/Shanghai; mean 60 from 2 stations; no relations |
+| user maps one station hour | The Jan 1 13:00 station file | Map NO2 at 2026010113 | A colored PNG; station layer NO2 in ug/m3 at hour 2026010113 with no time zone; mean 60 from 2 stations; no relations |
 | user reads the station table | Same file | Map NO2 | The CSV lists all three stations read with values 40, 80, 999 and `in_region` 1, 1, 0, without satellite columns |
 | user counts exceedances only inside the region | The outside station's 999 exceeds the NO2 hourly limit | Map NO2 | Exceedance threshold 200, count 0 |
 | user sees AQI categories | Same file | Map AQI | `categories` counts one station as 优 and one as 良 |

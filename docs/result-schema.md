@@ -51,7 +51,7 @@ file, and that release's shipped schema describes it.
 | Key | Meaning |
 | --- | --- |
 | `command` | `raster`, `radius`, `overlay`, `station`, `trend`, `meteo`, `fnr`. |
-| `rsplot_version`, `generated_at` | Package version and ISO 8601 time with offset. |
+| `rsplot_version`, `generated_at` | Package version and ISO 8601 time in China time (`+08:00`), whatever the host clock's zone. |
 | `request` | The command as received, shell-quoted on one line, e.g. `rsplot raster 合肥市 20260919 --product no2 --output /abs/map.png`. |
 | `region` | `name`, `level`, `kind` (`administrative` or `station_radius`), `bbox` (`[lon_min, lon_max, lat_min, lat_max]`), `members` (comma-selected regions), and for radius maps `radius` (`center_station`, `center_lon`, `center_lat`, `km`, `side_length_km`, `shape`, `projection`, `administrative_context`). `null` only for single-station trends. |
 | `layers` | One entry per data layer (below); never empty. |
@@ -69,7 +69,7 @@ Every layer has the same keys:
 | `id` | Unique name within the sidecar (`satellite`, `station`, `temperature`, `wind`, `no2`, `hcho`, `fnr`, `regional_mean`, ...). |
 | `kind` | `grid`, `points`, `vector_grid` or `series`. |
 | `quantity` | `name`, `unit`, `scale` (stored × scale = value in `unit`), optional display `label`. |
-| `time` | `aggregation` (`scan`, `hourly`, `daily`, `daily_scan_mean`, `window_mean`, `hourly_series`), `at` or `start`/`end`, `timezone`, `basis`, optional `archive_time_utc`, and `days` for windows (`requested`, `found`, `failed`, `n_min`, `valid_days_per_cell`). `n_min` is the minimum valid days that keep a cell: always 1 for `raster`, `overlay` and `radius`, whose window means average each cell's valid days and leave cells without any as nodata; `fnr` records its `--n-min`. |
+| `time` | `aggregation` (`scan`, `hourly`, `daily`, `daily_scan_mean`, `window_mean`, `hourly_series`), `at` or `start`/`end`, `basis` (`calendar_day`, `nominal_scan_time`, `station_hour`, `era5_hour`); every time is China time and no time zone is named; and `days` for windows (`requested`, `found`, `failed`, `n_min`, `valid_days_per_cell`). `n_min` is the minimum valid days that keep a cell: always 1 for `raster`, `overlay` and `radius`, whose window means average each cell's valid days and leave cells without any as nodata; `fnr` records its `--n-min`. |
 | `source` | `sensor`, `processing` (`offl` or `nrti` for TROPOMI, `null` otherwise), `data_root`, `files_total` (files read; names are not listed), `failed_files` (relative name → reason), `versions`. |
 | `method` | Choices that change values: QA/cloud filters, grid spacing, gap filling, day weighting, smoothing, cell selection/weighting, pixels used. |
 | `coverage` | `valid`, `total`, `fraction` (0–1), `unit` (`cells`, `stations`, `hours`, `vectors`). |
@@ -148,7 +148,7 @@ anywhere; `source.data_root` and the archive layout locate them.
 | `statistical_grid` | NetCDF4 | `lat`, `lon` cell centres cropped to the region extent at the analysis spacing; `value` (float32, NaN = invalid, in stored units); `counted` (uint8, 1 = cell counts toward statistics); `valid_days` (int16, windows only); attributes for quantity, unit, scale, time and schema. |
 | `vector_grid` | NetCDF4 | Same layout as `statistical_grid` with `value` = speed plus `u` and `v`. |
 | `station_table` | CSV | Overlay: every station read around the region with `id`, `lon`, `lat`, `admin`, `admin_level`, `value`, `valid`, `exceeds`, `in_region`, `satellite_value`, `colocated`. Radius: the stations in the square with the same columns plus `is_center`, `distance_km`, `dx_km`, `dy_km`; without `--station-var` only `id`, `lon`, `lat`, `admin`, `in_region` and the radius columns. |
-| `hourly_series` | NetCDF4 | `station_id`, `lon`, `lat` per station; `time` (CF hours since 1970-01-01 UTC) and `time_cst` (`YYYYMMDDHH` China time); `value(station, time)` with NaN gaps; region trends add `regional_mean(time)` and `n_stations(time)`. |
+| `hourly_series` | NetCDF4 | `station_id`, `lon`, `lat` per station; `time` (hours since 1970-01-01 00:00:00 on the China clock, so it decodes to the CLI's hours); `value(station, time)` with NaN gaps; region trends add `regional_mean(time)` and `n_stations(time)`. |
 
 **Size.** The JSON itself stays small (typically under 64 KB) because it never
 holds arrays of values: grid values, all stations and series go to data

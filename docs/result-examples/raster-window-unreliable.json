@@ -28,8 +28,7 @@
         "aggregation": "window_mean",
         "start": "20260913",
         "end": "20260919",
-        "timezone": "UTC",
-        "basis": "filename_start_date_utc",
+        "basis": "calendar_day",
         "days": {
           "requested": 7,
           "found": 7,

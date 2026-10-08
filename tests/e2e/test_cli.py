@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from raster_support import RasterWorkspace, assert_failed
+from raster_support import RasterWorkspace, assert_failed, zone_wording
 
 ENABLED = (
     "raster",
@@ -104,6 +104,42 @@ class CliE2E(unittest.TestCase):
     def test_user_sees_only_long_options_for_meteo(self):
         """Given meteo help, when reading options, then none is a letter."""
         self.assertEqual(self.short_options("meteo"), [])
+
+    def help_zone_wording(self, command: str) -> list[str]:
+        """Time-zone words in a command's help, read on one wide line."""
+        # Wide output keeps Rich from wrapping a word across two lines.
+        self.workspace.env["COLUMNS"] = "1000"
+        result = self.workspace.invoke(command, "--help")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return zone_wording(result)
+
+    def test_user_reads_raster_help_without_time_zones(self):
+        """Given raster help, when reading times, then no zone is named."""
+        self.assertEqual(self.help_zone_wording("raster"), [])
+
+    def test_user_reads_overlay_help_without_time_zones(self):
+        """Given overlay help, when reading times, then no zone is named."""
+        self.assertEqual(self.help_zone_wording("overlay"), [])
+
+    def test_user_reads_radius_help_without_time_zones(self):
+        """Given radius help, when reading times, then no zone is named."""
+        self.assertEqual(self.help_zone_wording("radius"), [])
+
+    def test_user_reads_station_help_without_time_zones(self):
+        """Given station help, when reading times, then no zone is named."""
+        self.assertEqual(self.help_zone_wording("station"), [])
+
+    def test_user_reads_trend_help_without_time_zones(self):
+        """Given trend help, when reading times, then no zone is named."""
+        self.assertEqual(self.help_zone_wording("trend"), [])
+
+    def test_user_reads_fnr_help_without_time_zones(self):
+        """Given fnr help, when reading times, then no zone is named."""
+        self.assertEqual(self.help_zone_wording("fnr"), [])
+
+    def test_user_reads_meteo_help_without_time_zones(self):
+        """Given meteo help, when reading times, then no zone is named."""
+        self.assertEqual(self.help_zone_wording("meteo"), [])
 
     def test_user_cannot_use_a_former_alias(self):
         """Given raster, when passing -o, then reject it as unknown."""
@@ -519,6 +555,17 @@ class CliE2E(unittest.TestCase):
             [False, False, False],
         )
         self.assertIn("rsplot_version", payload)
+
+    def test_user_reads_the_generation_time_in_beijing_time(self):
+        """Given a New York clock, when mapping, then generated_at is +08."""
+        self.workspace.write_swath("20260101", 4)
+        self.workspace.env["TZ"] = "America/New_York"
+        result = self.workspace.raster("20260101")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertRegex(
+            self.workspace.payload()["generated_at"],
+            r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$",
+        )
 
     def test_user_cannot_run_the_disabled_reconstruct_command(self):
         """Given the CLI, when running reconstruct, then report no such command."""

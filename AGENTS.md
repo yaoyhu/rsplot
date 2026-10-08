@@ -72,8 +72,8 @@ stations, and `--view mean` hides the grey background lines. Missing hours
 remain gaps. Its result sidecar has one `station` series layer
 (single-station mode, `region: null`, station ID in `subject`) or
 `regional_mean` and `station` series layers (region mode); hourly values are
-in `<name>.series.nc` (`value(station, time)`, `time` in UTC hours,
-`time_cst` labels, `regional_mean`, `n_stations`). The single `station`
+in `<name>.series.nc` (`value(station, time)`, `time` in China clock
+hours with no UTC shift, `regional_mean`, `n_stations`). The single `station`
 and the `regional_mean` layers carry `daily` (per China-time day: valid
 hours, mean, min, max) and 24 `diurnal` rows (valid days and mean per hour
 of day), built by `result_builders.series_layer`. Focus stations and the
@@ -105,7 +105,12 @@ introduce new code that violates them.
    with one valid day, nodata with none; `raster`, `overlay` and `radius`
    have no `--n-min` (sidecar `time.days.n_min` is 1), only `fnr` keeps
    one. Station observations are always one
-   concrete hour, never a temporal mean.
+   concrete hour, never a temporal mean. Every time rsplot accepts or
+   reports is China time, so nothing names a time zone: help, console
+   output, error lines, figure titles and sidecars carry no 北京时间, CST,
+   UTC, `Asia/Shanghai`, `timezone` or `*_utc`; UTC archive lookups stay
+   internal. The one exception is meteo's missing ERA5 hour error, which
+   names the UTC hour it looked for. E2E helpers enforce this.
 5. **Variable naming.** `--var` selects what the command is about.
    `--station-var` selects the station variable drawn alongside another
    layer. Each command documents what happens without `--station-var`:
