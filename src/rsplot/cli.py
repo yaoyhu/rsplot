@@ -68,7 +68,7 @@ def raster(
     output: str = typer.Option(
         ...,
         "--output",
-        help="输出 PNG 路径，同时写同名 JSON",
+        help="输出 .png 文件路径（不能是目录），同时写同名 JSON",
     ),
     # --- Data selection and processing ---
     sensor: str = typer.Option(
@@ -177,7 +177,7 @@ def radius(
     output: str = typer.Option(
         ...,
         "--output",
-        help="输出 PNG 路径，同时写同名 JSON",
+        help="输出 .png 文件路径（不能是目录），同时写同名 JSON",
     ),
     # --- Data selection and processing ---
     sensor: str = typer.Option(
@@ -275,7 +275,7 @@ def meteo(
     output: str = typer.Option(
         ...,
         "--output",
-        help="输出 PNG 路径；同时写同名 JSON",
+        help="输出 .png 文件路径（不能是目录），同时写同名 JSON",
     ),
     # --- Data selection and processing ---
     temp_level: str | None = typer.Option(
@@ -385,7 +385,7 @@ def station(
     output: str = typer.Option(
         ...,
         "--output",
-        help="输出文件路径",
+        help="输出 .png 文件路径（不能是目录），同时写同名 JSON",
     ),
     # --- Data selection and processing ---
     # --- Plotting ---
@@ -439,7 +439,7 @@ def trend(
     output: str = typer.Option(
         ...,
         "--output",
-        help="PNG 输出文件路径",
+        help="输出 .png 文件路径（不能是目录），同时写同名 JSON",
     ),
     # --- Data selection and processing ---
     days: int | None = typer.Option(
@@ -529,7 +529,7 @@ def overlay(
     output: str = typer.Option(
         ...,
         "--output",
-        help="输出 PNG 路径，同时写同名 JSON",
+        help="输出 .png 文件路径（不能是目录），同时写同名 JSON",
     ),
     # --- Data selection and processing ---
     sensor: str = typer.Option(
@@ -642,7 +642,7 @@ def fnr(
     output: str = typer.Option(
         ...,
         "--output",
-        help="输出文件路径",
+        help="输出 .png 文件路径（不能是目录），同时写同名 JSON",
     ),
     # --- Data selection and processing ---
     processing: str | None = typer.Option(

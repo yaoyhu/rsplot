@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
@@ -13,6 +12,7 @@ import numpy as np
 from matplotlib.collections import LineCollection
 from matplotlib.ticker import FuncFormatter
 
+from rsplot.atomic import atomic_write
 from rsplot.readers.guokong import RegionStationSeries, StationSeries
 
 if TYPE_CHECKING:
@@ -107,9 +107,8 @@ def plot_station_trend(
         )
         _place_trend_legend(fig, ax)
 
-        path = Path(output)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(path, dpi=dpi, bbox_inches="tight")
+        with atomic_write(output) as temp:
+            fig.savefig(temp, dpi=dpi, bbox_inches="tight")
     finally:
         plt.close(fig)
 
@@ -239,9 +238,8 @@ def plot_region_station_trend(
         )
         _place_trend_legend(fig, ax)
 
-        path = Path(output)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(path, dpi=dpi, bbox_inches="tight")
+        with atomic_write(output) as temp:
+            fig.savefig(temp, dpi=dpi, bbox_inches="tight")
     finally:
         plt.close(fig)
 

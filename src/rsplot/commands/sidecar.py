@@ -1,8 +1,10 @@
 """Run a command that writes a result sidecar only when it succeeds.
 
-Successful runs write the image, data files and sidecar. A failure removes
-what the run already wrote, plus any sidecar an earlier run left at the same
-path, prints one ``rsplot error <code>[ <option>]: <message>[ <details>]``
+Successful runs write the data files, image and, last, the sidecar; each
+file appears whole, through a temporary name. A run first removes any
+sidecar an earlier run left at the same path, so a sidecar on disk always
+describes the image beside it. A failure removes what the run already wrote,
+prints one ``rsplot error <code>[ <option>]: <message>[ <details>]``
 line on stderr and exits 1.
 """
 
@@ -55,13 +57,33 @@ def run_with_sidecar(
 ) -> None:
     """Call ``emit(created)``; on failure clean up and report one error line.
 
-    ``emit`` appends every file it writes to ``created`` before writing it.
+    ``emit`` appends every file it writes to ``created`` before writing it,
+    writes each through ``atomic.atomic_write`` and writes the sidecar last.
     """
     from rsplot.result_builders.envelope import sidecar_path
 
     output = kwargs.get("output")
     created: list[Path] = []
+    cleanup_sidecar: Path | None = None
     try:
+        if output is None or Path(output).suffix.lower() != ".png":
+            raise RsplotError(
+                "invalid_argument",
+                "输出文件必须使用 .png 后缀。",
+                option="--output",
+            )
+        image = Path(output).resolve()
+        if image.is_dir() or image.suffix.lower() != ".png":
+            raise RsplotError(
+                "invalid_argument",
+                "输出路径必须指向 .png 文件，不能是目录。",
+                option="--output",
+            )
+        # Only a validated image path can own a sidecar to clean up. Remove
+        # an earlier run's sidecar first: if this run is killed, no sidecar
+        # is left to vouch for a new image.
+        cleanup_sidecar = Path(sidecar_path(str(image)))
+        cleanup_sidecar.unlink(missing_ok=True)
         emit(created)
     except typer.Exit:
         raise
@@ -69,8 +91,8 @@ def run_with_sidecar(
         coded = coded_error(error)
         for path in created:
             path.unlink(missing_ok=True)
-        if output is not None:
-            Path(sidecar_path(output)).unlink(missing_ok=True)
+        if cleanup_sidecar is not None:
+            cleanup_sidecar.unlink(missing_ok=True)
         print(error_line(coded), file=sys.stderr, flush=True)
         if coded.code == "internal_error":
             raise

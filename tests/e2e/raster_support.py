@@ -212,6 +212,15 @@ class RasterWorkspace:
                 ] = [0, 1, 2, 3]
         return path
 
+    def write_blocking_swath(self, date: str) -> Path:
+        """A FIFO named like a swath: reading it waits for a writer."""
+        path = self.data / (
+            f"S5P_OFFL_L2__NO2____{date}T040000_{date}T050000_"
+            f"00001_03_020600_{date}T120000.nc"
+        )
+        os.mkfifo(path)
+        return path
+
     def write_gems_scan(
         self, utc: str, value: float, *, product: str = "no2"
     ) -> None:
@@ -252,6 +261,27 @@ class RasterWorkspace:
             times[:] = (nominal - epoch).total_seconds()
 
     def invoke(self, *arguments: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            self.command(*arguments),
+            cwd=self.root,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+
+    def start(self, *arguments: str) -> subprocess.Popen:
+        """Start rsplot without waiting, for scenarios that interrupt it."""
+        return subprocess.Popen(
+            self.command(*arguments),
+            cwd=self.root,
+            env=self.env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    def command(self, *arguments: str) -> list[str]:
         command = [str(Path(sys.executable).with_name("rsplot"))]
         coverage_dir = os.environ.get("RSPLOT_E2E_COVERAGE_DIR")
         if coverage_dir:
@@ -267,15 +297,7 @@ class RasterWorkspace:
                 "--source=rsplot",
                 *command,
             ]
-        return subprocess.run(
-            [*command, *arguments],
-            cwd=self.root,
-            env=self.env,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
-        )
+        return [*command, *arguments]
 
     def raster(
         self, date: str, *options: str, region: str = "FixtureCity"

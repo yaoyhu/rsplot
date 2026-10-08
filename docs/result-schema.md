@@ -172,9 +172,11 @@ rsplot error <code>[ <option>]: <message>[ <details as one-line JSON>]
 rsplot error region_ambiguous: 区域名 '吉林' 同时匹配 吉林省（省级）和 吉林市（市级），请写全称。 {"region": "吉林", "candidates": ["吉林省", "吉林市"]}
 ```
 
-It writes no sidecar, removes the PNG and data files it had written, and
-removes a sidecar an earlier run left at the same path, so a sidecar on disk
-always describes a successful run. Codes:
+It writes no sidecar and removes the PNG and data files it had written.
+Every run first removes a sidecar an earlier run left at the same path,
+writes each file whole through a temporary name, and writes the sidecar
+last, so a sidecar on disk always describes the successful run that wrote
+the image beside it, even when a run is killed. Codes:
 
 | Code | Meaning |
 | --- | --- |

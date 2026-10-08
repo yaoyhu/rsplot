@@ -223,8 +223,9 @@ def _jsonable(value: Any) -> Any:
 
 
 def write_sidecar(payload: dict[str, Any], path: str) -> str:
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as file:
+    from rsplot.atomic import atomic_write
+
+    with atomic_write(path) as temp, open(temp, "w", encoding="utf-8") as file:
         json.dump(
             _jsonable(payload),
             file,

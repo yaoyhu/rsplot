@@ -17,6 +17,9 @@ the satellite maps, and `--var` for station and trend.
 Regions are named, never levelled: there is no `--level` option (see
 REGION_SCENARIOS.md).
 
+`--output` must name a `.png` file (case-insensitive), never a directory;
+on success, `artifacts.image` names the actual file written.
+
 Every time is China time, so no output names a time zone (北京时间, 中国时间,
 中国标准时间, CST, UTC, `Asia/Shanghai`, a `timezone` key or a `_utc` key):
 not help text, console output, the error line, figure titles or sidecars.
@@ -27,6 +30,8 @@ the UTC archive hour it looked for.
 
 | Scenario | Given | When | Then |
 | --- | --- | --- | --- |
+| user must supply a valid PNG output | Any enabled command | Pass an empty path, a non-PNG filename or a directory | Exit 1 with one `invalid_argument --output` line before data access; create no artifacts and preserve existing files |
+| user never finds an old sidecar after a killed run | An old sidecar at the output path | Kill a raster run while it reads its data | The old sidecar is gone: a sidecar on disk always describes the image beside it |
 | user sees only enabled commands | CLI is installed | Request top-level help | Help lists raster, radius, overlay, station, trend, meteo and fnr, and does not list recent, forecast or reconstruct |
 | user cannot run the disabled forecast command | CLI is installed | Run `forecast` with plausible arguments | Nonzero exit reporting no such command |
 | user cannot run the disabled reconstruct command | CLI is installed | Run `reconstruct` with plausible arguments | Nonzero exit reporting no such command |

@@ -147,9 +147,11 @@ introduce new code that violates them.
 7. **Failures are one stderr line.** Raise `rsplot.errors.RsplotError` with
    a code from `errors.ERROR_CODES`. `commands.sidecar.run_with_sidecar`
    then exits 1 and prints exactly one `rsplot error <code>[ <option>]:
-   <message>[ <details JSON>]` line on stderr; it writes no JSON, removes the
-   PNG/data files already written and any sidecar an earlier run left at the
-   same path.
+   <message>[ <details JSON>]` line on stderr; it writes no JSON and removes
+   the PNG/data files already written. Every run first deletes any sidecar
+   an earlier run left at the same path, writes each file through a
+   temporary name (`atomic.atomic_write`) and writes the sidecar last, so
+   even a killed run never leaves an old sidecar beside a new image.
 8. **Display options stay.** `--dpi`, `--cmap`, `--vmin`/`--vmax`,
    `--title`, `--basemap`, `--smooth`, and wind styling only change the
    image. The JSON records the values actually used, and they never change
@@ -412,7 +414,9 @@ This writes generated artifacts under `dist/`; do not hand-edit them.
   error line and removes partial outputs on failure.
 - `--output` is required by every enabled command; there are no default
   output paths. Typer rejects a missing required option with exit 2 before
-  rsplot runs, so no sidecar is written for it.
+  rsplot runs, so no sidecar is written for it. `run_with_sidecar` rejects
+  a path without a `.png` suffix, or a directory, with `invalid_argument
+  --output` before reading data.
 - ERA5 files are indexed in UTC. `meteo` input and station hours are fixed to
   `Asia/Shanghai`, and rsplot converts that hour to the matching ERA5 UTC
   archive time.

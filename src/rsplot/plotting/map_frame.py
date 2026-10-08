@@ -9,7 +9,6 @@ draw order stays explicit.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import cartopy.crs as ccrs
@@ -346,8 +345,10 @@ def finalize_map_figure(
         fig.tight_layout(rect=layout_rect)
 
     if output:
-        Path(output).parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(output, dpi=dpi, bbox_inches="tight")
+        from rsplot.atomic import atomic_write
+
+        with atomic_write(output) as temp:
+            fig.savefig(temp, dpi=dpi, bbox_inches="tight")
         plt.close(fig)
     else:
         plt.show()

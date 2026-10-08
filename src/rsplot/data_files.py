@@ -7,6 +7,7 @@ from typing import Any
 
 import numpy as np
 
+from rsplot.atomic import atomic_write
 from rsplot.result_builders.envelope import rsplot_version
 
 
@@ -52,8 +53,10 @@ def write_grid_netcdf(
     )
     window = np.ix_(rows, columns)
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with Dataset(path, "w", format="NETCDF4") as dataset:
+    with (
+        atomic_write(path) as temp,
+        Dataset(temp, "w", format="NETCDF4") as dataset,
+    ):
         # setncattr: netCDF4 reserves some Python attribute names.
         dataset.setncattr("rsplot_version", rsplot_version())
         dataset.setncattr("layer", layer)
@@ -135,8 +138,10 @@ def write_table_csv(
     """Write one CSV row per item; floats use ``format_number``."""
     import csv
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8", newline="") as handle:
+    with (
+        atomic_write(path) as temp,
+        open(temp, "w", encoding="utf-8", newline="") as handle,
+    ):
         writer = csv.writer(handle)
         writer.writerow(columns)
         for row in rows:
@@ -186,8 +191,10 @@ def write_series_netcdf(
         for stamp in timestamps
     ]
     matrix = np.atleast_2d(np.asarray(values, dtype=np.float32))
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with Dataset(path, "w", format="NETCDF4") as dataset:
+    with (
+        atomic_write(path) as temp,
+        Dataset(temp, "w", format="NETCDF4") as dataset,
+    ):
         dataset.setncattr("rsplot_version", rsplot_version())
         dataset.setncattr("layer", layer)
         for key, value in attrs.items():
