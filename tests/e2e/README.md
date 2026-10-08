@@ -351,3 +351,19 @@ against the unchanged application: help no longer lists `recent`, and
 running it reports no such command. Its five CLI option scenarios were
 dropped with the command. The schema no longer allows a null `render` or
 `artifacts.image`, `daily_series`, or `temporal_summary`.
+
+## Evidence-only sidecars
+
+Sidecars carried judgements as prose (`quality.flags[].message`, an overall
+`quality.grade`), flags that only restated fields (`column_vs_surface`,
+`daily_vs_hourly`, `manual_time_override`, `values_smoothed`), input file
+lists with a `.sources.csv` manifest, and a per-option `request.resolved`
+block. The raster, overlay, radius, station, trend and region scenarios
+were rewritten first: flags are exactly `{code, severity, layer, evidence}`
+with measured counts and the threshold, `source` counts files without
+listing them, `request` is the command on one line (quoting only
+shell-special arguments, so Chinese names stay as typed), `region.bbox`
+replaces `extent`, overlay station `extremes` carry the colocated
+`satellite_value`, and trend series add `daily` and `diurnal` rows. Against
+the unchanged application all 21 changed scenarios and the new
+Chinese-command-line scenario failed.

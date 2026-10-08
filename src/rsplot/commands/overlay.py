@@ -19,28 +19,6 @@ if TYPE_CHECKING:
     from rich.console import Console
 
 
-# Keyword argument -> CLI spellings, for recording where values came from.
-OVERLAY_OPTIONS = {
-    "sensor": ("--sensor",),
-    "processing": ("--processing",),
-    "product": ("--product",),
-    "days": ("--days",),
-    "station_datetime": ("--station-datetime",),
-    "station_var": ("--station-var",),
-    "output": ("--output",),
-    "dpi": ("--dpi",),
-    "res": ("--res",),
-    "basemap": ("--basemap",),
-    "vmin": ("--vmin",),
-    "vmax": ("--vmax",),
-    "cmap": ("--cmap",),
-    "smooth": ("--smooth",),
-    "qa": ("--qa",),
-    "cf": ("--cf",),
-    "title": ("--title",),
-}
-
-
 def resolve_station_hour(
     date_arg: str,
     sensor: str,
@@ -142,10 +120,9 @@ def _emit_overlay(
     from rsplot.geo.boundaries import resolve_regions
     from rsplot.geo.processing import buffered_extent
     from rsplot.plotting.overlay import plot_overlay
-    from rsplot.readers.guokong import read_stations, resolve_station_file
+    from rsplot.readers.guokong import read_stations
     from rsplot.result_builders.envelope import (
-        request_block,
-        resolved,
+        command_line,
         sidecar_path,
         success_envelope,
         write_sidecar,
@@ -157,7 +134,6 @@ def _emit_overlay(
         StationInputs,
         build_station_layer,
         colocation_block,
-        comparison_flags,
         satellite_at_stations,
     )
 
@@ -280,7 +256,6 @@ def _emit_overlay(
         ),
         hour=station_hour,
         data_root=str(use_station_dir),
-        source_file=resolve_station_file(use_station_dir, station_hour).name,
     )
     admin_gdf = (
         info.sub_boundary_gdf
@@ -329,21 +304,7 @@ def _emit_overlay(
     )
 
     satellite_layer, satellite_flags = build_satellite_layer(
-        satellite_inputs, info, data=grid_entry["path"], files_manifest=None
-    )
-    relation_flags = comparison_flags(
-        matching, satellite_layer["time"], station_hour
-    )
-
-    request = dict(run.resolved)
-    request.pop("data_dir", None)
-    request["raster_dir"] = resolved(satellite_inputs.data_root, "config")
-    request["station_dir"] = resolved(str(use_station_dir), "config")
-    request["station_var"] = resolved(station_var, "cli")
-    request["station_datetime"] = (
-        resolved(station_hour, "cli")
-        if station_datetime is not None
-        else resolved(station_hour, "built_in", "nearest scan hour")
+        satellite_inputs, info, data=grid_entry["path"]
     )
     station_display = build_station_display(region_stations) or {
         "range_method": "data_p5_p95"
@@ -358,14 +319,14 @@ def _emit_overlay(
     }
     payload = success_envelope(
         command="overlay",
-        request=request_block(request),
+        request=command_line(),
         region=info,
         layers=[satellite_layer, station_layer],
         relations={
             "time_matching": matching,
             "colocation": colocation_block(rows, str(station_path)),
         },
-        flags=satellite_flags + station_flags + relation_flags,
+        flags=satellite_flags + station_flags,
         render=render,
         artifacts={
             "image": image,

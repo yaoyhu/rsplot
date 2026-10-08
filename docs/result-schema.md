@@ -12,11 +12,12 @@ reproduce it, and where the full data is. Humans read the PNG and stdout.
   (JSON Schema 2020-12, shipped inside the package).
 - Examples, all valid against the schema:
   - [`overlay-tropomi-day.json`](result-examples/overlay-tropomi-day.json):
-    two layers, time matching, colocation, informational flags.
+    two layers, time matching and colocation.
   - [`raster-window-unreliable.json`](result-examples/raster-window-unreliable.json):
-    a sparse Hefei 7-day window with 2.9 % coverage, graded `unreliable`.
+    a sparse Hefei 7-day window with 2.9 % coverage and a critical
+    `very_low_coverage` flag.
 
-  Examples abbreviate long lists (`files`, `by_admin`, `extremes`).
+  Examples abbreviate long lists (`by_admin`, `extremes`).
 
 This is a clean break from the old sidecars: no legacy keys are kept. There
 is no format number; `rsplot_version` identifies the release that wrote the
@@ -29,13 +30,16 @@ file, and that release's shipped schema describes it.
    and what `kind` they are. An agent needs one parser.
 2. **Numbers are numbers.** Units are machine-readable (`unit` + `scale`), never
    parsed from display labels. Missing values are `null`, never `NaN`.
-3. **Say how much to trust it.** `quality` grades every result and explains
-   why with coded flags. A mean over 35 cells must not look like a mean over
-   800.
+3. **Evidence, not verdicts.** The sidecar holds numbers measured from the
+   data. `quality.flags` name documented conditions with the counts and
+   threshold that raised them; there is no prose message and no overall
+   grade, so the agent draws its own conclusion. A mean over 35 cells must
+   not look like a mean over 800.
 4. **Point to the full data.** Summaries stay in JSON; complete grids, station
    tables and series go into data files next to the image.
-5. **Reproducible.** `request` records the exact arguments and every effective
-   parameter with where it came from; `source` records every input file.
+5. **Reproducible.** `request` is the command line; every effective value
+   that changes the numbers is in `layers[].method`, and `source` records the
+   data root and how many files were read (no file lists).
 6. **Science and display are separate.** Everything that changes values lives
    in `layers[].method`; everything that only changes the picture lives in
    `render`.
@@ -48,14 +52,13 @@ file, and that release's shipped schema describes it.
 | --- | --- |
 | `command` | `raster`, `radius`, `overlay`, `station`, `trend`, `meteo`, `fnr`. |
 | `rsplot_version`, `generated_at` | Package version and ISO 8601 time with offset. |
-| `request` | `argv` exactly as received, and `resolved`: every effective parameter as `{value, source, detail?}` where `source` is `cli`, `config`, `level_default`, `product_default` or `built_in`. |
-| `region` | `name`, `level`, `kind` (`administrative` or `station_radius`), `extent`, `members` (comma-selected regions), and for radius maps `radius` (`center_station`, `center_lon`, `center_lat`, `km`, `side_length_km`, `shape`, `projection`, `administrative_context`). `null` only for single-station trends. |
+| `request` | The command as received, shell-quoted on one line, e.g. `rsplot raster 合肥市 20260919 --product no2 --output /abs/map.png`. |
+| `region` | `name`, `level`, `kind` (`administrative` or `station_radius`), `bbox` (`[lon_min, lon_max, lat_min, lat_max]`), `members` (comma-selected regions), and for radius maps `radius` (`center_station`, `center_lon`, `center_lat`, `km`, `side_length_km`, `shape`, `projection`, `administrative_context`). `null` only for single-station trends. |
 | `layers` | One entry per data layer (below); never empty. |
 | `relations` | How layers relate: `time_matching` and `colocation`. `{}` for single-layer results. |
-| `quality` | `grade` and `flags` (below). |
+| `quality` | `flags` (below); `[]` when no condition was met. |
 | `render` | Image settings actually used, per layer id. |
 | `artifacts` | `image`, `sidecar`, and every `data` file with format, content, shape/rows and size in bytes. All paths are absolute. |
-| `error` | `null` on success; `{code, message, option?, details?}` on failure. |
 
 ## Layers
 
@@ -67,16 +70,18 @@ Every layer has the same keys:
 | `kind` | `grid`, `points`, `vector_grid` or `series`. |
 | `quantity` | `name`, `unit`, `scale` (stored × scale = value in `unit`), optional display `label`. |
 | `time` | `aggregation` (`scan`, `hourly`, `daily`, `daily_scan_mean`, `window_mean`, `hourly_series`), `at` or `start`/`end`, `timezone`, `basis`, optional `archive_time_utc`, and `days` for windows (`requested`, `found`, `failed`, `n_min`, `valid_days_per_cell`). `n_min` is the minimum valid days that keep a cell: always 1 for `raster`, `overlay` and `radius`, whose window means average each cell's valid days and leave cells without any as nodata; `fnr` records its `--n-min`. |
-| `source` | `sensor`, `processing` (`offl` or `nrti` for TROPOMI, `null` otherwise), `data_root`, `files` (relative to `data_root`, sorted, at most 200), `files_total`, `files_manifest` (absolute path of a CSV of all files when there are more than 200), `failed_files`, `versions`. |
+| `source` | `sensor`, `processing` (`offl` or `nrti` for TROPOMI, `null` otherwise), `data_root`, `files_total` (files read; names are not listed), `failed_files` (relative name → reason), `versions`. |
 | `method` | Choices that change values: QA/cloud filters, grid spacing, gap filling, day weighting, smoothing, cell selection/weighting, pixels used. |
 | `coverage` | `valid`, `total`, `fraction` (0–1), `unit` (`cells`, `stations`, `hours`, `vectors`). |
 | `stats` | `n`, `mean`, `std`, `min`, `p10`, `p25`, `median`, `p75`, `p90`, `max` over the statistical support. |
 | `exceedance` | Station layers with a standard: `threshold`, `operator` (`>`), `standard`, `count`, `fraction`. |
 | `vector_summary` | Vector layers: resultant `mean_u`, `mean_v`, `direction_to_deg`, `wind_from_deg`, component statistics and the maximum-speed location. |
+| `daily` | Series layers: one row per China-time day with `date`, `hours` (valid hours), `mean`, `min`, `max`. |
+| `diurnal` | Series layers: 24 rows, one per China-time hour of day, with `days` (valid days at that hour) and `mean`. |
 | `categories` | Counts per band where the variable has bands, e.g. AQI levels (优, 良, 轻度, 中度, 重度, 严重, 爆表). |
 | `by_admin` | Statistics for every subdivision of the region, never truncated; may carry a `category` such as the dominant FNR regime. |
 | `by_member` | Comma-selected regions only (`raster`, `overlay`, `station`, `meteo`, `fnr`), from the same statistical data. A member without valid data keeps `n: 0` with null summaries (and a null FNR `category`). |
-| `extremes` | Highest cells or stations as a capped list: `items`, `total`, `truncated`, `order`. |
+| `extremes` | Highest cells, stations or hours as a capped list: `items`, `total`, `truncated`, `order`. Station items in `overlay` and `radius` with a station variable add `satellite_value` (the colocated cell, `null` outside valid cells). |
 | `data` | Absolute path of this layer's data file, or `null`. |
 
 Commands map onto layers like this:
@@ -87,7 +92,7 @@ Commands map onto layers like this:
 | `overlay` | `satellite` (grid), `station` (points) |
 | `radius` | `satellite` (grid), `station` (points; quantity `location` with no values and no relations without `--station-var`) |
 | `station` | `station` (points) |
-| `trend` | `station` (series, station ID in `subject`, region `null`); region mode: `regional_mean` and `station` (series), all hours in the data file |
+| `trend` | `station` (series, station ID in `subject`, region `null`); region mode: `regional_mean` and `station` (series), all hours in the data file. The single station and `regional_mean` carry `daily` and `diurnal`; the region-mode `station` layer lists each station's mean, max and valid hours in `extremes` |
 | `meteo` | any of `temperature` (grid, degC), `wind` (vector_grid, speed statistics plus `vector_summary`), `station` (points, paired with `wind` by `same_hour`) |
 | `fnr` | `no2` and `hcho` window means (grid), `fnr` (grid, unit 1) with regime counts in `categories`, masking rules and `mask_counts` in `method`, and dominant regimes per unit in `by_admin[].category` |
 
@@ -113,36 +118,30 @@ Only `overlay` and `radius` with a station variable produce colocation.
 
 ## Quality
 
-`grade` is the worst flag severity: no flags or only `info` → `good`; any
-`warning` → `limited`; any `critical` → `unreliable`.
-Agents should not report `unreliable` statistics as regional values without
-saying so.
+`quality.flags` lists documented conditions the run met. Each flag has
+`code`, `severity`, `layer` when it concerns one layer, and `evidence`: the
+measured numbers and, for threshold rules, the threshold. There is no prose
+message and no overall grade. Severity follows only from the code below.
+Facts that are already fields (smoothing in `method`, time matching and unit
+comparability in `relations`) are not repeated as flags.
 
-| Code | Severity | Raised when |
-| --- | --- | --- |
-| `no_valid_data` | critical | A layer has zero valid cells/stations/hours. |
-| `very_low_coverage` | critical | Grid coverage fraction < 0.10. |
-| `low_coverage` | warning | Grid coverage fraction < 0.30. |
-| `few_valid_days` | warning | Window median valid days per cell < `n_min` (`fnr` only; never raised when `n_min` is 1). |
-| `missing_days` | warning | A window has failed or missing days. |
-| `failed_files` | warning | Any input file could not be read. |
-| `few_stations` | warning | Fewer than 3 valid stations in a station layer. |
-| `missing_station_values` | info | Some stations in the region have no value. |
-| `missing_hours` | warning | A series misses more than 10 % of its hours. |
-| `daily_vs_hourly` | info | A daily/window field is paired with one hour. |
-| `column_vs_surface` | info | Satellite columns are compared with surface concentrations. |
-| `manual_time_override` | info | `--station-datetime` overrode automatic matching. |
-| `values_smoothed` | info | Statistical smoothing changed values (coverage never changes). |
-
-Each flag carries `code`, `severity`, optional `layer`, a short `message`
-suggesting a remedy when there is one, and `evidence` with the numbers that
-triggered it.
+| Code | Severity | Raised when | Evidence |
+| --- | --- | --- | --- |
+| `no_valid_data` | critical | A grid or station layer has zero valid cells or stations. | `valid`, `total`, `fraction` (grids) |
+| `very_low_coverage` | critical | Grid coverage fraction < 0.10. | `valid`, `total`, `fraction`, `threshold` |
+| `low_coverage` | warning | Grid coverage fraction < 0.30. | `valid`, `total`, `fraction`, `threshold` |
+| `few_valid_days` | warning | Median valid days per observed cell < `n_min` (`fnr` only; never raised when `n_min` is 1). | `median_valid_days`, `n_min` |
+| `missing_days` | warning | A window has days without valid data. | `requested`, `found`, `failed` (date → reason) |
+| `failed_files` | warning | Any input file could not be read. | `count` (names and reasons in `source.failed_files`) |
+| `few_stations` | warning | Fewer than 3 valid stations in a station layer. | `valid`, `total`, `threshold` |
+| `missing_station_values` | info | Some stations in the region have no value. | `valid`, `total` |
+| `missing_hours` | warning | A series misses more than 10 % of its hours. | `valid`, `total`, `fraction`, `unit`, `threshold` |
 
 ## Data files
 
 Data files are written next to the image and share its base name:
-`<base>.<layer>.nc`, `<base>.<layer>.csv`, and `<base>.sources.csv` when a
-source list is too long for JSON.
+`<base>.<layer>.nc` or `<base>.<layer>.csv`. Input file names are not listed
+anywhere; `source.data_root` and the archive layout locate them.
 
 | Content | Format | Contents |
 | --- | --- | --- |
@@ -150,11 +149,11 @@ source list is too long for JSON.
 | `vector_grid` | NetCDF4 | Same layout as `statistical_grid` with `value` = speed plus `u` and `v`. |
 | `station_table` | CSV | Overlay: every station read around the region with `id`, `lon`, `lat`, `admin`, `admin_level`, `value`, `valid`, `exceeds`, `in_region`, `satellite_value`, `colocated`. Radius: the stations in the square with the same columns plus `is_center`, `distance_km`, `dx_km`, `dy_km`; without `--station-var` only `id`, `lon`, `lat`, `admin`, `in_region` and the radius columns. |
 | `hourly_series` | NetCDF4 | `station_id`, `lon`, `lat` per station; `time` (CF hours since 1970-01-01 UTC) and `time_cst` (`YYYYMMDDHH` China time); `value(station, time)` with NaN gaps; region trends add `regional_mean(time)` and `n_stations(time)`. |
-| `source_manifest` | CSV | Every input file with status and failure reason. |
 
 **Size.** The JSON itself stays small (typically under 64 KB) because it never
 holds arrays of values: grid values, all stations and series go to data
-files, `extremes` is capped at 10 items, and `files` at 200 names. Data files
+files, `extremes` is capped at 10 items, and input files are only counted.
+`daily` has one row per window day and `diurnal` 24 rows. Data files
 are compressed (NetCDF zlib level 4 with shuffle) and cropped to the region
 extent, not the buffered read extent. Rough worst cases: a national GEMS grid
 at 0.05° (about 1.3 million cells) is 1–3 MB; a national station table (about

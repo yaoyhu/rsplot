@@ -27,23 +27,11 @@ if TYPE_CHECKING:
     from rsplot.geo.boundaries import RegionInfo
     from rsplot.result_builders.satellite import SatelliteInputs
 
-# Keyword argument -> CLI spellings, for recording where values came from.
-RASTER_OPTIONS = {
-    "sensor": ("--sensor",),
-    "processing": ("--processing",),
-    "product": ("--product",),
-    "days": ("--days",),
-    "output": ("--output",),
-    "dpi": ("--dpi",),
-    "res": ("--res",),
-    "basemap": ("--basemap",),
-    "vmin": ("--vmin",),
-    "vmax": ("--vmax",),
-    "cmap": ("--cmap",),
-    "smooth": ("--smooth",),
-    "title": ("--title",),
-    "qa": ("--qa",),
-    "cf": ("--cf",),
+# How the colour range was chosen, recorded with the display settings.
+RANGE_METHOD = {
+    "cli": "manual",
+    "product_default": "product_default",
+    "built_in": "region_p02_p98",
 }
 
 
@@ -58,7 +46,6 @@ class RasterRun:
     plot_options: dict[str, Any]
     # Inputs for the sidecar satellite layer.
     satellite: SatelliteInputs | None = None
-    resolved: dict[str, Any] = field(default_factory=dict)
     render: dict[str, Any] = field(default_factory=dict)
 
 
@@ -76,20 +63,15 @@ def _emit_raster(kwargs: dict[str, Any], created: list[Path]) -> None:
     from rsplot.data_files import (
         data_path,
         write_grid_netcdf,
-        write_source_manifest,
     )
     from rsplot.plotting.raster import plot_raster
     from rsplot.result_builders.envelope import (
-        request_block,
+        command_line,
         sidecar_path,
         success_envelope,
         write_sidecar,
     )
-    from rsplot.result_builders.satellite import (
-        FILES_LIMIT,
-        build_satellite_layer,
-        collect_provenance,
-    )
+    from rsplot.result_builders.satellite import build_satellite_layer
 
     run = prepare_raster(**kwargs)
     inputs = run.satellite
@@ -116,14 +98,6 @@ def _emit_raster(kwargs: dict[str, Any], created: list[Path]) -> None:
         valid_days=inputs.valid_days,
     )
     data_entries = [grid_entry]
-    files, failed, _ = collect_provenance(inputs.metadata, inputs.data_root)
-    manifest = None
-    if len(files) > FILES_LIMIT:
-        manifest_path = data_path(image, "sources", ".csv")
-        created.append(manifest_path)
-        manifest_entry = write_source_manifest(manifest_path, files, failed)
-        data_entries.append(manifest_entry)
-        manifest = manifest_entry["path"]
 
     created.append(Path(image))
     plot_raster(run.lon, run.lat, run.grid, run.region, **run.plot_options)
@@ -131,11 +105,10 @@ def _emit_raster(kwargs: dict[str, Any], created: list[Path]) -> None:
         inputs,
         run.region,
         data=grid_entry["path"],
-        files_manifest=manifest,
     )
     payload = success_envelope(
         command="raster",
-        request=request_block(run.resolved),
+        request=command_line(),
         region=run.region,
         layers=[layer],
         flags=flags,
@@ -188,20 +161,6 @@ def parse_raster_dates(
     return dates, window_mode
 
 
-def _source(
-    name: str,
-    value: Any,
-    default_source: str,
-    detail: str | None = None,
-) -> dict[str, Any]:
-    """Record a value as CLI-supplied when its option appears in argv."""
-    from rsplot.result_builders.envelope import option_given, resolved
-
-    if option_given(*RASTER_OPTIONS[name]):
-        return resolved(value, "cli")
-    return resolved(value, default_source, detail)
-
-
 def prepare_raster(
     *,
     region: str | RegionInfo,
@@ -235,7 +194,7 @@ def prepare_raster(
     from rsplot.plotting.styles import setup_fonts
     from rsplot.readers import auto_vrange
     from rsplot.result_builders.common import grid_boundary_policy
-    from rsplot.result_builders.envelope import resolved, stats_block
+    from rsplot.result_builders.envelope import stats_block
     from rsplot.result_builders.satellite import SatelliteInputs
     from rsplot.temporal import compute_window_mean, read_scan_mean
 
@@ -679,68 +638,11 @@ def prepare_raster(
         method=method,
         valid_days=valid_days,
         days=days_block,
-        smoothing_sigma=None if china else use_smooth,
     )
 
-    if res is not None:
-        res_entry = resolved(use_res, "cli")
-    elif product_defaults.res is not None:
-        res_entry = resolved(use_res, "product_default", info.level)
-    else:
-        res_entry = resolved(use_res, "level_default", info.level)
-    if smooth is not None:
-        smooth_entry = resolved(use_smooth or 0, "cli")
-    elif product_defaults.smooth_sigma is not None:
-        smooth_entry = resolved(use_smooth or 0, "product_default", info.level)
-    else:
-        smooth_entry = resolved(use_smooth or 0, "level_default", info.level)
     effective_basemap = (
         use_basemap if use_basemap is not None else params.basemap
     )
-    resolved_values = {
-        "region": resolved(
-            region if isinstance(region, str) else info.name, "cli"
-        ),
-        "date": resolved(date_arg, "cli"),
-        "sensor": _source("sensor", sensor, "built_in"),
-        "processing": _source(
-            "processing",
-            processing or ("offl" if not china else None),
-            "built_in",
-        ),
-        "product": _source("product", product, "built_in"),
-        "days": _source("days", days, "built_in") if days else None,
-        "level": resolved(info.level, "built_in", "from region"),
-        "data_dir": resolved(str(use_data_dir), "config"),
-        "res": res_entry,
-        "smooth": smooth_entry,
-        "qa": None if china else _source("qa", use_qa, "config"),
-        "cf": _source("cf", cf, "built_in"),
-        "dpi": _source("dpi", use_dpi, "built_in"),
-        "basemap": _source(
-            "basemap",
-            "satellite" if effective_basemap else "none",
-            "level_default",
-            info.level,
-        ),
-        "cmap": _source("cmap", use_cmap, "product_default"),
-        "vmin": resolved(
-            use_vmin,
-            "cli" if vmin is not None else vrange_source,
-            None
-            if vmin is not None or vrange_source != "built_in"
-            else "auto_percentile",
-        ),
-        "vmax": resolved(
-            use_vmax,
-            "cli" if vmax is not None else vrange_source,
-            None
-            if vmax is not None or vrange_source != "built_in"
-            else "auto_percentile",
-        ),
-        "title": _source("title", title, "built_in"),
-        "output": _source("output", output, "built_in"),
-    }
     display_policy = grid_boundary_policy(
         display_lon, display_lat, display_grid, info
     )["display"]
@@ -755,6 +657,7 @@ def prepare_raster(
                 "cmap": use_cmap,
                 "vmin": use_vmin,
                 "vmax": use_vmax,
+                "range_method": RANGE_METHOD[vrange_source],
                 "display_smoothing_sigma": use_smooth or 0,
                 "display_grid_shape": list(display_grid.shape),
                 "display_selection": display_policy["selection"],
@@ -772,6 +675,5 @@ def prepare_raster(
         info,
         plot_options,
         satellite=satellite,
-        resolved=resolved_values,
         render=render,
     )

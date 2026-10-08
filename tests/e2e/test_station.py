@@ -104,21 +104,22 @@ class StationE2E(unittest.TestCase):
         self.assertEqual([categories["优"], categories["良"]], [1, 1])
 
     def test_user_is_warned_about_few_stations(self):
-        """Given two valid stations, when mapping, then grade limited."""
+        """Given two valid stations, when mapping, then flag the count."""
         payload = self.assert_plot(self.workspace.station("2026010113"))
         self.assertEqual(flags(payload)["few_stations"], "warning")
-        self.assertEqual(payload["quality"]["grade"], "limited")
+        self.assertNotIn("grade", payload["quality"])
 
     def test_user_reproduces_a_request(self):
-        """Given explicit options, when mapping, then record their sources."""
+        """Given explicit options, when mapping, then record the command."""
         payload = self.assert_plot(self.workspace.station("2026010113"))
-        resolved = payload["request"]["resolved"]
-        self.assertEqual(resolved["var"], {"value": "NO2", "source": "cli"})
         self.assertEqual(
-            resolved["datetime"], {"value": "2026010113", "source": "cli"}
+            payload["request"],
+            "rsplot station FixtureCity 2026010113 --var NO2 --dpi 60 "
+            f"--basemap none --output {self.workspace.output}",
         )
         self.assertEqual(
-            resolved["data_dir"]["value"], str(self.workspace.stations)
+            station(payload)["source"]["data_root"],
+            str(self.workspace.stations),
         )
 
     def test_user_rejects_a_date_only_hour(self):

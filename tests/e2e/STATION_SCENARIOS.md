@@ -20,8 +20,8 @@ The station file for Jan 1 13:00 places two stations inside `FixtureCity`
 | user reads the station table | Same file | Map NO2 | The CSV lists all three stations read with values 40, 80, 999 and `in_region` 1, 1, 0, without satellite columns |
 | user counts exceedances only inside the region | The outside station's 999 exceeds the NO2 hourly limit | Map NO2 | Exceedance threshold 200, count 0 |
 | user sees AQI categories | Same file | Map AQI | `categories` counts one station as 优 and one as 良 |
-| user is warned about few stations | Two valid stations in the region | Map NO2 | Warning `few_stations`; grade `limited` |
-| user reproduces a request | Same file | Map NO2 | `request.resolved` records var NO2 and the hour from the command line, and the data directory |
+| user is warned about few stations | Two valid stations in the region | Map NO2 | Warning `few_stations`; `quality` has no grade |
+| user reproduces a request | Same file | Map NO2 | `request` is the command as one line; the station layer's `source.data_root` is the configured station folder |
 | user rejects a date-only hour | Same file | Map 20260101 | Rejected with `invalid_time` |
 | user rejects an impossible hour | Same file | Map 2026010125 | Rejected with `invalid_time` |
 | user learns the variable is unknown | Same file | Map --var XYZ | Rejected with `invalid_argument` on option --var |

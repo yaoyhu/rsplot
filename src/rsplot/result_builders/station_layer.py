@@ -55,7 +55,6 @@ class StationInputs:
     standard: str | None
     hour: str
     data_root: str
-    source_file: str
 
 
 def satellite_at_stations(
@@ -131,6 +130,7 @@ def build_station_layer(
         if threshold is not None
         else np.zeros(len(values), dtype=bool)
     )
+    paired = satellite_values is not None
     if satellite_values is None:
         satellite_values = np.full(len(values), np.nan)
     colocated = valid & in_region & np.isfinite(satellite_values)
@@ -191,6 +191,11 @@ def build_station_layer(
             "lat": round(float(read.lat[index]), 3),
             "value": round_finite(values[index]),
             "admin": admins[index] or None,
+            **(
+                {"satellite_value": round_finite(satellite_values[index])}
+                if paired
+                else {}
+            ),
         }
         for index in order
     ]
@@ -217,9 +222,7 @@ def build_station_layer(
             "sensor": "station",
             "processing": None,
             "data_root": inputs.data_root,
-            "files": [inputs.source_file],
             "files_total": 1,
-            "files_manifest": None,
             "failed_files": {},
         },
         "method": {
@@ -278,7 +281,6 @@ def build_station_layer(
             flag(
                 "no_valid_data",
                 "critical",
-                "No station in the region has a valid value at this hour.",
                 layer="station",
                 evidence=evidence,
             )
@@ -288,8 +290,6 @@ def build_station_layer(
             flag(
                 "few_stations",
                 "warning",
-                f"Only {n_valid} station(s) in the region have a valid "
-                "value; station statistics are not representative.",
                 layer="station",
                 evidence={**evidence, "threshold": MIN_STATIONS},
             )
@@ -299,8 +299,6 @@ def build_station_layer(
             flag(
                 "missing_station_values",
                 "info",
-                f"{n_stations - n_valid} of {n_stations} stations in the "
-                "region have no value at this hour.",
                 layer="station",
                 evidence=evidence,
             )
@@ -325,45 +323,3 @@ def colocation_block(
     if data is not None:
         block["data"] = data
     return block
-
-
-def comparison_flags(
-    matching: dict[str, Any],
-    satellite_time: dict[str, Any],
-    station_hour: str,
-) -> list[dict[str, Any]]:
-    """Explain what a satellite/station comparison can and cannot mean."""
-    flags = [
-        flag(
-            "column_vs_surface",
-            "info",
-            "Satellite columns and surface concentrations show spatial "
-            "agreement, not equal quantities.",
-        )
-    ]
-    if matching["difference_minutes"] is None:
-        flags.append(
-            flag(
-                "daily_vs_hourly",
-                "info",
-                "A daily or window satellite field is compared with one "
-                "station hour; there is no single satellite observation time.",
-                evidence={
-                    "satellite": satellite_time,
-                    "station": station_hour,
-                },
-            )
-        )
-    elif matching["manual_override"]:
-        flags.append(
-            flag(
-                "manual_time_override",
-                "info",
-                "--station-datetime replaced the nearest station hour of the "
-                "scan.",
-                evidence={
-                    "difference_minutes": matching["difference_minutes"]
-                },
-            )
-        )
-    return flags

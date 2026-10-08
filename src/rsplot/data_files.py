@@ -116,28 +116,6 @@ def write_grid_netcdf(
     }
 
 
-def write_source_manifest(
-    path: Path, files: list[str], failed: dict[str, str]
-) -> dict[str, Any]:
-    """List every input file with its read status (JSON keeps 200)."""
-    import csv
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8", newline="") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(["file", "status", "reason"])
-        for name in files:
-            reason = failed.get(name)
-            writer.writerow([name, "failed" if reason else "ok", reason or ""])
-    return {
-        "path": str(path),
-        "format": "csv",
-        "content": "source_manifest",
-        "rows": len(files),
-        "bytes": path.stat().st_size,
-    }
-
-
 def format_number(value: float | None) -> str:
     """Compact CSV text: up to 4 decimals, no trailing zeros, '' for NaN."""
     if value is None or not np.isfinite(value):

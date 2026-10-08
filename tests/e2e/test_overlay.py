@@ -262,7 +262,7 @@ class OverlayE2E(unittest.TestCase):
         matching = payload["relations"]["time_matching"]
         self.assertEqual(matching["difference_minutes"], 60)
         self.assertTrue(matching["manual_override"])
-        self.assertEqual(flags(payload)["manual_time_override"], "info")
+        self.assertNotIn("manual_time_override", flags(payload))
 
     def test_user_names_the_station_hour_for_a_gems_day(self):
         """Given a GEMS daily mean, when omitting the hour, then reject."""
@@ -420,21 +420,54 @@ class OverlayE2E(unittest.TestCase):
             ],
         )
 
-    def test_user_is_told_what_the_comparison_means(self):
-        """Given a day and an hour, when overlaying, then explain both."""
+    def test_user_reads_what_the_comparison_pairs(self):
+        """Given a day and an hour, when overlaying, then record, not explain."""
         self.workspace.write_swath("20260101", 4)
         self.workspace.write_stations("2026010113")
         payload = self.assert_plot(self.workspace.overlay("20260101"))
-        self.assertEqual(flags(payload)["column_vs_surface"], "info")
-        self.assertEqual(flags(payload)["daily_vs_hourly"], "info")
+        relations = payload["relations"]
+        self.assertEqual(
+            [
+                relations["time_matching"]["reference"],
+                relations["time_matching"]["difference_minutes"],
+                relations["colocation"]["comparable_units"],
+            ],
+            ["period_mean_with_explicit_station_hour", None, False],
+        )
+        self.assertEqual(flags(payload), {"few_stations": "warning"})
 
     def test_user_is_warned_about_few_stations(self):
-        """Given two valid stations, when overlaying, then grade limited."""
+        """Given two valid stations, when overlaying, then flag the count."""
         self.workspace.write_swath("20260101", 4)
         self.workspace.write_stations("2026010113")
         payload = self.assert_plot(self.workspace.overlay("20260101"))
-        self.assertEqual(flags(payload)["few_stations"], "warning")
-        self.assertEqual(payload["quality"]["grade"], "limited")
+        self.assertEqual(
+            payload["quality"]["flags"],
+            [
+                {
+                    "code": "few_stations",
+                    "severity": "warning",
+                    "layer": "station",
+                    "evidence": {"valid": 2, "total": 2, "threshold": 3},
+                }
+            ],
+        )
+
+    def test_user_sees_satellite_values_at_the_highest_stations(self):
+        """Given colocated stations, when overlaying, then pair the values."""
+        self.workspace.write_swath("20260101", 4)
+        self.workspace.write_stations("2026010113")
+        payload = self.assert_plot(self.workspace.overlay("20260101"))
+        station = next(
+            item for item in payload["layers"] if item["id"] == "station"
+        )
+        self.assertEqual(
+            [
+                (item["id"], item["value"], item["satellite_value"])
+                for item in station["extremes"]["items"]
+            ],
+            [("S002A", 80.0, 4.0), ("S001A", 40.0, 4.0)],
+        )
 
 
 if __name__ == "__main__":

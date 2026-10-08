@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import math
+import re
+import shlex
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -17,8 +19,6 @@ if TYPE_CHECKING:
     from rsplot.geo.boundaries import RegionInfo
 
 STAT_KEYS = ("mean", "std", "min", "p10", "p25", "median", "p75", "p90")
-SEVERITY_GRADE = {"info": 0, "warning": 1, "critical": 2}
-GRADES = ("good", "limited", "unreliable")
 LOW_COVERAGE = 0.30
 VERY_LOW_COVERAGE = 0.10
 EXTREMES_LIMIT = 10
@@ -41,36 +41,18 @@ def rsplot_version() -> str:
         return "unknown"
 
 
-def cli_argv() -> list[str]:
-    """Arguments after the program name, exactly as received."""
-    return [str(arg) for arg in sys.argv[1:]]
+# Characters a POSIX shell treats specially; other text, such as Chinese
+# region names, is written as typed.
+SHELL_SPECIAL = re.compile(r"[\s'\"\\$`!*?;&|<>()\[\]{}#~]")
 
 
-def option_given(*names: str) -> bool:
-    """Whether any spelling of an option appears on the command line."""
-    for arg in cli_argv():
-        for name in names:
-            if arg == name or arg.startswith(f"{name}="):
-                return True
-    return False
-
-
-def resolved(
-    value: Any, source: str, detail: str | None = None
-) -> dict[str, Any]:
-    entry = {"value": value, "source": source}
-    if detail is not None:
-        entry["detail"] = detail
-    return entry
-
-
-def request_block(values: dict[str, dict[str, Any] | None]) -> dict:
-    return {
-        "argv": cli_argv(),
-        "resolved": {
-            key: entry for key, entry in values.items() if entry is not None
-        },
-    }
+def command_line() -> str:
+    """The command as received on one line, quoting only where needed."""
+    words = ["rsplot", *(str(arg) for arg in sys.argv[1:])]
+    return " ".join(
+        shlex.quote(word) if not word or SHELL_SPECIAL.search(word) else word
+        for word in words
+    )
 
 
 def region_block(
@@ -81,7 +63,7 @@ def region_block(
         "name": region.name,
         "level": region.level if administrative else "station_radius",
         "kind": "administrative" if administrative else "station_radius",
-        "extent": [round(float(value), 3) for value in region.extent],
+        "bbox": [round(float(value), 3) for value in region.extent],
         "members": [
             {
                 "name": member.name,
@@ -144,20 +126,15 @@ def capped(items: list[dict], total: int, order: str) -> dict[str, Any]:
 def flag(
     code: str,
     severity: str,
-    message: str,
     *,
+    evidence: dict[str, Any],
     layer: str | None = None,
-    evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    result: dict[str, Any] = {
-        "code": code,
-        "severity": severity,
-        "message": message,
-    }
+    """A documented condition with the counts that triggered it, no prose."""
+    result: dict[str, Any] = {"code": code, "severity": severity}
     if layer is not None:
         result["layer"] = layer
-    if evidence is not None:
-        result["evidence"] = evidence
+    result["evidence"] = evidence
     return result
 
 
@@ -174,8 +151,6 @@ def coverage_flags(layer: str, coverage: dict[str, Any]) -> list[dict]:
             flag(
                 "no_valid_data",
                 "critical",
-                "No valid value falls on a statistics cell of the region; "
-                "regional statistics are empty.",
                 layer=layer,
                 evidence=evidence,
             )
@@ -185,8 +160,6 @@ def coverage_flags(layer: str, coverage: dict[str, Any]) -> list[dict]:
             flag(
                 "very_low_coverage",
                 "critical",
-                f"Only {fraction:.1%} of region cells have a valid value; "
-                "regional statistics are not representative.",
                 layer=layer,
                 evidence={**evidence, "threshold": VERY_LOW_COVERAGE},
             )
@@ -196,8 +169,6 @@ def coverage_flags(layer: str, coverage: dict[str, Any]) -> list[dict]:
             flag(
                 "low_coverage",
                 "warning",
-                f"Only {fraction:.1%} of region cells have a valid value; "
-                "treat regional statistics with care.",
                 layer=layer,
                 evidence={**evidence, "threshold": LOW_COVERAGE},
             )
@@ -205,17 +176,10 @@ def coverage_flags(layer: str, coverage: dict[str, Any]) -> list[dict]:
     return []
 
 
-def quality_block(flags: list[dict]) -> dict[str, Any]:
-    worst = max(
-        (SEVERITY_GRADE[item["severity"]] for item in flags), default=0
-    )
-    return {"grade": GRADES[worst], "flags": flags}
-
-
 def success_envelope(
     *,
     command: str,
-    request: dict,
+    request: str,
     region: RegionInfo | None,
     layers: list[dict],
     flags: list[dict],
@@ -232,7 +196,7 @@ def success_envelope(
         "region": None if region is None else region_block(region, radius),
         "layers": layers,
         "relations": relations or {},
-        "quality": quality_block(flags),
+        "quality": {"flags": flags},
         "render": render,
         "artifacts": artifacts,
     }

@@ -83,13 +83,13 @@ class TrendE2E(unittest.TestCase):
         self.assertEqual([first_hour, float(values[0, 0])], ["2026010100", 10])
 
     def test_user_is_warned_about_missing_hours(self):
-        """Given 12 of 24 hours, when trending, then grade limited."""
+        """Given 12 of 24 hours, when trending, then flag the gap."""
         self.workspace.write_hours("20260101", hours=range(12))
         payload = self.assert_plot(self.workspace.trend("S001A", "20260101"))
         coverage = layer(payload, "station")["coverage"]
         self.assertEqual([coverage["valid"], coverage["total"]], [12, 24])
         self.assertEqual(flags(payload)["missing_hours"], "warning")
-        self.assertEqual(payload["quality"]["grade"], "limited")
+        self.assertNotIn("grade", payload["quality"])
 
     def test_user_overrides_the_exceedance_threshold(self):
         """Given --threshold 30, when trending, then count 3 hours above."""
@@ -149,13 +149,76 @@ class TrendE2E(unittest.TestCase):
         )
 
     def test_user_is_warned_about_few_stations(self):
-        """Given two stations, when trending a region, then grade limited."""
+        """Given two stations, when trending a region, then flag the count."""
         self.workspace.write_hours("20260101")
         payload = self.assert_plot(
             self.workspace.trend("FixtureCity", "20260101", "--region")
         )
         self.assertEqual(flags(payload)["few_stations"], "warning")
-        self.assertEqual(payload["quality"]["grade"], "limited")
+        self.assertNotIn("grade", payload["quality"])
+
+    def test_user_reads_one_station_s_daily_means(self):
+        """Given two days, when trending a station, then summarize each day."""
+        self.workspace.write_hours("20260101")
+        self.workspace.write_hours("20260102", hours=range(12))
+        payload = self.assert_plot(
+            self.workspace.trend("S001A", "20260102", days="2")
+        )
+        self.assertEqual(
+            layer(payload, "station")["daily"],
+            [
+                {
+                    "date": "20260101",
+                    "hours": 24,
+                    "mean": 21.5,
+                    "min": 10.0,
+                    "max": 33.0,
+                },
+                {
+                    "date": "20260102",
+                    "hours": 12,
+                    "mean": 15.5,
+                    "min": 10.0,
+                    "max": 21.0,
+                },
+            ],
+        )
+
+    def test_user_reads_the_regional_hour_of_day_profile(self):
+        """Given two days, when trending a region, then average each hour."""
+        self.workspace.write_hours("20260101")
+        self.workspace.write_hours("20260102", hours=range(12))
+        payload = self.assert_plot(
+            self.workspace.trend(
+                "FixtureCity", "20260102", "--region", days="2"
+            )
+        )
+        diurnal = layer(payload, "regional_mean")["diurnal"]
+        self.assertEqual(len(diurnal), 24)
+        self.assertEqual(
+            [diurnal[0], diurnal[23]],
+            [
+                {"hour": 0, "days": 2, "mean": 15.0},
+                {"hour": 23, "days": 1, "mean": 38.0},
+            ],
+        )
+
+    def test_user_reads_the_regional_daily_means(self):
+        """Given two days, when trending a region, then summarize each day."""
+        self.workspace.write_hours("20260101")
+        self.workspace.write_hours("20260102", hours=range(12))
+        payload = self.assert_plot(
+            self.workspace.trend(
+                "FixtureCity", "20260102", "--region", days="2"
+            )
+        )
+        self.assertEqual(
+            [
+                (row["date"], row["hours"], row["mean"])
+                for row in layer(payload, "regional_mean")["daily"]
+            ],
+            [("20260101", 24, 26.5), ("20260102", 12, 20.5)],
+        )
 
     def test_user_learns_a_focus_station_is_outside_the_region(self):
         """Given an outside focus station, when trending, then reject it."""

@@ -23,24 +23,6 @@ from rsplot.errors import RsplotError
 if TYPE_CHECKING:
     from rich.console import Console
 
-# Keyword argument -> CLI spellings, for recording where values came from.
-FNR_OPTIONS = {
-    "days": ("--days",),
-    "n_min": ("--n-min",),
-    "no2_min": ("--no2-min",),
-    "voc_threshold": ("--voc-threshold",),
-    "nox_threshold": ("--nox-threshold",),
-    "display_max": ("--display-max",),
-    "output": ("--output",),
-    "dpi": ("--dpi",),
-    "res": ("--res",),
-    "basemap": ("--basemap",),
-    "smooth": ("--smooth",),
-    "qa": ("--qa",),
-    "cf": ("--cf",),
-    "processing": ("--processing",),
-    "title": ("--title",),
-}
 REGIMES = ("voc_limited", "transition", "nox_limited")
 
 
@@ -90,12 +72,9 @@ def _emit_fnr(
     from rsplot.result_builders.common import top_hotspots
     from rsplot.result_builders.envelope import (
         capped,
+        command_line,
         coverage_block,
         coverage_flags,
-        flag,
-        option_given,
-        request_block,
-        resolved,
         sidecar_path,
         stats_block,
         subdivision_level,
@@ -369,7 +348,6 @@ def _emit_fnr(
             ),
             info,
             data=entry["path"],
-            files_manifest=None,
             layer_id=name,
             coverage_checks=False,
         )
@@ -465,9 +443,9 @@ def _emit_fnr(
             "sensor": "tropomi",
             "processing": processing or "offl",
             "data_root": str(use_no2_dir),
-            "files": [],
-            "files_total": 0,
-            "files_manifest": None,
+            "files_total": sum(
+                item["source"]["files_total"] for item in layers
+            ),
             "failed_files": {},
         },
         "method": {
@@ -523,19 +501,6 @@ def _emit_fnr(
         )
     layers.append(fnr_layer)
     flags.extend(coverage_flags("fnr", coverage))
-    if use_smooth:
-        flags.append(
-            flag(
-                "values_smoothed",
-                "info",
-                f"Gaussian smoothing (sigma {use_smooth:g}) changed FNR "
-                "values; valid cells are unchanged. Use --smooth 0 for "
-                "unsmoothed values.",
-                layer="fnr",
-                evidence={"sigma": use_smooth},
-            )
-        )
-
     console.print("\n[bold]绘图中...[/bold]")
     created.append(Path(image))
     plot_fnr(
@@ -554,49 +519,12 @@ def _emit_fnr(
         display_max=use_display_max,
     )
 
-    def source_of(name: str, value: Any, default: str) -> dict[str, Any]:
-        if option_given(*FNR_OPTIONS[name]):
-            return resolved(value, "cli")
-        return resolved(value, default)
-
     effective_basemap = (
         use_basemap if use_basemap is not None else params.basemap
     )
-    request = {
-        "region": resolved(region, "cli"),
-        "date": resolved(date_arg, "cli"),
-        "days": resolved(days, "cli") if days is not None else None,
-        "n_min": source_of("n_min", use_n_min, "built_in"),
-        "no2_min": source_of("no2_min", no2_min, "built_in"),
-        "voc_threshold": source_of(
-            "voc_threshold", use_voc_threshold, "built_in"
-        ),
-        "nox_threshold": source_of(
-            "nox_threshold", use_nox_threshold, "built_in"
-        ),
-        "display_max": source_of("display_max", use_display_max, "built_in"),
-        "level": resolved(info.level, "built_in", "from region"),
-        "no2_dir": resolved(str(use_no2_dir), "config"),
-        "hcho_dir": resolved(str(use_hcho_dir), "config"),
-        "output": source_of("output", output, "built_in"),
-        "dpi": source_of("dpi", use_dpi, "built_in"),
-        "res": source_of("res", use_res, "level_default"),
-        "basemap": source_of(
-            "basemap",
-            "satellite" if effective_basemap else "none",
-            "level_default",
-        ),
-        "smooth": source_of("smooth", use_smooth or 0, "level_default"),
-        "qa": source_of("qa", use_qa, "built_in"),
-        "cf": source_of("cf", cf, "built_in"),
-        "processing": source_of(
-            "processing", processing or "offl", "built_in"
-        ),
-        "title": source_of("title", use_title, "built_in"),
-    }
     payload = success_envelope(
         command="fnr",
-        request=request_block(request),
+        request=command_line(),
         region=info,
         layers=layers,
         flags=flags,

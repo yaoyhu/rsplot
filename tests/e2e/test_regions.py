@@ -49,6 +49,15 @@ class RegionE2E(unittest.TestCase):
         """Given 北京市 in both files, when mapping 北京, then a city."""
         self.assertEqual(self.region("北京"), ["北京市", "city"])
 
+    def test_user_reads_a_chinese_command_line_as_typed(self):
+        """Given 北京, when mapping, then the request keeps it unquoted."""
+        self.region("北京")
+        self.assertTrue(
+            self.workspace.payload()["request"].startswith(
+                "rsplot raster 北京 20260101 --product no2 "
+            )
+        )
+
     def test_user_maps_chongqing_as_a_province(self):
         """Given 重庆市 in both files, when mapping 重庆, then a province."""
         self.assertEqual(self.region("重庆"), ["重庆市", "province"])

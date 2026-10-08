@@ -23,7 +23,7 @@ on Jan 1 contain 2 and 4.
 | user reads the radius station table | Same as the first scenario | Map with NO2 | The station CSV lists C001A and N002A only, with `is_center` 1 and 0, `distance_km` 0 for the centre and about 7 for the neighbour, and east/north offsets `dx_km`, `dy_km` |
 | user sees satellite values at stations | Same as the first scenario | Map with NO2 | Colocation has 2 pairs, no Spearman correlation, incomparable units |
 | user sees how the day meets the station hour | Same as the first scenario | Map with NO2 | Time matching by `period_mean_with_explicit_station_hour`, null difference, manual override |
-| user is told what the comparison means | Same as the first scenario | Map with NO2 | Info flags `column_vs_surface` and `daily_vs_hourly` |
+| user reads what the comparison pairs | Same as the first scenario | Map with NO2 | Time matching difference null and colocation `comparable_units` false; no `column_vs_surface` or `daily_vs_hourly` flag |
 | user records the administrative context | Same as the first scenario | Map with NO2 | `region.radius.administrative_context.center_cities` is `["FixtureCity"]` |
 | user matches a GEMS scan to the nearest station hour | A UTC 04:00 NO2 scan and the Jan 1 12:00 station file | Map local 202601011200 with --station-var NO2 | Station hour 2026010112; time matching by nominal scan time, 0 minutes |
 | user names the station hour for a daily mean with values | The station file | Map with --station-var NO2 and no --station-datetime | Rejected with `invalid_argument` on option --station-datetime |

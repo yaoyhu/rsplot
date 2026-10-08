@@ -2,37 +2,28 @@
   "command": "raster",
   "rsplot_version": "0.3.2.dev4",
   "generated_at": "2026-10-05T14:05:40+08:00",
-  "request": {
-    "argv": [
-      "raster", "合肥", "20260919",
-      "--product", "no2",
-      "--days", "7",
-      "--basemap", "none",
-      "--output", "out/hefei_no2_week.png"
-    ],
-    "resolved": {
-      "sensor": {"value": "tropomi", "source": "built_in"},
-      "processing": {"value": "offl", "source": "built_in"},
-      "product": {"value": "no2", "source": "cli"},
-      "days": {"value": 7, "source": "cli"},
-      "res": {"value": 0.03, "source": "level_default", "detail": "city"},
-      "smooth": {"value": 1.5, "source": "level_default", "detail": "city"},
-      "qa": {"value": 0.5, "source": "config"},
-      "cf": {"value": 0.5, "source": "built_in"}
-    }
-  },
+  "request": "rsplot raster '合肥' 20260919 --product no2 --days 7 --basemap none --output /home/agent/out/hefei_no2_week.png",
   "region": {
     "name": "合肥市",
     "level": "city",
     "kind": "administrative",
-    "extent": [116.69, 117.98, 30.94, 32.54],
+    "bbox": [
+      116.69,
+      117.98,
+      30.94,
+      32.54
+    ],
     "members": []
   },
   "layers": [
     {
       "id": "satellite",
       "kind": "grid",
-      "quantity": {"name": "tropospheric_no2_column", "unit": "molec/cm2", "scale": 1e15},
+      "quantity": {
+        "name": "tropospheric_no2_column",
+        "unit": "molec/cm2",
+        "scale": 1000000000000000.0
+      },
       "time": {
         "aggregation": "window_mean",
         "start": "20260913",
@@ -44,17 +35,25 @@
           "found": 7,
           "failed": {},
           "n_min": 1,
-          "valid_days_per_cell": {"n": 35, "min": 1, "p10": 1, "p25": 1, "median": 1, "mean": 1.2, "p75": 1, "p90": 2, "max": 2}
+          "valid_days_per_cell": {
+            "n": 35,
+            "min": 1,
+            "p10": 1,
+            "p25": 1,
+            "median": 1,
+            "mean": 1.2,
+            "p75": 1,
+            "p90": 2,
+            "max": 2
+          }
         }
       },
       "source": {
         "sensor": "tropomi",
         "processing": "offl",
         "data_root": "/mnt/nas/tianpu/no2/OFFL",
-        "files": ["S5P_OFFL_L2__NO2____20260913T013112_20260913T031242_46204_03_020901_20260914T170205.nc.zip"],
-        "failed_files": {},
         "files_total": 32,
-        "files_manifest": null
+        "failed_files": {}
       },
       "method": {
         "qa_min_exclusive": 0.5,
@@ -68,23 +67,42 @@
         "cell_selection": "center_strictly_inside",
         "cell_weighting": "equal"
       },
-      "coverage": {"valid": 35, "total": 1209, "fraction": 0.029, "unit": "cells"},
-      "stats": {"n": 35, "mean": 3.7, "min": 2.1, "median": 3.6, "max": 5.9},
+      "coverage": {
+        "valid": 35,
+        "total": 1209,
+        "fraction": 0.029,
+        "unit": "cells"
+      },
+      "stats": {
+        "n": 35,
+        "mean": 3.7,
+        "min": 2.1,
+        "median": 3.6,
+        "max": 5.9
+      },
       "by_admin": [],
-      "extremes": {"items": [], "total": 35, "truncated": true, "order": "value_desc"},
+      "extremes": {
+        "items": [],
+        "total": 35,
+        "truncated": true,
+        "order": "value_desc"
+      },
       "data": "/data/out/hefei_no2_week.satellite.nc"
     }
   ],
   "relations": {},
   "quality": {
-    "grade": "unreliable",
     "flags": [
       {
         "code": "very_low_coverage",
         "severity": "critical",
         "layer": "satellite",
-        "message": "Only 2.9% of region cells have a valid window mean; regional statistics are not representative.",
-        "evidence": {"fraction": 0.029, "threshold": 0.1}
+        "evidence": {
+          "valid": 35,
+          "total": 1209,
+          "fraction": 0.029,
+          "threshold": 0.1
+        }
       }
     ]
   },
@@ -93,7 +111,13 @@
     "dpi": 300,
     "basemap": "none",
     "title": "TROPOMI NO2 - 合肥市 (20260913~20260919, 7d mean)",
-    "layers": {"satellite": {"cmap": "rsplot_22", "vmin": 0.0, "vmax": 20.0}}
+    "layers": {
+      "satellite": {
+        "cmap": "rsplot_22",
+        "vmin": 0.0,
+        "vmax": 20.0
+      }
+    }
   },
   "artifacts": {
     "image": "/data/out/hefei_no2_week.png",
@@ -104,7 +128,10 @@
         "format": "netcdf4",
         "content": "statistical_grid",
         "layer": "satellite",
-        "shape": [54, 43],
+        "shape": [
+          54,
+          43
+        ],
         "bytes": 9204
       }
     ]

@@ -26,6 +26,7 @@ file.
 | user maps the province of that name | 双名省 and 双名市 | Map 双名省 | Region 双名省, level province |
 | user is told a short name is ambiguous | 双名省 and 双名市 | Map 双名 | Rejected with `region_ambiguous`; `details.candidates` is 双名省, 双名市 |
 | user maps Beijing as a city | 北京市 in both files | Map 北京 | Region 北京市, level city |
+| user reads a Chinese command line as typed | 北京市 in both files | Map 北京 | `request` starts `rsplot raster 北京 20260101 --product no2`, with no quotes around the name |
 | user maps Chongqing as a province | 重庆市 in both files | Map 重庆 | Region 重庆市, level province |
 | user maps Guangxi by its short name | 广西壮族自治区 | Map 广西 | Region 广西壮族自治区, level province |
 | user maps Xinjiang by its short name | 新疆维吾尔自治区 (no 族) | Map 新疆 | Region 新疆维吾尔自治区, level province |

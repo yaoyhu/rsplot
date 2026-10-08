@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -82,19 +83,23 @@ class RasterE2E(unittest.TestCase):
         self.assertEqual(layer["source"]["files_total"], 2)
         self.assertEqual(layer["stats"]["mean"], 3)
 
-    def test_user_finds_every_input_file(self):
-        """Given two orbits, when plotting, then both files are listed."""
-        first = self.workspace.write_swath("20260101", 2, orbit=1)
-        second = self.workspace.write_swath("20260101", 4, orbit=2)
+    def test_user_counts_the_input_files(self):
+        """Given two orbits, when plotting, then count them without a list."""
+        self.workspace.write_swath("20260101", 2, orbit=1)
+        self.workspace.write_swath("20260101", 4, orbit=2)
         layer = satellite(self.assert_plot(self.workspace.raster("20260101")))
+        source = layer["source"]
+        self.assertEqual(source["data_root"], str(self.workspace.data))
         self.assertEqual(
-            layer["source"]["data_root"], str(self.workspace.data)
+            [source["sensor"], source["processing"], source["files_total"]],
+            ["tropomi", "offl", 2],
         )
+        self.assertNotIn("files", source)
+        self.assertNotIn("files_manifest", source)
         self.assertEqual(
-            layer["source"]["files"], sorted([first.name, second.name])
+            sorted(os.listdir(self.workspace.output.parent)),
+            ["map.json", "map.png", "map.satellite.nc"],
         )
-        self.assertEqual(layer["source"]["sensor"], "tropomi")
-        self.assertEqual(layer["source"]["processing"], "offl")
 
     def test_user_loads_the_statistical_grid(self):
         """Given one day, when plotting, then the data file holds the stats."""
@@ -211,23 +216,39 @@ class RasterE2E(unittest.TestCase):
             [smoothed["coverage"][key] for key in SUPPORT_KEYS],
         )
 
-    def test_user_learns_values_were_smoothed(self):
-        """Given smoothing, when plotting, then an info flag explains it."""
+    def test_user_reads_smoothing_from_the_method(self):
+        """Given smoothing, when plotting, then the method records it."""
         self.workspace.write_swath("20260101", 4)
         payload = self.assert_plot(
             self.workspace.raster("20260101", "--smooth", "1")
         )
-        self.assertEqual(flag_codes(payload), ["values_smoothed"])
-        self.assertEqual(payload["quality"]["grade"], "good")
+        self.assertEqual(satellite(payload)["method"]["smoothing_sigma"], 1)
+        self.assertEqual(flag_codes(payload), [])
 
     def test_user_is_warned_when_coverage_is_too_low(self):
-        """Given one valid cell of 16, when plotting, then grade unreliable."""
+        """Given one valid cell of 16, when plotting, then flag the counts."""
         self.workspace.write_swath("20260101", 4, sparse=True)
         payload = self.assert_plot(
             self.workspace.raster("20260101", "--days", "1")
         )
-        self.assertEqual(payload["quality"]["grade"], "unreliable")
-        self.assertIn("very_low_coverage", flag_codes(payload))
+        self.assertEqual(
+            payload["quality"],
+            {
+                "flags": [
+                    {
+                        "code": "very_low_coverage",
+                        "severity": "critical",
+                        "layer": "satellite",
+                        "evidence": {
+                            "valid": 1,
+                            "total": 16,
+                            "fraction": 0.062,
+                            "threshold": 0.1,
+                        },
+                    }
+                ]
+            },
+        )
 
     def test_user_sees_missing_day_diagnostics(self):
         """Given Jan 1 missing, when averaging two days, then report it."""
@@ -240,13 +261,22 @@ class RasterE2E(unittest.TestCase):
         self.assertIn("20260101", layer["time"]["days"]["failed"])
 
     def test_user_is_warned_about_missing_days(self):
-        """Given Jan 1 missing, when averaging two days, then grade limited."""
+        """Given Jan 1 missing, when averaging two days, then count them."""
         self.workspace.write_swath("20260102", 9)
         payload = self.assert_plot(
             self.workspace.raster("20260102", "--days", "2")
         )
-        self.assertEqual(flag_codes(payload), ["missing_days"])
-        self.assertEqual(payload["quality"]["grade"], "limited")
+        (warning,) = payload["quality"]["flags"]
+        self.assertEqual(
+            [warning["code"], warning["severity"], warning["layer"]],
+            ["missing_days", "warning", "satellite"],
+        )
+        self.assertEqual(
+            [warning["evidence"]["requested"], warning["evidence"]["found"]],
+            [2, 1],
+        )
+        self.assertIn("20260101", warning["evidence"]["failed"])
+        self.assertNotIn("message", warning)
 
     def test_user_keeps_cells_with_one_valid_day(self):
         """Given cells seen on one or two days, when averaging, keep them all."""
@@ -310,28 +340,43 @@ class RasterE2E(unittest.TestCase):
         )
 
     def test_user_is_warned_about_unreadable_inputs(self):
-        """Given one corrupt orbit, when plotting, then grade limited."""
+        """Given one corrupt orbit, when plotting, then flag it."""
         self.workspace.write_swath("20260101", 4)
         bad_file = self.workspace.write_swath("20260101", 100, orbit=2)
         bad_file.write_bytes(b"not a NetCDF file")
         payload = self.assert_plot(self.workspace.raster("20260101"))
         self.assertEqual(flag_codes(payload), ["failed_files"])
-        self.assertEqual(payload["quality"]["grade"], "limited")
+        self.assertNotIn("grade", payload["quality"])
 
     def test_user_reproduces_a_request(self):
-        """Given defaults from CLI and config, when plotting, then record them."""
+        """Given a command, when plotting, then record it on one line."""
         self.workspace.write_swath("20260101", 4)
         payload = self.assert_plot(self.workspace.raster("20260101"))
-        resolved = payload["request"]["resolved"]
         self.assertEqual(
-            payload["request"]["argv"][:3],
-            ["raster", "FixtureCity", "20260101"],
+            payload["request"],
+            "rsplot raster FixtureCity 20260101 --product no2 --res 0.25 "
+            "--smooth 0 --dpi 60 --basemap none --output "
+            f"{self.workspace.output}",
         )
-        self.assertEqual(resolved["res"], {"value": 0.25, "source": "cli"})
-        self.assertEqual(resolved["qa"], {"value": 0.5, "source": "config"})
+        method = satellite(payload)["method"]
         self.assertEqual(
-            resolved["sensor"], {"value": "tropomi", "source": "built_in"}
+            [method["grid_deg"], method["qa_min_exclusive"]], [0.25, 0.5]
         )
+
+    def test_user_reads_a_quoted_title_in_the_command_line(self):
+        """Given a title with a space, when plotting, then quote only it."""
+        self.workspace.write_swath("20260101", 4)
+        payload = self.assert_plot(
+            self.workspace.raster("20260101", "--title", "NO2 map")
+        )
+        self.assertTrue(payload["request"].endswith(" --title 'NO2 map'"))
+
+    def test_user_reads_the_region_bounding_box(self):
+        """Given a region, when plotting, then record its bounding box."""
+        self.workspace.write_swath("20260101", 4)
+        payload = self.assert_plot(self.workspace.raster("20260101"))
+        self.assertEqual(payload["region"]["bbox"], [117.0, 118.0, 31.0, 32.0])
+        self.assertNotIn("extent", payload["region"])
 
     def test_user_selects_multiple_regions(self):
         """Given adjacent regions, when selecting both, then retain members."""

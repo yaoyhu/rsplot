@@ -20,15 +20,6 @@ from rsplot.errors import RsplotError
 if TYPE_CHECKING:
     from rich.console import Console
 
-# Keyword argument -> CLI spellings, for recording where values came from.
-STATION_OPTIONS = {
-    "var": ("--var",),
-    "output": ("--output",),
-    "dpi": ("--dpi",),
-    "basemap": ("--basemap",),
-    "title": ("--title",),
-}
-
 
 def run_station(**kwargs: Any) -> None:
     """Map one station hour for a region."""
@@ -84,12 +75,9 @@ def _emit_station(
     from rsplot.readers.guokong import (
         mask_stations_to_region,
         read_stations,
-        resolve_station_file,
     )
     from rsplot.result_builders.envelope import (
-        option_given,
-        request_block,
-        resolved,
+        command_line,
         sidecar_path,
         success_envelope,
         write_sidecar,
@@ -193,7 +181,6 @@ def _emit_station(
             ),
             hour=resolved_dt,
             data_root=str(use_data_dir),
-            source_file=resolve_station_file(use_data_dir, resolved_dt).name,
         ),
         info,
         admin_gdf=admin_gdf,
@@ -227,33 +214,12 @@ def _emit_station(
         colorbar_label=colorbar_label,
     )
 
-    def source(name: str, value: Any, default: str) -> dict[str, Any]:
-        if option_given(*STATION_OPTIONS[name]):
-            return resolved(value, "cli")
-        return resolved(value, default)
-
     effective_basemap = (
         use_basemap if use_basemap is not None else info.params.basemap
     )
     payload = success_envelope(
         command="station",
-        request=request_block(
-            {
-                "region": resolved(region, "cli"),
-                "datetime": resolved(datetime_str, "cli"),
-                "var": source("var", var, "built_in"),
-                "level": resolved(info.level, "built_in", "from region"),
-                "data_dir": resolved(str(use_data_dir), "config"),
-                "output": source("output", output, "built_in"),
-                "dpi": source("dpi", use_dpi, "built_in"),
-                "basemap": source(
-                    "basemap",
-                    "satellite" if effective_basemap else "none",
-                    "level_default",
-                ),
-                "title": source("title", use_title, "built_in"),
-            }
-        ),
+        request=command_line(),
         region=info,
         layers=[layer],
         flags=flags,

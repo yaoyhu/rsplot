@@ -131,12 +131,20 @@ class RadiusE2E(unittest.TestCase):
             },
         )
 
-    def test_user_is_told_what_the_comparison_means(self):
-        """Given a day and an hour, when mapping values, then explain both."""
+    def test_user_reads_what_the_comparison_pairs(self):
+        """Given a day and an hour, when mapping values, then record both."""
         self.standard_inputs()
         payload = self.assert_plot(self.workspace.radius("20260101", *VALUES))
-        self.assertEqual(flags(payload)["column_vs_surface"], "info")
-        self.assertEqual(flags(payload)["daily_vs_hourly"], "info")
+        relations = payload["relations"]
+        self.assertEqual(
+            [
+                relations["time_matching"]["difference_minutes"],
+                relations["colocation"]["comparable_units"],
+            ],
+            [None, False],
+        )
+        self.assertNotIn("column_vs_surface", flags(payload))
+        self.assertNotIn("daily_vs_hourly", flags(payload))
 
     def test_user_records_the_administrative_context(self):
         """Given a centre in FixtureCity, when mapping, then name the city."""

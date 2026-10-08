@@ -34,7 +34,7 @@ product-to-station-variable default. Station fixtures place two stations inside
 | user overlays a TROPOMI window mean | Jan 1 orbits contain 2 and 4; Jan 2 contains 9; Jan 2 13:00 stations | Overlay Jan 2 with --days 2 and station hour 2026010213 | Satellite mean 6 from 2 found days, window ending Jan 2; station hour 2026010213 |
 | user rejects competing window selectors | TROPOMI data and a station file | Supply a date range and --days together | Rejected with `invalid_argument` on option --days |
 | user matches a GEMS scan to the nearest station hour | A UTC 04:00 NO2 scan and the Jan 1 12:00 station file | Overlay local 202601011200 without --station-datetime | Station hour 2026010112; time matching by nominal scan time, 0 minutes, not a manual override |
-| user learns a GEMS scan hour was overridden | A UTC 04:00 NO2 scan and the Jan 1 13:00 station file | Overlay the scan with --station-datetime 2026010113 | Time difference 60 minutes, manual override, and a `manual_time_override` flag |
+| user learns a GEMS scan hour was overridden | A UTC 04:00 NO2 scan and the Jan 1 13:00 station file | Overlay the scan with --station-datetime 2026010113 | Time matching difference 60 minutes with `manual_override` true; no flag repeats it |
 | user names the station hour for a GEMS day | A GEMS scan and a station file | Overlay GEMS daily mean Jan 1 without --station-datetime | Rejected with `invalid_argument` on option --station-datetime |
 | user overlays a GEMS window mean | Jan 1 scans contain 2 and 6; Jan 2 contains 10; Jan 2 12:00 stations | Overlay Jan 2 with --days 2 and station hour 2026010212 | Satellite mean 7; station hour 2026010212 |
 | user sees how a TROPOMI day meets its station hour | TROPOMI Jan 1 data and the Jan 1 13:00 station file | Overlay Jan 1 | Time matching pairs satellite and station by `period_mean_with_explicit_station_hour`, null difference, manual override |
@@ -44,8 +44,9 @@ product-to-station-variable default. Station fixtures place two stations inside
 | user reads the station table | TROPOMI Jan 1 data and the station file | Overlay Jan 1 | The station CSV lists all three stations read, with values 40, 80 and 999 and `in_region` 1, 1, 0 |
 | user sees satellite values at stations | Uniform satellite value 4 and the station file | Overlay Jan 1 | Colocation has 2 pairs, no Spearman correlation (fewer than 3 pairs), incomparable units; the CSV gives satellite value 4 and `colocated` 1 for both in-region stations and `colocated` 0 for the outside one |
 | user counts exceedances only inside the region | The outside station's 999 exceeds the NO2 hourly limit | Overlay Jan 1 | Station exceedance count is 0 with threshold 200 |
-| user is told what the comparison means | TROPOMI Jan 1 data and the station file | Overlay Jan 1 | Info flags `column_vs_surface` and `daily_vs_hourly` |
-| user is warned about few stations | Two valid stations in the region | Overlay Jan 1 | Warning `few_stations`; grade `limited` |
+| user reads what the comparison pairs | TROPOMI Jan 1 data and the station file | Overlay Jan 1 | Time matching `period_mean_with_explicit_station_hour` with null difference, colocation `comparable_units` false; the only flag is `few_stations` (no explanatory flags) |
+| user is warned about few stations | Two valid stations in the region | Overlay Jan 1 | Exactly one flag: `few_stations`, warning, layer station, evidence valid 2, total 2, threshold 3 |
+| user sees satellite values at the highest stations | TROPOMI Jan 1 data valued 4 and the station file | Overlay Jan 1 | Station `extremes` lists S002A 80 and S001A 40, each with `satellite_value` 4 |
 
 For suspected bugs, run the corresponding scenario against the unchanged
 application and record the failure before applying a fix.

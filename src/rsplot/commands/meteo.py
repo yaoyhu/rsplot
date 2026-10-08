@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -21,23 +20,6 @@ from rsplot.errors import RsplotError
 
 if TYPE_CHECKING:
     from rich.console import Console
-
-# Keyword argument -> CLI spellings, for recording where values came from.
-METEO_OPTIONS = {
-    "temp_level": ("--temp-level",),
-    "wind_level": ("--wind-level",),
-    "station_var": ("--station-var",),
-    "output": ("--output",),
-    "dpi": ("--dpi",),
-    "basemap": ("--basemap",),
-    "cmap": ("--cmap",),
-    "vmin": ("--vmin",),
-    "vmax": ("--vmax",),
-    "wind_stride": ("--wind-stride",),
-    "wind_scale": ("--wind-scale",),
-    "wind_width": ("--wind-width",),
-    "title": ("--title",),
-}
 
 
 def run_meteo(**kwargs: Any) -> None:
@@ -95,12 +77,9 @@ def _emit_meteo(
     from rsplot.readers.guokong import (
         mask_stations_to_region,
         read_stations,
-        resolve_station_file,
     )
     from rsplot.result_builders.envelope import (
-        option_given,
-        request_block,
-        resolved,
+        command_line,
         sidecar_path,
         success_envelope,
         write_sidecar,
@@ -439,9 +418,6 @@ def _emit_meteo(
                 ),
                 hour=datetime_str,
                 data_root=str(use_station_dir),
-                source_file=resolve_station_file(
-                    use_station_dir, datetime_str
-                ).name,
             ),
             info,
             admin_gdf=admin_gdf,
@@ -500,57 +476,12 @@ def _emit_meteo(
         output=image,
     )
 
-    def source_of(name: str, value: Any, default: str) -> dict[str, Any]:
-        if option_given(*METEO_OPTIONS[name]):
-            return resolved(value, "cli")
-        return resolved(value, default)
-
     effective_basemap = (
         use_basemap if use_basemap is not None else info.params.basemap
     )
-    request = {
-        "region": resolved(region, "cli"),
-        "datetime": resolved(datetime_str, "cli"),
-        "temp_level": (
-            resolved(field.level, "cli") if field is not None else None
-        ),
-        "wind_level": (
-            resolved(wind.level, "cli") if wind is not None else None
-        ),
-        "station_var": (
-            resolved(station_var, "cli") if station_var is not None else None
-        ),
-        "level": resolved(info.level, "built_in", "from region"),
-        "data_dir": resolved(use_data_dir, "config"),
-        "station_data_dir": (
-            resolved(str(use_station_dir), "config")
-            if use_station_dir is not None
-            else None
-        ),
-        "output": source_of("output", output, "built_in"),
-        "dpi": source_of("dpi", use_dpi, "built_in"),
-        "basemap": source_of(
-            "basemap",
-            "satellite" if effective_basemap else "none",
-            "level_default",
-        ),
-        "cmap": source_of("cmap", use_cmap, "built_in")
-        if field is not None
-        else None,
-        "wind_stride": source_of("wind_stride", use_wind_stride, "built_in")
-        if wind is not None
-        else None,
-        "wind_scale": source_of("wind_scale", wind_scale, "built_in")
-        if wind is not None
-        else None,
-        "wind_width": source_of("wind_width", wind_width, "built_in")
-        if wind is not None
-        else None,
-        "title": source_of("title", use_title, "built_in"),
-    }
     payload = success_envelope(
         command="meteo",
-        request=request_block(request),
+        request=command_line(),
         region=info,
         layers=layers,
         relations=relations,
@@ -629,11 +560,7 @@ def _era5_grid_layer(
             "sensor": "era5",
             "processing": None,
             "data_root": data_root,
-            "files": sorted(
-                os.path.relpath(path, data_root) for path in files
-            ),
             "files_total": len(files),
-            "files_manifest": None,
             "failed_files": {},
         },
         "method": method,

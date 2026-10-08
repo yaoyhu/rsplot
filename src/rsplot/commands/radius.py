@@ -16,27 +16,6 @@ from rsplot.errors import RsplotError
 if TYPE_CHECKING:
     from rich.console import Console
 
-# Keyword argument -> CLI spellings, for recording where values came from.
-RADIUS_OPTIONS = {
-    "sensor": ("--sensor",),
-    "processing": ("--processing",),
-    "product": ("--product",),
-    "days": ("--days",),
-    "km": ("--km",),
-    "station_var": ("--station-var",),
-    "station_datetime": ("--station-datetime",),
-    "output": ("--output",),
-    "dpi": ("--dpi",),
-    "res": ("--res",),
-    "basemap": ("--basemap",),
-    "vmin": ("--vmin",),
-    "vmax": ("--vmax",),
-    "cmap": ("--cmap",),
-    "smooth": ("--smooth",),
-    "title": ("--title",),
-    "qa": ("--qa",),
-    "cf": ("--cf",),
-}
 LOCATION_COLUMNS = [
     "id",
     "lon",
@@ -128,9 +107,8 @@ def _emit_radius(
         read_stations,
     )
     from rsplot.result_builders.envelope import (
+        command_line,
         coverage_block,
-        request_block,
-        resolved,
         sidecar_path,
         stats_block,
         success_envelope,
@@ -146,7 +124,6 @@ def _emit_radius(
         StationInputs,
         build_station_layer,
         colocation_block,
-        comparison_flags,
         satellite_at_stations,
     )
 
@@ -335,7 +312,6 @@ def _emit_radius(
     station_path = data_path(image, "station", ".csv")
     admin_gdf = info.sub_boundary_gdf
     relations: dict[str, Any] = {}
-    comparison: list[dict[str, Any]] = []
     station_flags: list[dict[str, Any]] = []
     if station_var is not None:
         unit, limit_key, limit_time = STATION_VAR_META[station_var]
@@ -354,7 +330,6 @@ def _emit_radius(
                 ),
                 hour=locations.datetime,
                 data_root=str(directory),
-                source_file=Path(locations.source_file).name,
             ),
             info,
             admin_gdf=admin_gdf,
@@ -404,9 +379,7 @@ def _emit_radius(
                 "sensor": "station",
                 "processing": None,
                 "data_root": str(directory),
-                "files": [Path(locations.source_file).name],
                 "files_total": 1,
-                "files_manifest": None,
                 "failed_files": {},
             },
             "method": {
@@ -452,38 +425,14 @@ def _emit_radius(
         plot_overlay(run.lon, run.lat, run.grid, data, info, **plot_options)
 
     satellite_layer, satellite_flags = build_satellite_layer(
-        satellite_inputs, info, data=grid_entry["path"], files_manifest=None
+        satellite_inputs, info, data=grid_entry["path"]
     )
     if matching is not None:
         relations = {
             "time_matching": matching,
             "colocation": colocation_block(rows, str(station_path)),
         }
-        comparison = comparison_flags(
-            matching, satellite_layer["time"], locations.datetime
-        )
 
-    request_values = dict(run.resolved)
-    request_values.pop("region", None)
-    request_values.update(
-        station_id=resolved(station_id, "cli"),
-        km=resolved(km, "cli"),
-        station_var=(
-            resolved(station_var, "cli") if station_var is not None else None
-        ),
-        station_datetime=(
-            resolved(locations.datetime, "cli")
-            if station_datetime is not None
-            else resolved(
-                locations.datetime,
-                "built_in",
-                "nearest scan hour"
-                if station_var is not None
-                else "end date snapshot",
-            )
-        ),
-        station_data_dir=resolved(str(directory), "config"),
-    )
     render_layers = dict(run.render["layers"])
     if station_var is not None:
         render_layers["station"] = build_station_display(data) or {
@@ -491,11 +440,11 @@ def _emit_radius(
         }
     payload = success_envelope(
         command="radius",
-        request=request_block(request_values),
+        request=command_line(),
         region=info,
         layers=[satellite_layer, station_layer],
         relations=relations,
-        flags=satellite_flags + station_flags + comparison,
+        flags=satellite_flags + station_flags,
         render={"image": image, **run.render, "layers": render_layers},
         artifacts={
             "image": image,

@@ -57,17 +57,56 @@ def missing_hours_flag(layer_id: str, coverage: dict) -> list[dict]:
     fraction = coverage["fraction"]
     if fraction is None or fraction >= COMPLETE_HOURS:
         return []
-    missing = coverage["total"] - coverage["valid"]
     return [
         flag(
             "missing_hours",
             "warning",
-            f"{missing} of {coverage['total']} hours have no value; gaps "
-            "are kept, not interpolated.",
             layer=layer_id,
             evidence={**coverage, "threshold": COMPLETE_HOURS},
         )
     ]
+
+
+def daily_rows(
+    timestamps: list[str], values: np.ndarray
+) -> list[dict[str, Any]]:
+    """One row per China-time day: valid hours, mean, min and max."""
+    days: dict[str, list[float]] = {}
+    for stamp, value in zip(timestamps, values, strict=True):
+        days.setdefault(stamp[:8], []).append(float(value))
+    rows = []
+    for date, day_values in days.items():
+        finite = np.asarray(day_values)[np.isfinite(day_values)]
+        empty = finite.size == 0
+        rows.append(
+            {
+                "date": date,
+                "hours": int(finite.size),
+                "mean": None if empty else round_finite(np.mean(finite)),
+                "min": None if empty else round_finite(np.min(finite)),
+                "max": None if empty else round_finite(np.max(finite)),
+            }
+        )
+    return rows
+
+
+def diurnal_rows(
+    timestamps: list[str], values: np.ndarray
+) -> list[dict[str, Any]]:
+    """One row per China-time hour of day: valid days and their mean."""
+    hours = np.array([int(stamp[8:10]) for stamp in timestamps])
+    rows = []
+    for hour in range(24):
+        selected = values[hours == hour]
+        finite = selected[np.isfinite(selected)]
+        rows.append(
+            {
+                "hour": hour,
+                "days": int(finite.size),
+                "mean": round_finite(np.mean(finite)) if finite.size else None,
+            }
+        )
+    return rows
 
 
 def station_series_layer(
@@ -97,6 +136,8 @@ def station_series_layer(
         "method": {"gaps": "kept_as_missing", "hours_per_day": 24},
         "coverage": coverage,
         "stats": stats_block(values),
+        "daily": daily_rows(timestamps, values),
+        "diurnal": diurnal_rows(timestamps, values),
         "by_admin": [],
         "extremes": capped(
             [
@@ -120,8 +161,6 @@ def station_series_layer(
             flag(
                 "failed_files",
                 "warning",
-                f"{len(source['failed_files'])} hourly file(s) could not be "
-                "read.",
                 layer="station",
                 evidence={"count": len(source["failed_files"])},
             )
@@ -166,6 +205,8 @@ def region_series_layers(
         },
         "coverage": mean_coverage,
         "stats": stats_block(mean),
+        "daily": daily_rows(timestamps, mean),
+        "diurnal": diurnal_rows(timestamps, mean),
         "by_admin": [],
         "extremes": capped(
             [
@@ -233,8 +274,6 @@ def region_series_layers(
             flag(
                 "few_stations",
                 "warning",
-                f"Only {station_coverage['valid']} station(s) in the region "
-                "have values; the regional mean is not representative.",
                 layer="station",
                 evidence={**station_coverage, "threshold": MIN_STATIONS},
             )
@@ -244,8 +283,6 @@ def region_series_layers(
             flag(
                 "failed_files",
                 "warning",
-                f"{len(source['failed_files'])} hourly file(s) could not be "
-                "read.",
                 layer="station",
                 evidence={"count": len(source["failed_files"])},
             )

@@ -17,12 +17,15 @@ S003A in `EastCity` reads 999. Requests use `--days 1 --var NO2`.
 | --- | --- | --- | --- |
 | user plots one station's hours | 24 hourly files | Trend S001A for Jan 1 | A PNG; no region; one `series` layer for station S001A, 24 of 24 hours valid, mean 21.5, hourly series on Jan 1 in Asia/Shanghai |
 | user loads the hourly series | 24 hourly files | Trend S001A | The series NetCDF holds 1 station × 24 hours, first hour 2026010100 with value 10 |
-| user is warned about missing hours | Only hours 00–11 exist | Trend S001A | Coverage 12 of 24 hours; warning `missing_hours`; grade `limited` |
+| user is warned about missing hours | Only hours 00–11 exist | Trend S001A | Coverage 12 of 24 hours; warning `missing_hours`; `quality` has no grade |
 | user overrides the exceedance threshold | 24 hourly files | Trend S001A with --threshold 30 | Exceedance threshold 30 counts 3 hours, standard says it came from --threshold |
 | user plots a regional trend | 24 hourly files | Trend FixtureCity with --region | Region FixtureCity; `regional_mean` layer with mean 26.5 over 24 hours; `station` layer with 2 stations |
 | user loads every station's hours | 24 hourly files | Trend FixtureCity with --region | The series NetCDF holds 2 stations × 24 hours plus the regional mean, first mean 15 |
 | user highlights a focus station | 24 hourly files | Regional trend with --focus-station S002A | `render.layers.station.focus_station_ids` is ["S002A"] |
-| user is warned about few stations | 24 hourly files | Regional trend | Warning `few_stations`; grade `limited` |
+| user is warned about few stations | 24 hourly files | Regional trend | Warning `few_stations`; `quality` has no grade |
+| user reads one station's daily means | 24 hourly files on Jan 1 and hours 00–11 on Jan 2 | Trend S001A for Jan 1–2 | `daily` rows: Jan 1 24 hours, mean 21.5, min 10, max 33; Jan 2 12 hours, mean 15.5, min 10, max 21 |
+| user reads the regional hour-of-day profile | Same two days | Regional trend for Jan 1–2 | `regional_mean.diurnal` has 24 rows; hour 0 averages 2 days to 15, hour 23 has 1 day at 38 |
+| user reads the regional daily means | Same two days | Regional trend for Jan 1–2 | `regional_mean.daily`: Jan 1 24 hours mean 26.5, Jan 2 12 hours mean 20.5 |
 | user learns a focus station is outside the region | 24 hourly files | Regional trend with --focus-station S003A | Rejected with `invalid_argument` on option --focus-station |
 | user learns the station does not exist | 24 hourly files | Trend ZZZ9A | Rejected with `region_not_found`, naming ZZZ9A |
 | user learns the region does not exist | 24 hourly files | Trend Atlantis with --region | Rejected with `region_not_found` |

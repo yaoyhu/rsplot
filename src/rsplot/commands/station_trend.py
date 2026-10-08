@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -21,19 +20,6 @@ if TYPE_CHECKING:
     from rich.console import Console
 
     from rsplot.readers.guokong import RegionStationSeries
-
-# Keyword argument -> CLI spellings, for recording where values came from.
-TREND_OPTIONS = {
-    "days": ("--days",),
-    "var": ("--var",),
-    "region_mode": ("--region",),
-    "view": ("--view",),
-    "focus_station_ids": ("--focus-station",),
-    "threshold": ("--threshold",),
-    "output": ("--output",),
-    "dpi": ("--dpi",),
-    "title": ("--title",),
-}
 
 
 def run_trend(**kwargs: Any) -> None:
@@ -64,22 +50,15 @@ def _emit_trend(
 ) -> None:
     """Read and plot the trend, then write the sidecar and series file."""
     from rsplot.config import STATION_VAR_META, get_exceedance_threshold
-    from rsplot.data_files import (
-        data_path,
-        write_series_netcdf,
-        write_source_manifest,
-    )
+    from rsplot.data_files import data_path, write_series_netcdf
     from rsplot.geo.boundaries import resolve_region
     from rsplot.plotting.styles import setup_fonts
     from rsplot.result_builders.envelope import (
-        option_given,
-        request_block,
-        resolved,
+        command_line,
         sidecar_path,
         success_envelope,
         write_sidecar,
     )
-    from rsplot.result_builders.satellite import FILES_LIMIT
     from rsplot.result_builders.series_layer import (
         region_series_layers,
         station_series_layer,
@@ -182,26 +161,16 @@ def _emit_trend(
     sidecar = sidecar_path(image)
 
     root = str(use_data_dir)
-    files = sorted(os.path.relpath(path, root) for path in trend.source_files)
     failed = {
         f"{stamp}.nc": reason
         for stamp, reason in sorted(trend.failed_files.items())
     }
     data_entries = []
-    manifest = None
-    if len(files) > FILES_LIMIT:
-        manifest_path = data_path(image, "sources", ".csv")
-        created.append(manifest_path)
-        manifest_entry = write_source_manifest(manifest_path, files, failed)
-        data_entries.append(manifest_entry)
-        manifest = manifest_entry["path"]
     source = {
         "sensor": "station",
         "processing": None,
         "data_root": root,
-        "files": files[:FILES_LIMIT],
-        "files_total": len(files),
-        "files_manifest": manifest,
+        "files_total": len(trend.source_files),
         "failed_files": failed,
     }
 
@@ -297,41 +266,9 @@ def _emit_trend(
             title=use_title,
         )
 
-    def source_of(name: str, value: Any, default: str) -> dict[str, Any]:
-        if option_given(*TREND_OPTIONS[name]):
-            return resolved(value, "cli")
-        return resolved(value, default)
-
-    request = {
-        "target": resolved(target, "cli"),
-        "date": resolved(date_arg, "cli"),
-        "days": resolved(days, "cli") if days is not None else None,
-        "var": source_of("var", var, "built_in"),
-        "region_mode": source_of("region_mode", region_mode, "built_in"),
-        "view": source_of("view", use_view, "built_in"),
-        "focus_station_ids": (
-            resolved(canonical_focus_ids, "cli")
-            if info is not None and canonical_focus_ids
-            else None
-        ),
-        "threshold": (
-            resolved(use_threshold, "cli")
-            if threshold is not None
-            else resolved(use_threshold, "built_in", standard)
-        ),
-        "level": (
-            resolved(info.level, "built_in", "from region")
-            if info is not None
-            else None
-        ),
-        "data_dir": resolved(root, "config"),
-        "output": source_of("output", output, "built_in"),
-        "dpi": source_of("dpi", use_dpi, "built_in"),
-        "title": source_of("title", use_title, "built_in"),
-    }
     payload = success_envelope(
         command="trend",
-        request=request_block(request),
+        request=command_line(),
         region=info,
         layers=layers,
         flags=flags,

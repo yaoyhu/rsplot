@@ -26,8 +26,6 @@ if TYPE_CHECKING:
     from rsplot.geo.boundaries import RegionInfo
     from rsplot.readers import ProductInfo
 
-FILES_LIMIT = 200
-
 
 @dataclass
 class SatelliteInputs:
@@ -44,7 +42,6 @@ class SatelliteInputs:
     method: dict[str, Any]
     valid_days: np.ndarray | None = None
     days: dict[str, Any] | None = None
-    smoothing_sigma: float | None = None
     extra_flags: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -98,7 +95,6 @@ def build_satellite_layer(
     region: RegionInfo,
     *,
     data: str | None,
-    files_manifest: str | None,
     layer_id: str = "satellite",
     coverage_checks: bool = True,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -160,9 +156,7 @@ def build_satellite_layer(
                 prod.processing or "offl" if prod.sensor == "tropomi" else None
             ),
             "data_root": inputs.data_root,
-            "files": files[:FILES_LIMIT],
             "files_total": len(files),
-            "files_manifest": files_manifest,
             "failed_files": failed,
             "versions": versions,
         },
@@ -208,10 +202,12 @@ def build_satellite_layer(
             flag(
                 "missing_days",
                 "warning",
-                f"{days['requested'] - days['found']} of "
-                f"{days['requested']} window days have no valid data.",
                 layer=layer_id,
-                evidence={"failed": days["failed"]},
+                evidence={
+                    "requested": days["requested"],
+                    "found": days["found"],
+                    "failed": days["failed"],
+                },
             )
         )
     if days is not None and inputs.valid_days is not None:
@@ -222,9 +218,6 @@ def build_satellite_layer(
                 flag(
                     "few_valid_days",
                     "warning",
-                    f"Median valid days per observed cell ({median:g}) is "
-                    f"below n_min ({days['n_min']}); most cells were "
-                    "removed. Consider a coarser --res or lower --n-min.",
                     layer=layer_id,
                     evidence={
                         "median_valid_days": median,
@@ -237,21 +230,8 @@ def build_satellite_layer(
             flag(
                 "failed_files",
                 "warning",
-                f"{len(failed)} input file(s) could not be read.",
                 layer=layer_id,
                 evidence={"count": len(failed)},
-            )
-        )
-    if inputs.smoothing_sigma:
-        flags.append(
-            flag(
-                "values_smoothed",
-                "info",
-                f"Gaussian smoothing (sigma {inputs.smoothing_sigma:g}) "
-                "changed statistic values; coverage is unchanged. Use "
-                "--smooth 0 for unsmoothed values.",
-                layer=layer_id,
-                evidence={"sigma": inputs.smoothing_sigma},
             )
         )
     flags.extend(inputs.extra_flags)

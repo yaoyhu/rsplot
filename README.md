@@ -180,7 +180,9 @@ rsplot trend 重庆 20260520 --days 7 --var O3 --region --output trend_chongqing
 rsplot trend 重庆 20260520 --days 7 --var O3 --region --view mean \
   --focus-station 3347A --threshold 200 --output trend_chongqing_focus.png
 # Each trend also writes <name>.series.nc: value(station, time) with
-# time_cst labels, plus regional_mean and n_stations in region mode.
+# time_cst labels, plus regional_mean and n_stations in region mode. The
+# sidecar's station (or regional_mean) layer adds `daily` rows (hours, mean,
+# min, max per China-time day) and 24 `diurnal` rows (mean per hour of day).
 
 # Overlay satellite raster data and station observations.
 rsplot overlay 合肥 20260414 --product no2 --station-var NO2 \
@@ -232,21 +234,22 @@ rsplot raster 合肥 20260919 --product no2 --days 7 --output out/hefei_no2_week
 | Question an agent asks | Where to read it |
 | --- | --- |
 | Did it work? | Exit 0 and a sidecar; on failure exit 1 and one `rsplot error <code>` line on stderr |
-| How far can I trust it? | `quality.grade` (`good`, `limited`, `unreliable`) and `quality.flags` |
+| How far can I trust it? | `layers[0].coverage` and `quality.flags` (code, severity and the measured `evidence`; no prose verdict) |
 | What was measured, in which unit? | `layers[0].quantity` (`unit` and `scale`) |
 | Over which time? | `layers[0].time`, including `days` for windows |
-| From which files? | `layers[0].source` (`data_root`, `files`, `failed_files`) |
+| From which files? | `layers[0].source` (`data_root`, `files_total`, `failed_files`; names are not listed) |
 | How was it processed? | `layers[0].method` |
 | Regional result | `layers[0].coverage`, `stats`, `by_admin`, `by_member`, `extremes` |
 | Full values | the NetCDF in `layers[0].data` / `artifacts.data` |
-| How to reproduce it | `request.argv` and `request.resolved` (value and source of every parameter) |
+| How to reproduce it | `request`, the command on one line; effective values that change the numbers are in `method` |
 
 A failed run exits 1, prints one line such as
 `rsplot error region_ambiguous: … {"region": "吉林", "candidates": ["吉林省", "吉林市"]}`
 on stderr, and leaves no PNG, JSON or data file. For example, the real
 Hefei 7-day NO2 window above
-covers only 2.9 % of the city's cells and is graded `unreliable` with
-`very_low_coverage` and `few_valid_days`.
+covers only 2.9 % of the city's cells, so it carries a critical
+`very_low_coverage` flag with evidence `valid` 35, `total` 1209, `fraction`
+0.029 and `threshold` 0.1.
 
 The `forecast` and `reconstruct` commands are disabled and no longer part of
 the CLI. Their `forecast` and `reconstruct` data-directory keys remain valid
@@ -349,8 +352,8 @@ of the cell it falls in.
 (difference null, because a daily or window mean has no single observation
 time). `relations.colocation` counts stations that fall in a valid satellite
 cell and gives the Spearman rank correlation of satellite and station values
-(null with fewer than 3 pairs). It measures spatial agreement only; the
-`column_vs_surface` flag says the units are not comparable.
+(null with fewer than 3 pairs). It measures spatial agreement only;
+`comparable_units` is always false.
 
 ## Station map color scales
 

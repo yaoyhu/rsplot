@@ -73,7 +73,10 @@ remain gaps. Its result sidecar has one `station` series layer
 (single-station mode, `region: null`, station ID in `subject`) or
 `regional_mean` and `station` series layers (region mode); hourly values are
 in `<name>.series.nc` (`value(station, time)`, `time` in UTC hours,
-`time_cst` labels, `regional_mean`, `n_stations`). Focus stations and the
+`time_cst` labels, `regional_mean`, `n_stations`). The single `station`
+and the `regional_mean` layers carry `daily` (per China-time day: valid
+hours, mean, min, max) and 24 `diurnal` rows (valid days and mean per hour
+of day), built by `result_builders.series_layer`. Focus stations and the
 view are display settings under `render.layers.station`.
 Every enabled command writes a PNG and a same-basename `.json` sidecar.
 
@@ -126,6 +129,16 @@ introduce new code that violates them.
    or `status` key: `rsplot_version` identifies the release, and a sidecar
    on disk means success. Do not keep legacy keys. E2E tests validate every
    sidecar against the shipped schema.
+   The sidecar holds evidence, not verdicts: no prose messages, no overall
+   grade. `request` is the command line as one string
+   (`envelope.command_line`, quoting only shell-special arguments); there is
+   no per-option provenance block, and values that change the numbers live
+   in `layers[].method`. `source` gives `data_root`, `files_total`,
+   `failed_files` and `versions`, never file lists or manifests.
+   `quality.flags` are `{code, severity, layer?, evidence}` with measured
+   numbers and the threshold; never add a flag that only restates a field
+   (smoothing, time matching, unit comparability). `region.bbox` is the
+   region's bounding box.
 7. **Failures are one stderr line.** Raise `rsplot.errors.RsplotError` with
    a code from `errors.ERROR_CODES`. `commands.sidecar.run_with_sidecar`
    then exits 1 and prints exactly one `rsplot error <code>[ <option>]:

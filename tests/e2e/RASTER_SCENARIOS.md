@@ -15,7 +15,7 @@ JSON or data file.
 | --- | --- | --- | --- |
 | user understands raster dates | CLI is installed | Request raster help | Explain TROPOMI single-day orbit aggregation, trailing/inclusive windows, GEMS scans, and file output |
 | user plots one TROPOMI day | Two NO2 orbits on Jan 1 contain 2 and 4; Jan 2 contains 9 | Select Jan 1 | A colored PNG; time is a daily UTC filename date Jan 1; 2 source files; mean 3 |
-| user finds every input file | Two NO2 orbits on Jan 1 | Select Jan 1 | `source` lists exactly both file names under the configured data root, sensor `tropomi`, processing `offl` |
+| user counts the input files | Two NO2 orbits on Jan 1 | Select Jan 1 | `source` has the configured data root, sensor `tropomi`, processing `offl` and `files_total` 2, with no file list or manifest; the output folder holds only the PNG, JSON and satellite NetCDF |
 | user loads the statistical grid | Two NO2 orbits on Jan 1 contain 2 and 4 | Select Jan 1 | The NetCDF named by the layer's `data` exists, has nonzero size, and its mean over `counted` cells is 3 with as many counted cells as `coverage.total` |
 | user reads grouped products | Official PRODUCT-group NO2 input contains 4 | Plot that day | Mean 4 |
 | user plots HCHO | HCHO input contains 6 in display units | Plot HCHO | Mean 6; quantity `tropospheric_hcho_column` in molec/cm2 with scale 1e15 |
@@ -26,16 +26,18 @@ JSON or data file.
 | user requests a one-day window | Jan 1 has two orbits valued 2 and 4 | Select Jan 1 with --days 1 | One requested day, mean 3 |
 | user distinguishes gap filling | Only one grid cell has observations in a larger region | Compare single day with --days 1 | Single day fills nearby holes; window retains observed-cell support (1 valid cell) |
 | user keeps observed support while smoothing | One observed NO2 cell in a region too large for gap filling to cover | Plot one TROPOMI day with --smooth 0 and --smooth 1.5 | Valid cells, total cells and coverage fraction are identical; smoothing creates no observed cells |
-| user learns values were smoothed | Uniform NO2 input | Plot with --smooth 1 | The only flag is `values_smoothed` (info); grade stays `good` |
-| user is warned when coverage is too low | One observed cell of 16 region cells | Plot a one-day window | Grade `unreliable` with `very_low_coverage` |
+| user reads smoothing from the method | Uniform NO2 input | Plot with --smooth 1 | `method.smoothing_sigma` is 1 and there is no flag |
+| user is warned when coverage is too low | One observed cell of 16 region cells | Plot a one-day window | `quality` is exactly one flag: `very_low_coverage`, critical, layer satellite, evidence valid 1, total 16, fraction 0.062, threshold 0.1; no grade and no message |
 | user sees missing-day diagnostics | Jan 1 is missing, Jan 2 has value 9 | Request two days | Mean 9, one found day, Jan 1 listed under the window's failed days |
-| user is warned about missing days | Same incomplete archive | Request two days | The only flag is `missing_days`; grade `limited` |
+| user is warned about missing days | Same incomplete archive | Request two days | The only flag is `missing_days` (warning, satellite) with evidence requested 2, found 1 and Jan 1 under failed; no message |
 | user keeps cells with one valid day | Jan 1 is valued 2 in all 16 cells; Jan 2 is valued 18 in one cell only | Request two days | All 16 cells valid; the twice-observed cell averages 10 and the others keep 2, so the mean is 2.5, not 1.5625 as with missing days counted as zero; valid days per cell range 1–2 and the minimum valid days recorded is 1 |
 | user keeps unobserved cells empty | Jan 1 and Jan 2 are each valued in the same one cell (4 and 8) | Request two days | 1 of 16 cells valid with mean 6; the 15 unobserved cells are NaN in the layer's NetCDF, not 0 |
 | user filters QA and clouds | Valid observations are 2; large outliers have QA at threshold or excessive cloud | Plot with --qa 0.5 --cf 0.5 | Mean 2 from 16 pixels; QA equality rejected and cloud equality retained; method records both thresholds |
 | user sees partial unreadable inputs | One valid orbit and one corrupt file | Plot the day | Mean 4; the corrupt file is the only entry in `failed_files` |
-| user is warned about unreadable inputs | Same inputs | Plot the day | The only flag is `failed_files`; grade `limited` |
-| user reproduces a request | Uniform NO2 input; QA threshold only in config | Plot with --res 0.25 | `request.argv` starts with the command and positionals; resolved `res` is from cli, `qa` 0.5 from config, `sensor` tropomi built in |
+| user is warned about unreadable inputs | Same inputs | Plot the day | The only flag is `failed_files`; `quality` has no grade |
+| user reproduces a request | Uniform NO2 input; QA threshold only in config | Plot with --res 0.25 | `request` is the command as one line, `rsplot raster FixtureCity 20260101 ... --output <path>`; `method` records grid 0.25 and the config QA 0.5 |
+| user reads a quoted title in the command line | Uniform NO2 input | Plot with --title "NO2 map" | `request` ends with `--title 'NO2 map'`; other arguments stay unquoted |
+| user reads the region bounding box | Uniform NO2 input | Plot FixtureCity | `region.bbox` is [117, 118, 31, 32]; there is no `extent` |
 | user selects multiple regions | Two adjacent fixture regions and uniform observations | Select comma-separated regions | Region has both members; the layer has two `by_member` rows |
 | user selects NRTI processing | Two versions of identical NRTI observations contain 2 and 4 | Plot with --processing nrti | Mean 4; processing `nrti`; 16 duplicates removed; UTC filename-date basis |
 | user rejects competing window selectors | A valid archive | Supply a date range and --days together | Rejected with `invalid_argument` on option --days |
